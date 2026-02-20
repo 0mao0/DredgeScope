@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球疏浚船舶分布 - Global Dredging Intelligence</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: "Microsoft YaHei", "SimHei", sans-serif; }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        #map { height: calc(100vh - 100px); width: 100%; border-radius: 1rem; z-index: 1; }
+        .leaflet-popup-content-wrapper {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .leaflet-popup-tip {
+            background: rgba(30, 41, 59, 0.95);
+        }
+        .leaflet-container a.leaflet-popup-close-button {
+            color: #fff;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Navbar -->
+    <nav class="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-md z-50">
+        <div class="flex items-center gap-4">
+            <a href="/" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors border border-white/10" title="返回首页">
+                <i class="fa-solid fa-arrow-left text-white"></i>
+            </a>
+            <div>
+                <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-earth-americas text-brand-500"></i>
+                    全球疏浚船舶分布 
+                    <span class="text-xs font-normal text-gray-500 ml-2 bg-slate-800 px-2 py-1 rounded border border-slate-700">AIS 实时模拟</span>
+                </h1>
+            </div>
+        </div>
+        <div class="flex gap-4 text-sm hidden md:flex">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+                <span class="text-gray-300">施工中 (Dredging)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                <span class="text-gray-300">航行中 (Underway)</span>
+            </div>
+             <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]"></span>
+                <span class="text-gray-300">停泊 (Moored)</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Map Container -->
+    <div class="flex-1 p-4 relative">
+        <div id="map" class="glass-card"></div>
+        
+        <!-- Overlay Stats -->
+        <div class="absolute top-8 right-8 z-[1000] glass-card p-4 rounded-xl w-64">
+            <h3 class="text-sm font-bold text-white mb-3 border-b border-white/10 pb-2">船队状态监控</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400">船队总数</span>
+                    <span class="text-sm font-bold text-white" id="stat-total">-</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400">活跃 (地图展示)</span>
+                    <span class="text-sm font-bold text-white" id="stat-active">-</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400">航行中 (Underway)</span>
+                    <span class="text-xs font-mono text-green-400" id="stat-underway">-</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400">作业中 (Dredging)</span>
+                    <span class="text-xs font-mono text-blue-400" id="stat-dredging">-</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400">停泊 (Moored)</span>
+                    <span class="text-xs font-mono text-yellow-400" id="stat-moored">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        // Initialize Map
+        const map = L.map('map', {
+            center: [25, 110], // 默认聚焦亚洲/中国附近
+            zoom: 3,
+            zoomControl: false,
+            attributionControl: false
+        });
+
+        // Dark Matter Tile Layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            subdomains: 'abcd'
+        }).addTo(map);
+        
+        // Add Continents Layer
+        // Use jsDelivr CDN for better accessibility in China
+        // Increased opacity and weight for better visibility
+        fetch('/static/continents.geojson')
+            .then(res => {
+                if (!res.ok) {
+                     // Fallback to CDN if local fails
+                     return fetch('https://cdn.jsdelivr.net/gh/codeforgermany/click_that_hood@main/public/data/continents.geojson');
+                }
+                return res;
+            })
+            .then(res => res.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: {
+                        color: '#94a3b8',       // Slate-400，更明显的灰色
+                        weight: 2,              // 加粗线条
+                        opacity: 0.6,           // 增加不透明度
+                        fillColor: '#cbd5e1',   // Slate-300 填充
+                        fillOpacity: 0.15,      // 增加填充不透明度
+                        dashArray: '5, 5'       // 虚线
+                    }
+                }).addTo(map);
+                console.log("Continents layer loaded successfully");
+            })
+            .catch(err => {
+                console.error("Failed to load continents:", err);
+            });
+
+        // Custom Icons
+        const createIcon = (color) => {
+            return L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 12px ${color}; border: 2px solid white;"></div>`,
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
+                popupAnchor: [0, -6]
+            });
+        };
+
+        const icons = {
+            dredging: createIcon('#3b82f6'), // Blue - Working
+            underway: createIcon('#22c55e'), // Green - Moving
+            moored: createIcon('#eab308'),   // Yellow - Moored
+            stopped: createIcon('#ef4444'),  // Red - Stopped
+            unknown: createIcon('#9ca3af')   // Gray - Unknown
+        };
+
+        // Helper to map Status to Icon key
+        const mapStatusToIcon = (status) => {
+            if (!status) return 'unknown';
+            const s = status.toLowerCase();
+            
+            // English matches
+            if (s === 'dredging') return 'dredging';
+            if (s === 'underway using engine' || s === 'underway') return 'underway';
+            if (s === 'moored' || s === 'at anchor') return 'moored';
+            if (s === 'stopped') return 'stopped';
+
+            // Chinese matches (Database actual values)
+            if (s.includes('施工')) return 'dredging';
+            if (s.includes('操纵能力受限')) return 'dredging'; // Often implies dredging operation
+            if (s.includes('机动船在航')) return 'underway';
+            if (s.includes('调遣')) return 'underway';
+            if (s.includes('锚泊')) return 'moored';
+            if (s.includes('系泊')) return 'moored';
+            if (s.includes('捕鱼')) return 'unknown'; // Fishing?
+            
+            return 'unknown';
+        };
+
+        // Translation Helpers
+        const translateStatus = (status) => {
+            if (!status) return '未知';
+            // If already Chinese, return as is (maybe simplify)
+            if (/[\u4e00-\u9fa5]/.test(status)) {
+                return status;
+            }
+            
+            const s = status.toLowerCase();
+            if (s === 'dredging') return '施工中';
+            if (s === 'underway using engine') return '航行中';
+            if (s === 'underway') return '航行中';
+            if (s === 'moored') return '停泊';
+            if (s === 'at anchor') return '锚泊';
+            if (s === 'stopped') return '停止';
+            return status;
+        };
+
+        const translateContinent = (en) => {
+            if (!en) return '';
+            const map = {
+                'Asia': '亚洲',
+                'Europe': '欧洲',
+                'Africa': '非洲',
+                'North America': '北美洲',
+                'South America': '南美洲',
+                'Oceania': '大洋洲',
+                'Antarctica': '南极洲'
+            };
+            return map[en] || en;
+        };
+
+        const translateCountry = (en) => {
+            if (!en) return '';
+            const map = {
+                'China': '中国', 'CN': '中国',
+                'United States': '美国', 'US': '美国', 'USA': '美国',
+                'Netherlands': '荷兰', 'NL': '荷兰',
+                'Belgium': '比利时', 'BE': '比利时',
+                'Germany': '德国', 'DE': '德国',
+                'Singapore': '新加坡', 'SG': '新加坡',
+                'Malaysia': '马来西亚', 'MY': '马来西亚',
+                'United Kingdom': '英国', 'UK': '英国', 'GB': '英国',
+                'France': '法国', 'FR': '法国',
+                'Japan': '日本', 'JP': '日本',
+                'Korea': '韩国', 'KR': '韩国', 'South Korea': '韩国',
+                'Australia': '澳大利亚', 'AU': '澳大利亚',
+                'Philippines': '菲律宾', 'PH': '菲律宾',
+                'Vietnam': '越南', 'VN': '越南',
+                'Indonesia': '印度尼西亚', 'ID': '印度尼西亚',
+                'India': '印度', 'IN': '印度',
+                'Russia': '俄罗斯', 'RU': '俄罗斯',
+                'Saudi Arabia': '沙特阿拉伯', 'SA': '沙特阿拉伯',
+                'United Arab Emirates': '阿联酋', 'AE': '阿联酋',
+                'Egypt': '埃及', 'EG': '埃及',
+                'Denmark': '丹麦', 'DK': '丹麦',
+                'Luxembourg': '卢森堡', 'LU': '卢森堡',
+                'Italy': '意大利', 'IT': '意大利',
+                'Spain': '西班牙', 'ES': '西班牙',
+                'Portugal': '葡萄牙', 'PT': '葡萄牙',
+                'Greece': '希腊', 'GR': '希腊',
+                'Turkey': '土耳其', 'TR': '土耳其',
+                'Thailand': '泰国', 'TH': '泰国',
+                'Taiwan': '台湾', 'TW': '台湾',
+                'Hong Kong': '香港', 'HK': '香港',
+                'Brazil': '巴西', 'BR': '巴西',
+                'Argentina': '阿根廷', 'AR': '阿根廷',
+                'Chile': '智利', 'CL': '智利',
+                'Peru': '秘鲁', 'PE': '秘鲁',
+                'Canada': '加拿大', 'CA': '加拿大',
+                'Mexico': '墨西哥', 'MX': '墨西哥',
+                'Panama': '巴拿马', 'PA': '巴拿马',
+                'South Africa': '南非', 'ZA': '南非',
+                'Nigeria': '尼日利亚', 'NG': '尼日利亚',
+                'Kenya': '肯尼亚', 'KE': '肯尼亚',
+                'New Zealand': '新西兰', 'NZ': '新西兰',
+                'Papua New Guinea': '巴布亚新几内亚', 'PG': '巴布亚新几内亚',
+                'Fiji': '斐济', 'FJ': '斐济'
+            };
+            return map[en] || en;
+        };
+
+        const translateLocation = (str) => {
+            if (!str) return '';
+            // Fix specific user-reported issue
+            if (str === 'LiaoningXining') return '辽宁 西宁'; // Assuming this is what user meant, or just translate components if possible
+            
+            // Common Provinces/Cities
+            const map = {
+                'Liaoning': '辽宁', 'Xining': '西宁',
+                'Guangdong': '广东', 'Guangzhou': '广州', 'Shenzhen': '深圳',
+                'Shanghai': '上海', 'Beijing': '北京', 'Tianjin': '天津',
+                'Zhejiang': '浙江', 'Hangzhou': '杭州', 'Ningbo': '宁波',
+                'Jiangsu': '江苏', 'Nanjing': '南京',
+                'Fujian': '福建', 'Xiamen': '厦门', 'Fuzhou': '福州',
+                'Shandong': '山东', 'Qingdao': '青岛',
+                'Hebei': '河北', 'Tangshan': '唐山',
+                'Guangxi': '广西', 'Beihai': '北海', 'Qinzhou': '钦州',
+                'Hainan': '海南', 'Haikou': '海口', 'Sanya': '三亚'
+            };
+            return map[str] || str;
+        };
+
+        // Fetch Data from API
+        fetch('/api/ships')
+            .then(response => response.json())
+            .then(data => {
+                const vessels = data.ships;
+                const totalFleet = data.total;
+                
+                // Update stats
+                const total = totalFleet; 
+                const active = vessels.length; 
+                const underway = vessels.filter(v => v.status === 'Underway').length;
+                const dredging = vessels.filter(v => v.status === 'Dredging').length;
+                const moored = vessels.filter(v => v.status === 'Moored').length;
+                
+                // Update UI Stats
+                document.getElementById('stat-total').innerText = total;
+                document.getElementById('stat-active').innerText = active;
+                document.getElementById('stat-underway').innerText = underway;
+                document.getElementById('stat-dredging').innerText = dredging;
+                document.getElementById('stat-moored').innerText = moored;
+                
+                vessels.forEach(v => {
+                    const iconKey = mapStatusToIcon(v.status);
+                    const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(map);
+                    
+                    // Format time to hour precision
+                    let timeStr = '未知';
+                    if (v.updated_at) {
+                        try {
+                            const date = new Date(v.updated_at);
+                            const yyyy = date.getFullYear();
+                            const mm = String(date.getMonth() + 1).padStart(2, '0');
+                            const dd = String(date.getDate()).padStart(2, '0');
+                            const hh = String(date.getHours()).padStart(2, '0');
+                            timeStr = `${yyyy}-${mm}-${dd} ${hh}:00`;
+                        } catch (e) {}
+                    }
+
+                    // Location Info
+                    let locHtml = '';
+                    let hasLoc = false;
+                    
+                    // 大洲/国家
+                    if (v.continent || v.country) {
+                         const cont = translateContinent(v.continent) || '-';
+                         const count = translateCountry(v.country) || '-';
+                         locHtml += `<div class="flex justify-between"><span class="text-gray-500">区域:</span> <span>${cont} / ${count}</span></div>`;
+                         hasLoc = true;
+                    }
+                    
+                    // 国内省市
+                    if ((v.country === 'China' || v.country === 'CN' || v.country === '中国') && (v.province || v.city)) {
+                         const prov = translateLocation(v.province || '');
+                         const city = translateLocation(v.city || '');
+                         locHtml += `<div class="flex justify-between"><span class="text-gray-500">详情:</span> <span>${prov} ${city}</span></div>`;
+                         hasLoc = true;
+                    }
+
+                    // 如果没有位置信息，显示占位符提示用户等待更新
+                    if (!hasLoc) {
+                         locHtml += `<div class="flex justify-between"><span class="text-gray-500">位置:</span> <span class="text-gray-600 italic">数据更新中...</span></div>`;
+                    }
+
+                    const statusCN = translateStatus(v.status);
+                    const iconKeyForClass = mapStatusToIcon(v.status);
+                    const statusClass = (iconKeyForClass === 'dredging') ? 'text-blue-400 font-bold' : 
+                                      (iconKeyForClass === 'moored') ? 'text-yellow-400' : 
+                                      (iconKeyForClass === 'stopped') ? 'text-red-400' : 
+                                      (iconKeyForClass === 'underway') ? 'text-green-400' : 'text-gray-400';
+
+                    const popupContent = `
+                        <div class="p-1 min-w-[200px]">
+                            <h3 class="font-bold text-sm mb-2 text-white border-b border-gray-600 pb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-ship text-blue-400"></i> ${v.name}
+                            </h3>
+                            <div class="text-xs text-gray-300 space-y-1.5">
+                                <div class="flex justify-between"><span class="text-gray-500">类型:</span> <span class="uppercase font-semibold">${v.type || '未知'}</span></div>
+                                <div class="flex justify-between"><span class="text-gray-500">状态:</span> <span class="${statusClass}">${statusCN}</span></div>
+                                <div class="flex justify-between"><span class="text-gray-500">更新:</span> <span>${timeStr}</span></div>
+                                ${locHtml}
+                                <div class="flex justify-between"><span class="text-gray-500">MMSI:</span> <span class="font-mono">${v.mmsi || '-'}</span></div>
+                                <div class="flex justify-between"><span class="text-gray-500">舱容:</span> <span>${v.capacity_1 || '-'} m³</span></div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                });
+            })
+            .catch(error => console.error('Error fetching ship data:', error));
+
+    </script>
+</body>
+</html>

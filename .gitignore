@@ -1,24 +1,24 @@
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
+*.py[cod]
+*$py.class
 .env
-.DS_Store
+.venv
+venv/
 .idea/
 .vscode/
+*.log
 *.sqlite
 *.db
-*.log
-logs/
-assets/*.jpg
-assets/*.png
-!assets/draghead.jpg
-node_modules/
-dist/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+.DS_Store
+
+# Data
+backend/data/
+!backend/data/assets/
+!backend/data/assets/.gitkeep
+!backend/data/report.md
+!backend/data/scheduler.log
+.ships.csv
+.《国际疏浚简讯》第30期 2025年1月.pdf
+
+# Local config
+local_config.py

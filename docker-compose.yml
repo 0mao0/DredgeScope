@@ -1,0 +1,31 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: dredge_dashboard
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./.env:/app/.env
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      # 显式覆盖 .env 中的值，确保容器内正确识别
+      - WISEFLOW_BACKEND_URL=http://124.221.238.70:8000
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: dredge_scheduler
+    command: ["python", "backend/scheduler.py"]
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./.env:/app/.env
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1

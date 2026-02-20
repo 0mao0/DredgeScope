@@ -1,0 +1,80 @@
+[
+    {
+        "name": "Dredging Today",
+        "url": "https://dredgingtoday.com/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "DredgeWire",
+        "url": "https://dredgewire.com/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "MarineLog Dredging",
+        "url": "https://www.marinelog.com/category/inland-rivers-coastal-shipping/dredging/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "Waterways Journal",
+        "url": "https://www.waterwaysjournal.net/category/dredging/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "Pile Buck Magazine",
+        "url": "https://pilebuck.com/feed",
+        "type": "rss"
+    },
+    {
+        "name": "Great Lakes Dredge & Dock",
+        "url": "https://investor.gldd.com/rss/news-releases.xml",
+        "type": "rss"
+    },
+    {
+        "name": "Dredging Contractors of America",
+        "url": "https://dredgingcontractors.org/news-1/news-item-list/",
+        "type": "web",
+        "selector": ".news-item"
+    },
+    {
+        "name": "IADC Dredging",
+        "url": "https://www.iadc-dredging.com/news/",
+        "type": "web",
+        "selector": "article"
+    },
+    {
+        "name": "CEDA Industry News",
+        "url": "https://dredging.org/news/industry-news/",
+        "type": "web",
+        "selector": ".news-item"
+    },
+    {
+        "name": "China Dredging Association",
+        "url": "http://www.chida.org/Market/",
+        "type": "web",
+        "selector": ".content-list"
+    },
+    {
+        "name": "Jan De Nul News",
+        "url": "https://www.jandenul.com/en/news/",
+        "type": "web",
+        "selector": "article"
+    },
+    {
+        "name": "Van Oord News",
+        "url": "https://www.vanoord.com/en/news/",
+        "type": "web",
+        "selector": "article"
+    },
+    {
+        "name": "Boskalis News",
+        "url": "https://boskalis.com/news",
+        "type": "web",
+        "selector": "article"
+    },
+    {
+        "name": "DEME News",
+        "url": "https://www.deme-group.com/news",
+        "type": "web",
+        "selector": "article"
+    }
+]
