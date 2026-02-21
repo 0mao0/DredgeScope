@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy backend code
 COPY backend /app/backend
+COPY frontend /app/frontend
 
 # Set PYTHONPATH
 ENV PYTHONPATH=/app/backend

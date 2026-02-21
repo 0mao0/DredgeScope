@@ -360,7 +360,8 @@ async def get_ships():
                 valid_ships.append(ship)
             except:
                 continue
-    return {"ships": valid_ships, "total": total_count, "tracked": tracked_count}
+    visible_count = len(valid_ships)
+    return {"ships": valid_ships, "total": total_count, "tracked": tracked_count, "visible": visible_count}
 
 @app.get("/api/articles")
 async def get_articles(

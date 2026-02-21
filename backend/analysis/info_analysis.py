@@ -378,15 +378,16 @@ async def analyze_item(context, client, item):
 
         # 3. 截图 (辅助 & 兜底)
         try:
-            # 优先尝试 article 标签
             locator = page.locator('article').first
+            box = None
             if await locator.count() > 0:
-                screenshot_bytes = await locator.screenshot(type='jpeg', quality=70)
+                box = await locator.bounding_box()
+            if box:
+                screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
                 log_ss = "内容区域截图"
             else:
-                # 全页兜底
                 await page.set_viewport_size({"width": 1280, "height": 1500})
-                screenshot_bytes = await page.screenshot(type='jpeg', quality=60)
+                screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
                 log_ss = "全页截图"
                 
             # 保存截图

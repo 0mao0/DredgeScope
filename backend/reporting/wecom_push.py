@@ -198,7 +198,7 @@ def push_daily_report():
                 "desc_color": 0
             },
             "main_title": {
-                "title": f"全球疏浚情报 {date_str}",
+                "title": f"{date_str}",
                 "desc": f"本次更新: {total_count} 条"
             },
             "card_image": {

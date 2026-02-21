@@ -71,15 +71,15 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2 md:gap-4">
-                    <a href="/" class="flex items-center justify-center gap-2 px-3 h-10 rounded-lg bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 transition-all text-sm font-medium whitespace-nowrap">
+                    <a href="/" class="flex items-center justify-center gap-1 md:gap-2 px-2 md:px-3 h-10 rounded-lg bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 transition-all text-sm font-medium whitespace-nowrap">
                         <i class="fa-solid fa-arrow-left text-sm"></i>
-                        <span>返回首页</span>
+                        <span class="hidden md:inline">返回首页</span>
                     </a>
-                    <a href="/statistics.html" class="flex items-center justify-center gap-2 px-3 h-10 rounded-lg bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 transition-all text-sm font-medium whitespace-nowrap" title="统计分析">
+                    <a href="/statistics.html" class="flex items-center justify-center gap-1 md:gap-2 px-2 md:px-3 h-10 rounded-lg bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 transition-all text-sm font-medium whitespace-nowrap" title="统计分析">
                         <i class="fa-solid fa-chart-pie text-sm"></i>
-                        <span>统计分析</span>
+                        <span class="hidden md:inline">统计分析</span>
                     </a>
-                    <a href="/vessel_map.html" target="_blank" class="flex items-center justify-center gap-2 px-3 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all text-sm font-medium whitespace-nowrap" title="全球船舶跟踪">
+                    <a href="/vessel_map.html" target="_blank" class="flex items-center justify-center gap-1 md:gap-2 px-2 md:px-3 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all text-sm font-medium whitespace-nowrap" title="全球船舶跟踪">
                         <i class="fa-solid fa-ship text-lg md:text-sm"></i> 
                         <span class="hidden md:inline">全球船舶跟踪</span>
                     </a>
@@ -99,7 +99,7 @@
                         <input id="filter-end-date" type="date" class="bg-transparent border-none text-white text-sm focus:ring-0 w-32 px-2 h-full">
                     </div>
                 </div>
-                <div class="flex-1 min-w-[200px]">
+                <div class="w-40 sm:flex-1 sm:min-w-[200px]">
                     <label class="text-xs text-gray-400">关键词</label>
                     <input id="filter-keyword" type="text" placeholder="标题/摘要关键词" class="mt-1 bg-dark-card border border-dark-border text-white text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5">
                 </div>
@@ -400,6 +400,21 @@
             }, 300);
         }
 
+        function normalizeText(value) {
+            return (value || '').replace(/\s+/g, '').trim();
+        }
+
+        function buildVlSupplement(textSummary, vlDesc) {
+            const summary = normalizeText(textSummary);
+            const raw = (vlDesc || '').trim();
+            if (!raw) return '无补充';
+            if (!summary) return `补充：${raw}`;
+            const parts = raw.split(/[。！？!?；;]+/).map(p => p.trim()).filter(Boolean);
+            const supplements = parts.filter(p => !summary.includes(normalizeText(p)));
+            if (!supplements.length) return '无补充';
+            return `补充：${supplements.join('；')}`;
+        }
+
         async function openModalById(articleId) {
             const res = await fetch(`/api/article/${articleId}`);
             const data = await res.json();
@@ -492,9 +507,9 @@
                 });
             }
 
-            modalTranslation.innerText = article.full_text_cn || article.summary_cn || '暂无翻译内容';
+            modalTranslation.innerText = article.full_text_cn || '暂无全文翻译';
             modalSummaryCn.innerText = article.summary_cn || '暂无摘要';
-            modalVlDesc.innerText = article.vl_desc || '暂无视觉分析数据';
+            modalVlDesc.innerText = buildVlSupplement(article.summary_cn, article.vl_desc);
 
             modalLink.href = article.url || '#';
 
