@@ -17,8 +17,8 @@ backend/data/
 !backend/data/assets/.gitkeep
 !backend/data/report.md
 !backend/data/scheduler.log
-.ships.csv
-.《国际疏浚简讯》第30期 2025年1月.pdf
+ships.csv
+《国际疏浚简讯》第30期 2025年1月.pdf
 
 # Local config
 local_config.py
