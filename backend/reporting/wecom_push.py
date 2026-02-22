@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import urllib.parse
 from datetime import datetime, timedelta
 import config
 import database
@@ -78,7 +79,7 @@ def push_daily_report():
     
     # 最终决定：直接使用服务器上的静态资源 (假设服务器配置正确)
     # 如果是在本地测试，这个链接可能无法被外网访问，但不影响流程
-    cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.jpg"
+    cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.png"
     
     found_cover = False
 
@@ -93,7 +94,8 @@ def push_daily_report():
                 pass 
             else:
                 filename = os.path.basename(e['screenshot_path'])
-                cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{filename}"
+                encoded_filename = urllib.parse.quote(filename)
+                cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{encoded_filename}"
                 found_cover = True
         
         # 添加到高亮列表 (简单的逻辑：按时间倒序，每类存前3个)
