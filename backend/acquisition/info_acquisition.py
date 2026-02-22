@@ -50,6 +50,16 @@ async def fetch_web_index(context, source):
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
         await asyncio.sleep(3) # 等待渲染
         
+        # Cloudflare / Error Check
+        current_url = page.url
+        title = await page.title()
+        if "cloudflare.com" in current_url or "5xx-error" in current_url or \
+           "Just a moment" in title or "Attention Required" in title or \
+           "Security Check" in title:
+            print(f"[Web] Skip Cloudflare/Error page: {url} -> {current_url}")
+            await page.close()
+            return []
+
         # 提取链接：简单的启发式，查找所有 a 标签
         # 优先使用 selector 限制范围
         selector = source.get('selector', 'body')
@@ -73,6 +83,10 @@ async def fetch_web_index(context, source):
         }}""", selector)
         
         for l in links:
+            # Filter out cloudflare links
+            if "cloudflare.com" in l['link'] or "5xx-error" in l['link']:
+                continue
+
             items.append({
                 'title': l['title'],
                 'link': l['link'],

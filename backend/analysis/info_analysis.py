@@ -453,37 +453,19 @@ async def analyze_item(context, client, item):
         if vl_res and not vl_res.get('is_junk'):
             final_result['image_desc'] = vl_res.get('image_desc', '')
             
-            # Supplement events (User request: "Supplement text-llm")
+            # Supplement events logic: Only use VL events if Text events are empty.
+            # This prevents duplicates caused by language differences (EN vs CN) or slightly different extractions.
             text_events = final_result.get('events', [])
             vl_events = vl_res.get('events', [])
             
-            if vl_events:
-                existing_signatures = {build_event_signature(e) for e in text_events if build_event_signature(e)}
-                existing_cores = set()
-                for e in text_events:
-                    core = normalize_event_text(e.get("project_name") or e.get("content") or "")
-                    if core:
-                        existing_cores.add(core)
-                count_added = 0
-                for ve in vl_events:
-                    sig = build_event_signature(ve)
-                    core = normalize_event_text(ve.get("project_name") or ve.get("content") or "")
-                    if (sig and sig in existing_signatures) or (core and core in existing_cores):
-                        continue
-                    text_events.append(ve)
-                    if sig:
-                        existing_signatures.add(sig)
-                    if core:
-                        existing_cores.add(core)
-                    count_added += 1
-                
-                final_result['events'] = text_events
-                if count_added > 0:
-                    analysis_log.append(f"4.1. **VL辅助**: 补充了 {count_added} 个事件")
-                else:
-                    analysis_log.append("4.1. **VL辅助**: 图片描述已合并 (无新增事件)")
+            if not text_events and vl_events:
+                final_result['events'] = vl_events
+                analysis_log.append(f"4.1. **VL辅助**: 文本提取为空，采用了VL提取的 {len(vl_events)} 个事件")
+            elif text_events and vl_events:
+                # Log that we ignored VL events to avoid duplicates
+                analysis_log.append(f"4.1. **VL辅助**: 文本已提取 {len(text_events)} 个事件，忽略VL事件以防重复")
             else:
-                analysis_log.append("4.1. **VL辅助**: 图片描述已合并")
+                analysis_log.append("4.1. **VL辅助**: 图片描述已合并 (无新增事件)")
             
     # Case 2: Text 认为是 Junk -> 丢弃
     elif text_res and text_res.get('is_junk'):
