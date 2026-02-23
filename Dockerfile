@@ -1,5 +1,5 @@
 # 阶段1: 构建前端
-FROM node:20-alpine AS frontend-builder
+FROM docker.m.daocloud.io/library/node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -10,7 +10,7 @@ COPY frontend/ ./
 RUN pnpm run build
 
 # 阶段2: 构建后端 + Nginx
-FROM python:3.12-slim AS backend
+FROM docker.m.daocloud.io/library/python:3.12-slim AS backend
 
 WORKDIR /app
 
@@ -47,8 +47,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Playwright
-RUN pip install playwright && playwright install chromium
+# 安装 Playwright 和 Chromium (使用系统包)
+RUN pip install playwright && \
+    apt-get update && apt-get install -y chromium && \
+    playwright install chromium || true
 
 # 复制 Python 依赖
 COPY backend/requirements.txt /app/backend/requirements.txt

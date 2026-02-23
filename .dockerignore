@@ -8,8 +8,12 @@
 *.swp
 *.swo
 
-# Node.js (前端构建在 Docker 内完成)
-node_modules
+# Frontend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/pnpm-lock.yaml
+frontend/.gitignore
 
 # Python
 __pycache__
@@ -19,8 +23,6 @@ __pycache__
 .Python
 *.egg-info
 .eggs
-dist
-build
 
 # 测试
 *.test.py
@@ -29,7 +31,6 @@ tests/
 
 # 文档
 *.md
-!README.md
 docs/
 
 # 环境文件
@@ -37,18 +38,12 @@ docs/
 .env.*.local
 
 # 日志
-*.log
 logs/
 
 # 临时文件
 tmp/
 temp/
-*.tmp
 
 # 操作系统文件
 .DS_Store
 Thumbs.db
-
-# 后端开发文件 (使用 volumes 挂载)
-backend/__pycache__
-backend/*.pyc

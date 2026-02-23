@@ -11,6 +11,13 @@ venv/
 *.db
 .DS_Store
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/pnpm-lock.yaml
+frontend/.gitignore
+
 # Data
 backend/data/
 !backend/data/assets/
