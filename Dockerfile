@@ -1,24 +1,27 @@
-# 使用国内镜像源加速基础镜像下载 (由 docker.io/library/python:3.12-slim 替换)
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/python:3.12-slim
+# 阶段1: 构建前端
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
+RUN npm install -g pnpm && pnpm install
+
+COPY frontend/ ./
+RUN pnpm run build
+
+# 阶段2: 构建后端 + Nginx
+FROM python:3.12-slim AS backend
 
 WORKDIR /app
 
-# 1. 优化：配置国内镜像源 (清华源)
-RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources \
-    && pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+# 配置国内镜像源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources
 
-# Copy requirements
-COPY backend/requirements.txt /app/backend/requirements.txt
-
-# 2. 安装 Python 依赖
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
-
-# 3. 安装 Chromium 浏览器 (仅下载二进制文件)
-RUN playwright install chromium
-
-# 4. 手动安装系统依赖 (Debian 12 专用)
-# 修复 playwright install-deps 在 Debian Slim 下因包名不匹配报错的问题
+# 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -41,17 +44,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-arphic-uming \
     lsb-release \
     xdg-utils \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy backend code
+# 安装 Playwright
+RUN pip install playwright && playwright install chromium
+
+# 复制 Python 依赖
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+
+# 复制后端代码
 COPY backend /app/backend
-COPY frontend /app/frontend
+COPY scheduler_entry.py /app/scheduler_entry.py
 
-# Set PYTHONPATH
+# 复制前端构建产物
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+
+# 复制 Nginx 配置
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# 设置环境变量
 ENV PYTHONPATH=/app/backend
+ENV TZ=Asia/Shanghai
+ENV PYTHONUNBUFFERED=1
 
-# Expose port
-EXPOSE 8000
+# 暴露端口
+EXPOSE 80
 
-# Default command
-CMD ["python", "backend/reporting/dashboard_server.py"]
+# 启动 Nginx 和后端服务
+CMD ["sh", "-c", "python /app/backend/reporting/dashboard_server.py & nginx -g 'daemon off;'"]

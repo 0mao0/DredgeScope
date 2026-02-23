@@ -240,7 +240,8 @@ const vesselStore = useVesselStore()
 const loading = ref(true)
 const modalVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
-const lastOpenedId = ref<number | null>(null)
+const lastOpenedId = ref<string | null>(null)
+const scrollPositions = ref<Record<string, number>>({})
 
 const categories = {
   Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -297,19 +298,30 @@ function formatTime(dateStr: string | undefined) {
 }
 
 async function openDetail(item: NewsItem) {
-  const isSameAsLast = lastOpenedId.value === (item.id || null)
-  lastOpenedId.value = item.id || null
+  const prevId = lastOpenedId.value
+  const currentId = item.id || null
+  
+  if (prevId && currentId && prevId !== currentId) {
+    const modalBody = document.querySelector('.ant-modal-body')
+    if (modalBody) {
+      scrollPositions.value[prevId] = modalBody.scrollTop
+    }
+  }
+  
+  lastOpenedId.value = currentId
   currentArticle.value = item
   modalVisible.value = true
   
-  if (!isSameAsLast) {
-    setTimeout(() => {
-      const modalBody = document.querySelector('.ant-modal-body')
-      if (modalBody) {
+  setTimeout(() => {
+    const modalBody = document.querySelector('.ant-modal-body')
+    if (modalBody && currentId) {
+      if (prevId === currentId && scrollPositions.value[currentId]) {
+        modalBody.scrollTop = scrollPositions.value[currentId]
+      } else {
         modalBody.scrollTop = 0
       }
-    }, 100)
-  }
+    }
+  }, 100)
 }
 
 onMounted(async () => {

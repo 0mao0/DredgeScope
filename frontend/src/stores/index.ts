@@ -148,7 +148,7 @@ export const useVesselStore = defineStore('vessel', () => {
       }
       const data = await response.json()
       vessels.value = data.ships || []
-      trackedCount.value = data.tracked || 0
+      trackedCount.value = data.visible || data.tracked || 0
       totalCount.value = data.total || 0
     } catch (error) {
       console.error('Failed to fetch vessels:', error)

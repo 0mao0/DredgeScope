@@ -1,32 +1,35 @@
 services:
-  dashboard:
+  dredge:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    container_name: dredge_dashboard
+      dockerfile: Dockerfile
+    container_name: dredge_app
     ports:
-      - "8000:8000"
+      - "8000:80"
     volumes:
-      - ./frontend:/app/frontend  # 添加这行，映射 frontend 目录
       - ./backend/data:/app/backend/data
-      - ./.env:/app/.env
+      - ./.env:/app/.env:ro
     restart: always
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
-      # 显式覆盖 .env 中的值，确保容器内正确识别
-      - WISEFLOW_BACKEND_URL=http://124.221.238.70:8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   scheduler:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: dredge_scheduler
-    command: ["python", "backend/scheduler.py"]
     volumes:
       - ./backend/data:/app/backend/data
-      - ./.env:/app/.env
+      - ./.env:/app/.env:ro
     restart: always
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+    command: ["python", "/app/scheduler_entry.py"]
