@@ -86,6 +86,19 @@ async def fetch_web_index(context, source):
             # Filter out cloudflare links
             if "cloudflare.com" in l['link'] or "5xx-error" in l['link']:
                 continue
+            
+            # 应用源配置的黑名单
+            blacklist = source.get('blacklist', [])
+            if blacklist:
+                link_lower = l['link'].lower()
+                if any(pattern.lower() in link_lower for pattern in blacklist):
+                    print(f"[Web] 黑名单过滤: {l['title']} -> {l['link']}")
+                    continue
+            
+            # 过滤非新闻类页面（委员会、About、Team等）
+            if not is_news_page(l['link'], l['title']):
+                print(f"[Web] 过滤非新闻页面: {l['title']} -> {l['link']}")
+                continue
 
             items.append({
                 'title': l['title'],
@@ -117,6 +130,92 @@ def contains_dredging_keywords(text):
         "dredge", "dredging", "channel", "harbor", "harbour", "port", "berth"
     ]
     return any(k in lower for k in keywords)
+
+def is_news_page(url, title):
+    """
+    判断是否为新闻类页面，排除委员会、About、Team等非新闻页面
+    """
+    if not url:
+        return False
+    
+    url_lower = url.lower()
+    title_lower = title.lower() if title else ""
+    
+    # 1. 过滤带锚点的URL（如 #a11y-footer, #top）
+    if '#' in url:
+        return False
+    
+    # 2. 过滤 /expertise/ 等专业领域/服务页面
+    if '/expertise/' in url_lower or '/services/' in url_lower or '/solutions/' in url_lower:
+        return False
+    
+    # 3. 过滤 /updates/ 索引页（这是列表页，不是具体新闻）
+    if url_lower.endswith('/updates/') or url_lower.endswith('/updates'):
+        return False
+    
+    # 4. 过滤导航类标题
+    skip_title_patterns = [
+        'skip to', 'back to', 'return to', 'go to',
+        'home', 'homepage', 'frontpage', 'main menu',
+        'previous', 'next', 'read more', 'learn more',
+        'cookie', 'accept', 'agree', 'privacy policy',
+        'terms of', 'contact us', 'about us'
+    ]
+    for pattern in skip_title_patterns:
+        if pattern in title_lower and len(title.strip()) < 30:
+            return False
+    
+    # 5. 非新闻类URL路径关键词
+    non_news_patterns = [
+        "/about", "/team", "/staff", "/governance", "/committee", 
+        "/contact", "/career", "/jobs", "/careers", "/join",
+        "/publication", "/publications", "/member", "/members",
+        "/event", "/events", "/conference", "/workshop",
+        "/award", "/awards", "/grant", "/grants",
+        "/policy", "/policies", "/document", "/documents",
+        "/report", "/reports", "/annual", "/financial",
+        "/press", "/media", "/gallery", "/video", "/videos",
+        "/faq", "/faq's", "/terms", "/privacy", "/legal",
+        "/sitemap", "/link", "/links", "/partner", "/partners",
+        "/newsroom", "/insight", "/insights", "/knowledge",
+        "/history", "/milestone", "/milestones", "/achievement",
+        "/board", "/directors", "/management", "/executive",
+        "/mission", "/vision", "/values", "/who-we-are",
+        "/community", "/forum", "/blog", "/opinion", "/perspective",
+        "/article", "/article/",  # 过滤文章类页面（非新闻）
+    ]
+    
+    # 检查URL是否包含非新闻模式
+    for pattern in non_news_patterns:
+        if pattern in url_lower:
+            # 但如果URL包含news或newsletter，则认为是新闻
+            if "/news" in url_lower or "/newsletter" in url_lower:
+                continue
+            return False
+    
+    # 非新闻类标题关键词
+    non_news_title_patterns = [
+        "about", "team", "staff", "governance", "committee", "commission",
+        "career", "job", "jobs", "join us", "vacancy", "vacancies",
+        "publication", "document", "report", "annual report",
+        "press release", "media", "gallery", "video",
+        "faq", "terms", "privacy", "legal", "contact",
+        "who we are", "our mission", "vision", "values",
+        "board of", "directors", "management team", "executive team",
+        "partner", "partners", "membership", "member",
+        "conference", "workshop", "event", "symposium",
+        "award", "grant", "scholarship", "funding",
+    ]
+    
+    # 检查标题是否包含非新闻模式
+    for pattern in non_news_title_patterns:
+        if pattern in title_lower:
+            # 但如果同时包含疏浚相关关键词，则可能是新闻
+            if contains_dredging_keywords(title):
+                continue
+            return False
+    
+    return True
 
 async def get_all_items():
     """获取所有来源的新闻"""

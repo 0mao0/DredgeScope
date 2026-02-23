@@ -10,13 +10,22 @@ import pycountry_convert as pc
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import database
+import config
 
-FLEET_API_URL = "http://101.200.125.6:8234/fleets/group/shipposition?usertoken=H2UbIXn52rXHndFrfxWm6i9xthSBK5b4C%2BDcmOwmUbEVu%2FLdfN5ZwQR%2BIP4N%2FxTI&group=group1"
+_geo_initialized = False
+
+def _ensure_geo_loaded():
+    """确保地理编码数据已加载（只加载一次）"""
+    global _geo_initialized
+    if not _geo_initialized:
+        print("[Status] 加载地理数据...")
+        rg.search((0, 0), mode=1)  # 预加载地理数据
+        _geo_initialized = True
 
 def fetch_all_fleet_positions():
     """从 Fleet API 获取所有船舶位置"""
     try:
-        resp = requests.get(FLEET_API_URL, timeout=30)
+        resp = requests.get(config.FLEET_API_URL, timeout=30)
         if resp.status_code != 200:
             print(f"[API] 请求失败: {resp.status_code}")
             return {}
@@ -72,9 +81,8 @@ def update_ship_statuses():
     
     updated_count = 0
     
-    # 预加载 reverse_geocoder (第一次调用会加载数据)
-    print("[Status] 加载地理数据...")
-    rg.search((0,0), mode=1)
+    # 预加载地理数据（只加载一次）
+    _ensure_geo_loaded()
 
     for (mmsi, ship_name_db) in db_ships:
         mmsi = str(mmsi)

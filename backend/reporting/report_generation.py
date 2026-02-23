@@ -3,96 +3,15 @@ import base64
 from datetime import datetime
 import config
 import database
-
-DEFAULT_CATEGORY = "Market"
-
-ALLOWED_CATEGORIES = {
-    "Bid",
-    "Equipment",
-    "Market",
-    "Project",
-    "Regulation",
-    "R&D"
-}
-
-KEYWORD_CATEGORY_MAP = [
-    (["contract", "tender", "bid", "award", "funding", "budget", "procurement"], "Bid"),
-    (["delivery", "launch", "vessel", "ship", "dredger", "keel", "shipyard", "equipment", "fleet"], "Equipment"),
-    (["acquire", "acquisition", "merger", "financial", "profit", "revenue", "earnings", "market", "investor", "share", "plan", "planning", "strategy", "strategic", "roadmap", "program", "programme", "initiative", "five-year", "five year", "5-year", "master plan"], "Market"),
-    (["project", "construction", "progress", "dredging", "completion", "completed", "underway", "restoration", "maintenance", "works"], "Project"),
-    (["regulation", "policy", "law", "act", "legislation", "tariff", "compliance", "standard", "guideline", "guidelines", "requirement", "requirements", "permit", "approval", "overview", "introduction", "intro", "basics", "guide", "101"], "Regulation"),
-    (["research", "technology", "innovation", "laboratory", "prototype", "r&d", "rd"], "R&D")
-]
-
-def normalize_category(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    lower = text.lower()
-    exact_map = {
-        "bid": "Bid",
-        "equipment": "Equipment",
-        "market": "Market",
-        "project": "Project",
-        "regulation": "Regulation",
-        "r&d": "R&D",
-        "rd": "R&D",
-        "r and d": "R&D",
-        "research and development": "R&D"
-    }
-    if lower in exact_map:
-        return exact_map[lower]
-    compact = "".join(ch for ch in lower if ch.isalnum())
-    if compact in ["rd", "researchdevelopment"]:
-        return "R&D"
-    for keywords, category in KEYWORD_CATEGORY_MAP:
-        if any(k in lower for k in keywords):
-            return category
-    return None
-
-def normalize_event_text(value):
-    """归一化事件字段文本"""
-    if not value:
-        return ""
-    text = str(value).strip().lower()
-    return "".join(ch for ch in text if ch.isalnum() or ch.isspace())
-
-def extract_regulation_core(evt):
-    """提取法规事件的核心内容用于去重"""
-    if not isinstance(evt, dict):
-        return ""
-    parts = [
-        evt.get("project_name"),
-        evt.get("content"),
-        evt.get("location"),
-        evt.get("time")
-    ]
-    merged = " ".join([str(p) for p in parts if p])
-    return normalize_event_text(merged)
-
-def consolidate_regulation_events(events):
-    """合并同一文章中过量拆分的法规事件"""
-    if not events:
-        return []
-    reg_indices = [(idx, evt) for idx, evt in enumerate(events) if evt.get("category") == "Regulation"]
-    if len(reg_indices) <= 1:
-        return events
-    cores = [(idx, evt, extract_regulation_core(evt)) for idx, evt in reg_indices]
-    meaningful = [(idx, evt, core) for idx, evt, core in cores if core]
-    if len(meaningful) <= 1:
-        keep_indices = {reg_indices[0][0]}
-    else:
-        seen = set()
-        keep_indices = set()
-        for idx, evt, core in cores:
-            key = core or "regulation"
-            if key in seen:
-                continue
-            seen.add(key)
-            keep_indices.add(idx)
-    return [evt for idx, evt in enumerate(events) if evt.get("category") != "Regulation" or idx in keep_indices]
+from constants import (
+    DEFAULT_CATEGORY,
+    ALLOWED_CATEGORIES,
+    KEYWORD_CATEGORY_MAP,
+    normalize_category,
+    normalize_event_text,
+    extract_regulation_core,
+    consolidate_regulation_events
+)
 
 def normalize_events(events, fallback_category):
     if events is None:

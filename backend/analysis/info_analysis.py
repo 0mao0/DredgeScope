@@ -5,54 +5,16 @@ import os
 from playwright.async_api import async_playwright
 from openai import AsyncOpenAI
 import config
-
-DEFAULT_CATEGORY = "Market"
-
-ALLOWED_CATEGORIES = {
-    "Bid",
-    "Equipment",
-    "Market",
-    "Project",
-    "Regulation",
-    "R&D"
-}
-
-KEYWORD_CATEGORY_MAP = [
-    (["contract", "tender", "bid", "award", "funding", "budget", "procurement"], "Bid"),
-    (["delivery", "launch", "vessel", "ship", "dredger", "keel", "shipyard", "equipment", "fleet"], "Equipment"),
-    (["acquire", "acquisition", "merger", "financial", "profit", "revenue", "earnings", "market", "investor", "share", "plan", "planning", "strategy", "strategic", "roadmap", "program", "programme", "initiative", "five-year", "five year", "5-year", "master plan"], "Market"),
-    (["project", "construction", "progress", "dredging", "completion", "completed", "underway", "restoration", "maintenance", "works"], "Project"),
-    (["regulation", "policy", "law", "act", "legislation", "tariff", "compliance", "standard", "guideline", "guidelines", "requirement", "requirements", "permit", "approval", "overview", "introduction", "intro", "basics", "guide", "101"], "Regulation"),
-    (["research", "technology", "innovation", "laboratory", "prototype", "r&d", "rd"], "R&D")
-]
-
-def normalize_category(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    lower = text.lower()
-    exact_map = {
-        "bid": "Bid",
-        "equipment": "Equipment",
-        "market": "Market",
-        "project": "Project",
-        "regulation": "Regulation",
-        "r&d": "R&D",
-        "rd": "R&D",
-        "r and d": "R&D",
-        "research and development": "R&D"
-    }
-    if lower in exact_map:
-        return exact_map[lower]
-    compact = "".join(ch for ch in lower if ch.isalnum())
-    if compact in ["rd", "researchdevelopment"]:
-        return "R&D"
-    for keywords, category in KEYWORD_CATEGORY_MAP:
-        if any(k in lower for k in keywords):
-            return category
-    return None
+from constants import (
+    DEFAULT_CATEGORY,
+    ALLOWED_CATEGORIES,
+    KEYWORD_CATEGORY_MAP,
+    normalize_category,
+    normalize_event_text,
+    build_event_signature,
+    extract_regulation_core,
+    consolidate_regulation_events
+)
 
 def normalize_events(events, fallback_category):
     if events is None:
@@ -83,66 +45,6 @@ def normalize_events(events, fallback_category):
         normalized.append(evt)
     return consolidate_regulation_events(normalized)
 
-def extract_regulation_core(evt):
-    """提取法规事件的核心内容用于去重"""
-    if not isinstance(evt, dict):
-        return ""
-    parts = [
-        evt.get("project_name"),
-        evt.get("content"),
-        evt.get("location"),
-        evt.get("time")
-    ]
-    merged = " ".join([str(p) for p in parts if p])
-    return normalize_event_text(merged)
-
-def consolidate_regulation_events(events):
-    """合并同一文章中过量拆分的法规事件"""
-    if not events:
-        return []
-    reg_indices = [(idx, evt) for idx, evt in enumerate(events) if evt.get("category") == "Regulation"]
-    if len(reg_indices) <= 1:
-        return events
-    cores = [(idx, evt, extract_regulation_core(evt)) for idx, evt in reg_indices]
-    meaningful = [(idx, evt, core) for idx, evt, core in cores if core]
-    if len(meaningful) <= 1:
-        keep_indices = {reg_indices[0][0]}
-    else:
-        seen = set()
-        keep_indices = set()
-        for idx, evt, core in cores:
-            key = core or "regulation"
-            if key in seen:
-                continue
-            seen.add(key)
-            keep_indices.add(idx)
-    return [evt for idx, evt in enumerate(events) if evt.get("category") != "Regulation" or idx in keep_indices]
-
-def normalize_event_text(value):
-    """归一化事件字段文本"""
-    if not value:
-        return ""
-    text = str(value).strip().lower()
-    return "".join(ch for ch in text if ch.isalnum() or ch.isspace())
-
-def build_event_signature(evt):
-    """生成事件指纹用于去重"""
-    if not isinstance(evt, dict):
-        return ""
-    parts = [
-        evt.get("category"),
-        evt.get("project_name"),
-        evt.get("location"),
-        evt.get("contractor"),
-        evt.get("client"),
-        evt.get("time"),
-        evt.get("content"),
-        evt.get("amount"),
-        evt.get("currency")
-    ]
-    normalized = [normalize_event_text(p) for p in parts if p]
-    return "|".join([p for p in normalized if p])
-
 async def analyze_with_vl(client, item, b64_img):
     """
     使用视觉模型进行首要分析
@@ -155,13 +57,17 @@ async def analyze_with_vl(client, item, b64_img):
 
 任务说明：
 1. 【深度语义分类】请基于新闻的核心语义和主要事件类型，将其归入以下六类别之一。
-   - Bid (中标/合同): 核心事件是关于合同签署、项目中标、招标公告发布、资金/预算获批。关键词：Secures, Wins, Contract, Tender, Awarded, Funding, Budget。
-   - Equipment (装备动态): 核心事件是关于船舶/设备的建造、交付、下水、购买、维修或技术升级。关键词：Vessel, Dredger, Delivery, Launch, Keel Laying。
-   - Market (市场情报): 核心事件是关于公司并购、财务报告、高层人事变动、战略合作、市场趋势分析、行业规划/战略/路线图/中长期计划。关键词：Acquire, Merger, Financial, Profit, Market, Plan, Strategy, Roadmap。
-   - Project (项目进展): 核心事件是关于工程项目的物理进展（如开工、施工中、完工、验收、疏浚作业详情）。关键词：Begins, Completed, Dredging works, Progress。
-   - Regulation (政策法规): 核心事件是关于政府政策、环保法规、行业标准、限制令、关税、指南/规范/许可审批，以及政策解读/基础知识科普类内容。
-   - R&D (科技研发): 核心事件是关于技术研发、创新项目、研究成果发布等。
-   - 不允许输出其他类别，必须从上述六类中选择最接近的一类。
+   请使用**排除法**进行分类决策：
+   - Bid (中标/合同): 仅包含合同签署、项目中标、招标公告发布、资金/预算获批。关键词：Secures, Wins, Contract, Tender, Awarded, Funding, Budget。
+   - Equipment (装备动态): 仅包含船舶/设备的建造、交付、下水、购买、维修或技术升级。关键词：Vessel, Dredger, Delivery, Launch, Keel Laying。
+   - Project (项目进展): 仅包含工程项目的**物理进展**（如开工、施工中、完工、验收、疏浚作业详情）。关键词：Begins, Completed, Dredging works, Progress。
+   - R&D (科技研发): 仅包含技术研发、创新项目、研究成果发布。
+   - Regulation (政策法规): 仅包含**官方发布**的政府政策、环保法规、行业标准、限制令、关税、指南/规范/许可审批。
+     * 注意：针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
+   - Market (市场情报): 
+     1. 公司动态：并购、财务报告、人事变动、战略合作。
+     2. 市场分析：行业规划、战略、路线图。
+     3. **兜底类别**：所有不属于上述5类的事件（如罢工、抗议、事故、地缘政治影响、无法明确分类的行业新闻），均归入 Market。
 
 2. 【信息提取】
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
@@ -252,12 +158,16 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
 
 任务说明：
 1. 【语义分类】(Category) - 请根据文章描述的核心事件性质进行分类：
-   - Bid: 核心是关于合同签署、中标、招标或资金获批。包括 "secures contract", "wins tender", "funding approved"。
-   - Equipment: 核心是关于船舶/设备的建造、交付、交易或维护。
-   - Market: 核心是关于公司财务、人事、并购或市场分析，以及行业规划/战略/路线图/中长期计划。包括 "acquisition", "merger", "plan", "strategy"。
-   - Project: 核心是关于项目的物理施工进展（开工/完工/施工中）。包括 "begins", "completed", "underway"。
-   - Regulation: 核心是关于政策法规、标准、指南、许可审批或政策解读/基础知识科普内容。
-   - R&D: 核心是关于科技研发。
+   请使用**排除法**进行分类决策：
+   - Bid: 仅包含合同签署、中标、招标或资金获批。包括 "secures contract", "wins tender", "funding approved"。
+   - Equipment: 仅包含船舶/设备的建造、交付、交易或维护。
+   - Project: 仅包含项目的**物理施工进展**（开工/完工/施工中）。包括 "begins", "completed", "underway"。
+   - R&D: 仅包含科技研发。
+   - Regulation: 仅包含**官方发布**的政策法规、标准、指南、许可审批或政策解读。
+     * 针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
+   - Market: 
+     1. 核心是关于公司财务、人事、并购或市场分析，以及行业规划/战略。
+     2. **兜底类别**：如果事件涉及罢工、抗议、地缘政治影响、意外事故等非标准事件，或者无法归入其他5类，请归入此项。
    - 不允许输出其他类别，必须从上述六类中选择最接近的一类。
 
 2. 【有效性】(is_junk) - 排除无关或无效内容（如董事会名单、简单的链接列表）。
@@ -360,14 +270,102 @@ async def analyze_item(context, client, item):
             await page.evaluate("window.scrollTo(0, 0)")
         except: pass
         
+        # --- 处理 Cookie 弹窗与遮挡 (增强版 v2) ---
+        try:
+            # 1. 尝试点击常见的同意按钮 (非阻塞)
+            try:
+                # 高优先级关键词 (全选)
+                high_priority_keywords = ["Accept All", "Allow All", "Agree All", "全部接受", "全部同意", "Accept cookies"]
+                for kw in high_priority_keywords:
+                     btn = page.locator(f"button:visible:has-text('{kw}'), a:visible:has-text('{kw}')").first
+                     if await btn.count() > 0:
+                        print(f"[Cookie] 尝试点击高优先级: {kw}")
+                        await btn.click(timeout=1000)
+                        await asyncio.sleep(1.0)
+                        break
+
+                # 普通关键词
+                keywords = [
+                    "Accept", "Agree", "Allow", "Got it", "I understand", 
+                    "同意", "接受", "我知道了", "允许", "好", "确定", 
+                    "OK", "Yes", "Close", "关闭"
+                ]
+                for kw in keywords:
+                    # 查找可见的按钮或链接，增加 div[role='button']
+                    btn = page.locator(f"button:visible:has-text('{kw}'), a:visible:has-text('{kw}'), div[role='button']:visible:has-text('{kw}')").first
+                    if await btn.count() > 0:
+                        print(f"[Cookie] 尝试点击: {kw}")
+                        await btn.click(timeout=1000)
+                        await asyncio.sleep(1.0)
+                        break
+            except: 
+                pass
+
+            # 2. 暴力移除干扰元素
+            await page.evaluate("""() => {
+                // 常见 Cookie/广告 ID 和 Class 关键词
+                const keywords = ['cookie', 'consent', 'gdpr', 'banner', 'popup', 'newsletter', 'subscribe', 'ad-', 'notice', 'policy', 'privacy'];
+                
+                // 常见 CMP (Consent Management Platform) 的 ID
+                const cmpIds = ['onetrust-banner-sdk', 'CybotCookiebotDialog', 'usercentrics-root', 'cmpbox', 'cmp-container', 'cookie-law-info-bar'];
+                
+                // 1. 直接移除已知的 CMP
+                cmpIds.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.remove();
+                });
+
+                // 2. 遍历所有元素，移除固定定位且符合特征的元素
+                document.querySelectorAll('*').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    
+                    // 检查是否固定定位或粘性定位
+                    if (style.position === 'fixed' || style.position === 'sticky') {
+                        const id = el.id.toLowerCase();
+                        const className = el.className.toString().toLowerCase();
+                        const zIndex = parseInt(style.zIndex) || 0;
+                        const tagName = el.tagName.toLowerCase();
+                        
+                        // 2.1 关键词匹配
+                        if (keywords.some(k => id.includes(k) || className.includes(k))) {
+                            el.remove();
+                            return;
+                        }
+                        
+                        // 2.2 位于底部或顶部的横幅 (高度较小，宽度较大)
+                        const rect = el.getBoundingClientRect();
+                        const isBanner = (rect.height < 250 && rect.width > window.innerWidth * 0.8);
+                        const isAtEdge = (rect.top < 100 || rect.bottom > window.innerHeight - 100);
+                        
+                        if (isBanner && isAtEdge) {
+                             // 避免移除顶部导航栏 (通常包含 nav, header 关键词)
+                             if (!(id.includes('nav') || id.includes('header') || className.includes('nav') || className.includes('header') || tagName === 'nav' || tagName === 'header')) {
+                                el.remove();
+                                return;
+                             }
+                        }
+                        
+                        // 2.3 遮挡屏幕大部分的元素 (可能是全屏弹窗，且z-index较高)
+                        if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9 && zIndex > 50) {
+                             el.remove();
+                             return;
+                        }
+                    }
+                });
+                
+                // 3. 移除常见的遮罩层
+                document.querySelectorAll('.modal-backdrop, .overlay, .fade.in, [class*="overlay"], [class*="backdrop"]').forEach(el => el.remove());
+                
+                // 4. 强制恢复滚动
+                document.body.style.overflow = 'auto';
+                document.documentElement.style.overflow = 'auto';
+            }""")
+            await asyncio.sleep(1.0) # 等待移除生效
+        except Exception as e:
+            print(f"[Cookie清理] 异常: {e}")
+
         # 2. 提取文本 (核心)
         try:
-            # 移除干扰元素
-            await page.evaluate("""() => {
-                const trash = document.querySelectorAll('nav, footer, .ad, .advertisement, .sidebar, .cookie-consent, #cookie-banner');
-                trash.forEach(el => el.remove());
-            }""")
-            
             # 优先提取 article
             text_content = await page.evaluate("""() => {
                 const article = document.querySelector('article') || document.querySelector('.post-content') || document.querySelector('.entry-content') || document.body;

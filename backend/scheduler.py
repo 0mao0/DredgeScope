@@ -56,10 +56,10 @@ def job_ship_tracker():
     except Exception as e:
         write_log(f"船舶追踪任务出错: {e}")
 
-# 1. 数据采集 (0, 4, 8, 12, 16, 20)
+# 1. 数据采集 (0, 4, 7, 12, 16, 20)
 schedule.every().day.at("00:00").do(job_fetch)
 schedule.every().day.at("04:00").do(job_fetch)
-schedule.every().day.at("08:00").do(job_fetch)
+schedule.every().day.at("07:30").do(job_fetch)
 schedule.every().day.at("12:00").do(job_fetch)
 schedule.every().day.at("16:00").do(job_fetch)
 schedule.every().day.at("20:00").do(job_fetch)
@@ -73,7 +73,7 @@ schedule.every().hour.do(job_ship_tracker)
 
 print("=== 疏浚情报定时任务系统启动 ===")
 print("计划任务:")
-print("- 采集: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00")
+print("- 采集: 00:00, 04:00, 07:30, 0:00, 12:00, 16:00, 20:00")
 print("- 推送: 08:00, 18:00")
 print("- 追踪: 每小时")
 print("--------------------------------")

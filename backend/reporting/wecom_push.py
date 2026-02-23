@@ -18,20 +18,21 @@ CATEGORIES_MAP = {
 }
 
 def get_push_window(now):
+    """获取推送窗口的时间范围
+    
+    早报: 00:00-08:00 -> 昨天18:00 到 今天08:00
+    日报: 08:00-18:00 -> 今天08:00 到 今天18:00
+    """
     label_prefix = f"{now.month}月{now.day}日"
     hour = now.hour
     if hour < 8:
         start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        label = f"{label_prefix}凌晨新闻"
-    elif hour < 18:
-        start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
-        end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        label = f"{label_prefix}凌晨新闻"
+        label = f"{label_prefix}早报"
     else:
         start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-        label = f"{label_prefix}白天新闻"
+        label = f"{label_prefix}日报"
     return start_dt, end_dt, label
 
 def push_daily_report():
@@ -72,7 +73,9 @@ def push_daily_report():
         return
 
     # 1. 统计数据
-    cat_counts = {k: 0 for k in CATEGORIES_MAP.keys()}
+    # cat_counts = {k: 0 for k in CATEGORIES_MAP.keys()}
+    # 新逻辑：按文章去重统计 (用户要求：数量是新闻的数量，而不是events的数量)
+    cat_article_ids = {k: set() for k in CATEGORIES_MAP.keys()}
     
     # 分组数据用于详情展示 (取每类最重要的1-2条)
     cat_highlights = {k: [] for k in CATEGORIES_MAP.keys()}
@@ -85,9 +88,14 @@ def push_daily_report():
 
     for e in events:
         cat = e.get('category', DEFAULT_CATEGORY)
-        if cat not in cat_counts:
+        # 兼容性处理：如果 cat 不在 map 中，归为 DEFAULT
+        if cat not in cat_article_ids:
             cat = DEFAULT_CATEGORY
-        cat_counts[cat] += 1
+        
+        # 统计文章ID
+        article_id = e.get('article_id')
+        if article_id:
+            cat_article_ids[cat].add(article_id)
         
         if not found_cover and e.get('screenshot_path'):
             if "127.0.0.1" in config.BACKEND_URL or "localhost" in config.BACKEND_URL:
@@ -99,7 +107,9 @@ def push_daily_report():
                 found_cover = True
         
         # 添加到高亮列表 (简单的逻辑：按时间倒序，每类存前3个)
-        if len(cat_highlights[cat]) < 3:
+        # 注意：这里需要去重，避免同一篇文章显示多次
+        existing_urls = {h['url'] for h in cat_highlights[cat]}
+        if len(cat_highlights[cat]) < 3 and e.get('article_url') not in existing_urls:
             # 构造简短描述
             desc = ""
             if cat == 'Bid':
@@ -124,6 +134,9 @@ def push_daily_report():
                 "desc": desc,
                 "url": e.get('article_url')
             })
+
+    # 计算最终数量
+    cat_counts = {k: len(v) for k, v in cat_article_ids.items()}
 
     # 2. 构造 Template Card
     date_str = label
@@ -157,22 +170,12 @@ def push_daily_report():
     # 4. 重新生成 v_list
     v_list = []
     for count, cat_key, cat_name in top_cats:
-        items = cat_highlights[cat_key]
-        item_titles = [i['title'] for i in items if i['title']]
-        
         # 格式优化：标题后加括号数字
         display_title = f"{cat_name} ({count})"
         
-        desc_str = ""
-        if item_titles:
-            desc_str = "、".join(item_titles)
-            
-        if len(desc_str) > 80:
-            desc_str = desc_str[:77] + "..."
-            
         v_list.append({
             "title": display_title,
-            "desc": desc_str
+            "desc": ""  # 用户要求删除概况详情
         })
         
     # 如果还有更多分类被隐藏
@@ -238,7 +241,7 @@ def push_daily_report():
                 text_content = f"【全球疏浚情报 {date_str}】\n"
                 text_content += f"本次更新: {total_count} 条\n\n"
                 for v in v_list:
-                    text_content += f"{v['title']}: {v['desc']}\n"
+                    text_content += f"{v['title']}\n"
                 text_content += f"\n详情请访问: {jump_url}"
                 
                 text_payload = {

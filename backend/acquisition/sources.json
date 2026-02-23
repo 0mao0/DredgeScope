@@ -45,7 +45,13 @@
         "name": "CEDA Industry News",
         "url": "https://dredging.org/news/industry-news/",
         "type": "web",
-        "selector": ".news-item"
+        "selector": ".news-item",
+        "blacklist": [
+            "/ceda/governance",
+            "/ceda/about",
+            "/ceda/member",
+            "/ceda/committee"
+        ]
     },
     {
         "name": "China Dredging Association",

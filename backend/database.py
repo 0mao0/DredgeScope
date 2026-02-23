@@ -3,92 +3,19 @@ import json
 import os
 from datetime import datetime
 import config
+from constants import (
+    DEFAULT_CATEGORY,
+    ALLOWED_CATEGORIES,
+    KEYWORD_CATEGORY_MAP,
+    normalize_category,
+    infer_category_from_text,
+    text_contains_any,
+    normalize_event_text,
+    build_event_signature
+)
 
 DB_PATH = os.path.join(config.DATA_DIR, 'dredge_intel.db')
 TRACK_DB_PATH = os.path.join(config.DATA_DIR, 'ship_tracks.db')
-
-DEFAULT_CATEGORY = "Project"
-
-ALLOWED_CATEGORIES = {
-    "Bid",
-    "Equipment",
-    "Market",
-    "Project",
-    "Regulation",
-    "R&D"
-}
-
-KEYWORD_CATEGORY_MAP = [
-    (["contract", "tender", "bid", "award", "funding", "budget", "procurement"], "Bid"),
-    (["delivery", "launch", "vessel", "ship", "dredger", "keel", "shipyard", "equipment", "fleet"], "Equipment"),
-    (["acquire", "acquisition", "merger", "financial", "profit", "revenue", "earnings", "market", "investor", "share", "plan", "planning", "strategy", "strategic", "roadmap", "program", "programme", "initiative", "five-year", "five year", "5-year", "master plan"], "Market"),
-    (["project", "construction", "progress", "dredging", "completion", "completed", "underway", "restoration", "maintenance", "works"], "Project"),
-    (["regulation", "policy", "law", "act", "legislation", "tariff", "compliance", "standard", "guideline", "guidelines", "requirement", "requirements", "permit", "approval", "overview", "introduction", "intro", "basics", "guide", "101"], "Regulation"),
-    (["research", "technology", "innovation", "laboratory", "prototype", "r&d", "rd"], "R&D")
-]
-
-def normalize_category(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    lower = text.lower()
-    exact_map = {
-        "bid": "Bid",
-        "equipment": "Equipment",
-        "market": "Market",
-        "project": "Project",
-        "regulation": "Regulation",
-        "r&d": "R&D",
-        "rd": "R&D",
-        "r and d": "R&D",
-        "research and development": "R&D"
-    }
-    if lower in exact_map:
-        return exact_map[lower]
-    compact = "".join(ch for ch in lower if ch.isalnum())
-    if compact in ["rd", "researchdevelopment"]:
-        return "R&D"
-    for keywords, category in KEYWORD_CATEGORY_MAP:
-        if any(k in lower for k in keywords):
-            return category
-    return None
-
-def infer_category_from_text(text):
-    if not text:
-        return None
-    lower = str(text).lower()
-    for keywords, category in KEYWORD_CATEGORY_MAP:
-        if any(k in lower for k in keywords):
-            return category
-    return None
-
-def text_contains_any(text, keywords):
-    if not text:
-        return False
-    lower = str(text).lower()
-    return any(k in lower for k in keywords)
-
-def normalize_event_text(value):
-    if not value:
-        return ""
-    text = str(value).strip().lower()
-    return "".join(ch for ch in text if ch.isalnum() or ch.isspace())
-
-def build_event_signature(item):
-    parts = [
-        item.get("category"),
-        item.get("project_name"),
-        item.get("location"),
-        item.get("amount"),
-        item.get("currency"),
-        item.get("contractor"),
-        item.get("client"),
-        item.get("details_json")
-    ]
-    normalized = [normalize_event_text(p) for p in parts if p]
-    return "|".join([p for p in normalized if p])
 
 def enrich_event_category(item):
     category = normalize_category(item.get("category"))
