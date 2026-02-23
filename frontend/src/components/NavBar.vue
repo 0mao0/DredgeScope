@@ -1,6 +1,6 @@
 <template>
   <nav class="sticky top-0 z-40 w-full glass-card border-b border-white/5 mb-6">
-    <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+    <div class="w-full px-2 sm:px-4 lg:px-8">
       <div class="flex items-center justify-between h-14 sm:h-16">
         <div class="flex items-center gap-2">
           <router-link to="/" class="flex items-center gap-2">
@@ -14,7 +14,7 @@
             </div>
           </router-link>
         </div>
-        <div class="flex items-center gap-2 md:gap-3">
+        <div class="flex items-center gap-1 sm:gap-2 md:gap-3">
           <router-link 
             to="/" 
             :class="[

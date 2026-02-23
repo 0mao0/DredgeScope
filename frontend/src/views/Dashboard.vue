@@ -217,13 +217,13 @@
       </div>
 
       <!-- Footer -->
-      <div class="mt-4 flex flex-col sm:flex-row gap-3">
-        <a-button @click="modalVisible = false" class="h-9 sm:order-2">
-          <i class="fa-solid fa-xmark mr-1"></i> 关闭
-        </a-button>
-        <a :href="currentArticle?.article_url || currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2 sm:order-1">
+      <div class="mt-4 flex justify-end gap-3">
+        <a :href="currentArticle?.article_url || currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
+        <a-button @click="modalVisible = false" class="h-9">
+          <i class="fa-solid fa-xmark mr-1"></i> 关闭
+        </a-button>
       </div>
     </a-modal>
   </div>
