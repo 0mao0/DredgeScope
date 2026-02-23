@@ -528,7 +528,7 @@ def get_recent_events(limit=50):
     c = conn.cursor()
     
     query = '''
-        SELECT e.*, a.title as article_title, a.url as article_url, a.summary_cn, a.is_significant, a.vl_desc
+        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.summary_cn, a.screenshot_path, a.is_significant, a.vl_desc, a.full_text_cn, e.details_json
         FROM events e
         JOIN articles a ON e.article_id = a.id
         ORDER BY e.created_at DESC
@@ -575,7 +575,7 @@ def get_events_by_time_range(start_time, end_time):
     c = conn.cursor()
     
     query = '''
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.is_significant, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name
+        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.is_significant, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, a.full_text_cn, e.details_json
         FROM events e
         JOIN articles a ON e.article_id = a.id
         WHERE (e.created_at BETWEEN ? AND ?) 

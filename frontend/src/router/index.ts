@@ -33,11 +33,4 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, _from, next) => {
-  if (to.meta.title) {
-    document.title = `${to.meta.title} - 全球疏浚情报 DredgeScope`
-  }
-  next()
-})
-
 export default router

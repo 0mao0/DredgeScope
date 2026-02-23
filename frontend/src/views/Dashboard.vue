@@ -158,21 +158,69 @@
         <!-- AI Analysis -->
         <div class="mt-6 bg-slate-800/50 rounded-xl p-4 border border-brand-500/20">
           <h4 class="text-sm font-bold text-brand-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-robot"></i> AI 智能分析
+            <i class="fa-solid fa-robot"></i> AI 分析过程
           </h4>
           <div class="mb-4">
             <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen2.5 纯文字解析：</span>
             <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
           </div>
-          <div>
+          <div class="mb-4">
             <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3-VL多模态识别</span>
             <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
+          </div>
+          <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">关键字段提取：</span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div v-if="currentArticle.details.project_name" class="flex gap-2">
+                <span class="text-gray-500">项目名称:</span>
+                <span class="text-gray-300">{{ currentArticle.details.project_name }}</span>
+              </div>
+              <div v-if="currentArticle.details.location" class="flex gap-2">
+                <span class="text-gray-500">位置:</span>
+                <span class="text-gray-300">{{ currentArticle.details.location }}</span>
+              </div>
+              <div v-if="currentArticle.details.contractor" class="flex gap-2">
+                <span class="text-gray-500">承包商:</span>
+                <span class="text-gray-300">{{ currentArticle.details.contractor }}</span>
+              </div>
+              <div v-if="currentArticle.details.client" class="flex gap-2">
+                <span class="text-gray-500">客户:</span>
+                <span class="text-gray-300">{{ currentArticle.details.client }}</span>
+              </div>
+              <div v-if="currentArticle.details.amount" class="flex gap-2">
+                <span class="text-gray-500">金额:</span>
+                <span class="text-gray-300">{{ currentArticle.details.amount }} {{ currentArticle.details.currency || '' }}</span>
+              </div>
+              <div v-if="currentArticle.details.event_type" class="flex gap-2">
+                <span class="text-gray-500">事件类型:</span>
+                <span class="text-gray-300">{{ currentArticle.details.event_type }}</span>
+              </div>
+              <div v-if="currentArticle.details.type" class="flex gap-2">
+                <span class="text-gray-500">类型:</span>
+                <span class="text-gray-300">{{ currentArticle.details.type }}</span>
+              </div>
+              <div v-if="currentArticle.details.vessel_name" class="flex gap-2">
+                <span class="text-gray-500">船舶名称:</span>
+                <span class="text-gray-300">{{ currentArticle.details.vessel_name }}</span>
+              </div>
+              <div v-if="currentArticle.details.company" class="flex gap-2">
+                <span class="text-gray-500">公司:</span>
+                <span class="text-gray-300">{{ currentArticle.details.company }}</span>
+              </div>
+              <div v-if="currentArticle.details.institution" class="flex gap-2">
+                <span class="text-gray-500">机构:</span>
+                <span class="text-gray-300">{{ currentArticle.details.institution }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="mt-4 flex flex-row-reverse gap-3">
+      <div class="mt-4 flex justify-between gap-3">
+        <a-button @click="modalVisible = false">
+          <i class="fa-solid fa-xmark mr-1"></i> 关闭
+        </a-button>
         <a :href="currentArticle?.article_url || currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
@@ -182,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useNewsStore, useVesselStore, type NewsItem } from '@/stores'
 import NavBar from '@/components/NavBar.vue'
 
@@ -192,6 +240,7 @@ const vesselStore = useVesselStore()
 const loading = ref(true)
 const modalVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
+const lastOpenedId = ref<number | null>(null)
 
 const categories = {
   Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -231,7 +280,12 @@ function formatTitle(item: NewsItem, category: string) {
   if (category === 'Bid' && item.contractor) {
     title = `[中标: ${item.contractor}] ${title}`
   } else if (category === 'Project' && item.location) {
-    title = `[${item.location}] ${title}`
+    let locationDisplay = item.location
+    if (item.location.includes(',')) {
+      const parts = item.location.split(',').map(p => p.trim())
+      locationDisplay = parts[parts.length - 1]
+    }
+    title = `[${locationDisplay}] ${title}`
   }
   return title
 }
@@ -243,8 +297,19 @@ function formatTime(dateStr: string | undefined) {
 }
 
 async function openDetail(item: NewsItem) {
+  const isSameAsLast = lastOpenedId.value === (item.id || null)
+  lastOpenedId.value = item.id || null
   currentArticle.value = item
   modalVisible.value = true
+  
+  if (!isSameAsLast) {
+    setTimeout(() => {
+      const modalBody = document.querySelector('.ant-modal-body')
+      if (modalBody) {
+        modalBody.scrollTop = 0
+      }
+    }, 100)
+  }
 }
 
 onMounted(async () => {
@@ -253,6 +318,20 @@ onMounted(async () => {
     vesselStore.fetchVessels()
   ])
   loading.value = false
+})
+
+watch(modalVisible, (isOpen) => {
+  if (isOpen) {
+    setTimeout(() => {
+      const modalBody = document.querySelector('.ant-modal-body')
+      if (modalBody) {
+        const isSame = currentArticle.value?.id === lastOpenedId.value
+        if (!isSame) {
+          modalBody.scrollTop = 0
+        }
+      }
+    }, 100)
+  }
 })
 </script>
 

@@ -9,14 +9,11 @@
         <div class="flex flex-wrap items-end gap-3">
           <div class="flex flex-col">
             <label class="text-xs text-gray-400 mb-1">时间范围</label>
-            <div class="flex items-center bg-dark-card border border-dark-border rounded-lg overflow-hidden h-[42px]">
-              <a-range-picker 
-                v-model:value="dateRange" 
-                class="bg-transparent border-none text-white"
-                :get-popup-container="(trigger: HTMLElement) => trigger.parentElement"
-                format="YYYY-MM-DD"
-              />
-            </div>
+            <a-range-picker 
+              v-model:value="dateRange" 
+              class="bg-dark-card border border-dark-border"
+              format="YYYY-MM-DD"
+            />
           </div>
           <div class="w-40 sm:flex-1 sm:min-w-[200px]">
             <label class="text-xs text-gray-400">关键词</label>

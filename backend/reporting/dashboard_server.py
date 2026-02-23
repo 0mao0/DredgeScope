@@ -478,7 +478,7 @@ async def get_article_detail(article_id: int):
         return {"article": None, "events": []}
 
     c.execute("""
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name
+        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.summary_cn, a.full_text_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, e.details_json
         FROM events e
         JOIN articles a ON e.article_id = a.id
         WHERE e.article_id = ?
