@@ -1,0 +1,288 @@
+<template>
+  <div class="min-h-screen">
+    <!-- Navbar -->
+    <NavBar />
+    
+    <main class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <!-- Stats Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="glass-card rounded-2xl p-5 flex items-center justify-between group">
+          <div>
+            <p class="text-sm font-medium text-gray-400">本次情报</p>
+            <div class="flex items-end gap-2 mt-1">
+              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ newsStore.currentCount }}</span>
+              <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
+            </div>
+          </div>
+          <div class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <i class="fa-solid fa-bolt text-blue-400 text-xl"></i>
+          </div>
+        </div>
+        <router-link to="/vessel-map" target="_blank" class="glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors">
+          <div>
+            <p class="text-sm font-medium text-gray-400">跟踪船舶</p>
+            <div class="flex items-end gap-2 mt-1">
+              <span class="text-3xl font-bold text-white group-hover:text-green-400 transition-colors">{{ vesselStore.trackedCount }}</span>
+              <span class="text-xs text-gray-500">/{{ vesselStore.totalCount }}</span>
+            </div>
+          </div>
+          <div class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+            <i class="fa-solid fa-ship text-green-400 text-xl"></i>
+          </div>
+        </router-link>
+      </div>
+
+      <!-- Main Content Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Left Column: Quick Summary -->
+        <div class="lg:col-span-1 space-y-6">
+          <div class="glass-card rounded-2xl p-6 h-full">
+            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-bolt text-yellow-400"></i> 今日速览
+            </h3>
+            <div class="space-y-3">
+              <div v-if="loading" class="animate-pulse flex space-x-4">
+                <div class="flex-1 space-y-4 py-1">
+                  <div class="h-4 bg-slate-700 rounded w-3/4"></div>
+                  <div class="h-4 bg-slate-700 rounded"></div>
+                </div>
+              </div>
+              <div 
+                v-else 
+                v-for="item in quickSummary" 
+                :key="item.id"
+                @click="openDetail(item)"
+                class="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-brand-500/20 transition-colors cursor-pointer"
+              >
+                <div class="flex items-start gap-2">
+                  <div :class="['w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', getCategoryMeta(item.category).bg]">
+                    <i :class="['fa-solid', getCategoryMeta(item.category).icon, getCategoryMeta(item.category).color, 'text-xs']"></i>
+                  </div>
+                  <div class="flex-1">
+                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">{{ item.title_cn || item.article_title }}</h4>
+                    <p class="text-xs text-gray-400 mt-1 line-clamp-1">{{ item.summary_cn || '暂无摘要' }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Categories Grid -->
+        <div class="lg:col-span-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div 
+              v-for="(meta, key) in categories" 
+              :key="key"
+              :class="['glass-card rounded-xl flex flex-col md:h-[400px] min-h-[120px] overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2', getCategoryMeta(key).border.replace('border-', 'border-t-')]"
+            >
+              <!-- Card Header -->
+              <div class="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div class="flex items-center gap-2">
+                  <div :class="['w-8 h-8 rounded-lg', getCategoryMeta(key).bg, 'flex items-center justify-center']">
+                    <i :class="['fa-solid', getCategoryMeta(key).icon, getCategoryMeta(key).color]"></i>
+                  </div>
+                  <h3 class="font-bold text-gray-200">{{ meta.name }}</h3>
+                </div>
+                <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{ getGroupedArticles(key).length }}</span>
+              </div>
+
+              <!-- Card Body -->
+              <div v-if="getGroupedArticles(key).length === 0" class="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                暂无数据
+              </div>
+              <div v-else class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                <div 
+                  v-for="group in getGroupedArticles(key)" 
+                  :key="group.article_id || group.article_url"
+                  @click="openDetail(group)"
+                  class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
+                >
+                  <div class="flex justify-between items-start">
+                    <h4 class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug">
+                      {{ formatTitle(group, key) }}
+                    </h4>
+                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{ formatTime(group.created_at) }}</span>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
+                    {{ group.summary_cn || group.article_title }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail Modal -->
+    <a-modal
+      v-model:open="modalVisible"
+      :title="currentArticle?.title_cn || currentArticle?.article_title"
+      :footer="null"
+      :width="800"
+      class="detail-modal"
+      centered
+    >
+      <div class="max-h-[70vh] overflow-y-auto custom-scrollbar">
+        <!-- Tags -->
+        <div class="flex flex-wrap gap-2 mb-4">
+          <span :class="['px-2 py-1 rounded-full text-xs', getCategoryMeta(currentArticle?.category).bg, getCategoryMeta(currentArticle?.category).color, 'border', getCategoryMeta(currentArticle?.category).border]">
+            {{ getCategoryMeta(currentArticle?.category).name }}
+          </span>
+          <span v-if="currentArticle?.source_name" class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10">
+            {{ currentArticle.source_name.length > 5 ? currentArticle.source_name.slice(0, 5) : currentArticle.source_name }}
+          </span>
+        </div>
+
+        <!-- Content -->
+        <div class="prose prose-invert prose-sm max-w-none text-gray-300">
+          <div v-if="currentArticle?.summary_cn" class="mb-4 font-medium text-gray-300">
+            {{ currentArticle.summary_cn }}
+          </div>
+        </div>
+
+        <!-- Image -->
+        <div v-if="currentArticle?.screenshot_path" class="mt-6 group relative cursor-pointer">
+          <img :src="currentArticle.screenshot_path" alt="Screenshot" class="w-full rounded-lg border border-slate-700 shadow-lg">
+        </div>
+
+        <!-- Translation -->
+        <div class="mt-6 bg-slate-900/50 rounded-lg p-4 border border-slate-700/50">
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">原文翻译</h4>
+          <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+            {{ currentArticle?.full_text_cn || '暂无全文翻译' }}
+          </div>
+        </div>
+
+        <!-- AI Analysis -->
+        <div class="mt-6 bg-slate-800/50 rounded-xl p-4 border border-brand-500/20">
+          <h4 class="text-sm font-bold text-brand-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-robot"></i> AI 智能分析
+          </h4>
+          <div class="mb-4">
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen2.5 纯文字解析：</span>
+            <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
+          </div>
+          <div>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3-VL多模态识别</span>
+            <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="mt-4 flex flex-row-reverse gap-3">
+        <a :href="currentArticle?.article_url || currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
+          <i class="fa-solid fa-external-link-alt"></i> 原文链接
+        </a>
+      </div>
+    </a-modal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useNewsStore, useVesselStore, type NewsItem } from '@/stores'
+import NavBar from '@/components/NavBar.vue'
+
+const newsStore = useNewsStore()
+const vesselStore = useVesselStore()
+
+const loading = ref(true)
+const modalVisible = ref(false)
+const currentArticle = ref<NewsItem | null>(null)
+
+const categories = {
+  Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+  Bid: { name: '中标信息', icon: 'fa-gavel', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
+  Project: { name: '项目信息', icon: 'fa-building', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
+  Equipment: { name: '设备修造', icon: 'fa-gears', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  'R&D': { name: '科技研发', icon: 'fa-flask', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+  Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' }
+}
+
+const quickSummary = computed(() => {
+  const seenTitles = new Set()
+  const unique: NewsItem[] = []
+  for (const e of newsStore.newsList) {
+    const title = e.title_cn || e.article_title
+    if (!seenTitles.has(title)) {
+      seenTitles.add(title)
+      unique.push(e)
+    }
+  }
+  return unique.slice(0, 5)
+})
+
+function getCategoryMeta(category: string | undefined) {
+  const cat = category || 'Project'
+  return categories[cat as keyof typeof categories] || categories.Project
+}
+
+function getGroupedArticles(category: string) {
+  return newsStore.newsList.filter(item => item.category === category).slice(0, 10)
+}
+
+function formatTitle(item: NewsItem, category: string) {
+  let title = item.title_cn || item.summary_cn || item.article_title || ''
+  if (title.length > 50) title = title.substring(0, 50) + '...'
+  
+  if (category === 'Bid' && item.contractor) {
+    title = `[中标: ${item.contractor}] ${title}`
+  } else if (category === 'Project' && item.location) {
+    title = `[${item.location}] ${title}`
+  }
+  return title
+}
+
+function formatTime(dateStr: string | undefined) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function openDetail(item: NewsItem) {
+  currentArticle.value = item
+  modalVisible.value = true
+}
+
+onMounted(async () => {
+  await Promise.all([
+    newsStore.fetchNews(),
+    vesselStore.fetchVessels()
+  ])
+  loading.value = false
+})
+</script>
+
+<style scoped>
+:deep(.glass-card) {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:deep(.ant-modal-content) {
+  background: rgba(30, 41, 59, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+:deep(.ant-modal-header) {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+:deep(.ant-modal-title) {
+  color: #fff !important;
+}
+
+:deep(.ant-modal-close-x) {
+  color: #9ca3af !important;
+}
+
+:deep(.ant-modal-body) {
+  color: #e2e8f0;
+}
+</style>
