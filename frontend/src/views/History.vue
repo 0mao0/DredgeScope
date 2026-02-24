@@ -163,18 +163,60 @@
             <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen2.5 纯文字解析：</span>
             <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
           </div>
-          <div>
+          <div class="mb-4">
             <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3-VL多模态识别</span>
             <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
+          </div>
+          <div v-if="currentArticle?.events && currentArticle.events.length > 0" class="pt-3 border-t border-white/10">
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">关键字段提取：</span>
+            <div v-for="(evt, idx) in currentArticle.events" :key="idx" class="mb-3 pb-2 border-b border-white/5 last:border-0 last:pb-0 last:mb-0">
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div v-if="evt.project_name" class="flex gap-2">
+                  <span class="text-gray-500">项目名称:</span>
+                  <span class="text-gray-300">{{ evt.project_name }}</span>
+                </div>
+                <div v-if="evt.location" class="flex gap-2">
+                  <span class="text-gray-500">位置:</span>
+                  <span class="text-gray-300">{{ evt.location }}</span>
+                </div>
+                <div v-if="evt.contractor" class="flex gap-2">
+                  <span class="text-gray-500">承包商:</span>
+                  <span class="text-gray-300">{{ evt.contractor }}</span>
+                </div>
+                <div v-if="evt.client" class="flex gap-2">
+                  <span class="text-gray-500">客户:</span>
+                  <span class="text-gray-300">{{ evt.client }}</span>
+                </div>
+                <div v-if="evt.amount" class="flex gap-2">
+                  <span class="text-gray-500">金额:</span>
+                  <span class="text-gray-300">{{ evt.amount }} {{ evt.currency || '' }}</span>
+                </div>
+                <div v-if="evt.time" class="flex gap-2">
+                  <span class="text-gray-500">时间:</span>
+                  <span class="text-gray-300">{{ evt.time }}</span>
+                </div>
+                <div v-if="evt.content" class="flex gap-2 col-span-2">
+                  <span class="text-gray-500">内容:</span>
+                  <span class="text-gray-300">{{ evt.content }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="pt-3 border-t border-white/10">
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">关键字段提取：</span>
+            <div class="text-gray-500 text-sm">暂无关键字段信息</div>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="mt-4 flex flex-row-reverse gap-3">
+      <div class="mt-4 flex justify-end gap-3">
         <a :href="currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
+        <a-button @click="modalVisible = false" class="h-9">
+          <i class="fa-solid fa-xmark mr-1"></i> 关闭
+        </a-button>
       </div>
     </a-modal>
   </div>

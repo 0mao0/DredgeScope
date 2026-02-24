@@ -1,66 +1,46 @@
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="min-h-screen">
     <!-- Navbar -->
-    <nav class="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-md z-50">
-      <div class="flex items-center gap-4">
-        <router-link to="/" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors border border-white/10" title="返回首页">
-          <i class="fa-solid fa-arrow-left text-white"></i>
-        </router-link>
-        <div>
-          <h1 class="text-xl font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-earth-americas text-brand-500"></i>
-            全球疏浚船舶分布 
-            <span class="text-xs font-normal text-gray-500 ml-2 bg-slate-800 px-2 py-1 rounded border border-slate-700">AIS 实时模拟</span>
-          </h1>
-        </div>
-      </div>
-      <div class="flex gap-4 text-sm hidden md:flex">
-        <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
-          <span class="text-gray-300">施工中 (Dredging)</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-          <span class="text-gray-300">航行中 (Underway)</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]"></span>
-          <span class="text-gray-300">停泊 (Moored)</span>
-        </div>
-      </div>
-    </nav>
+    <NavBar />
 
-    <!-- Map Container -->
-    <div class="flex-1 p-4 relative">
-      <div ref="mapContainer" class="glass-card" :style="{ height: 'calc(100vh - 100px)', width: '100%' }"></div>
+    <!-- Main Content -->
+    <main class="w-full px-4 sm:px-6 lg:px-8">
+      <!-- Map Container -->
+      <div class="relative">
+        <div ref="mapContainer" class="glass-card" :style="{ height: 'calc(100vh - 140px)', width: '100%' }"></div>
       
-      <!-- Overlay Stats -->
-      <div class="absolute top-8 right-8 z-[1000] glass-card p-4 rounded-xl w-64">
-        <h3 class="text-sm font-bold text-white mb-3 border-b border-white/10 pb-2">船队状态监控</h3>
-        <div class="space-y-3">
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-400">船队总数</span>
-            <span class="text-sm font-bold text-white">{{ stats.total }}</span>
+        <!-- Status Legend -->
+        <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
+          <div class="flex flex-wrap gap-x-4 gap-y-1">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span class="text-gray-400">跟踪</span>
+              <span class="text-white font-bold">{{ stats.active }}</span>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span class="text-gray-400">总计</span>
+              <span class="text-white font-bold">{{ stats.total }}</span>
+            </div>
           </div>
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-400">活跃 (地图展示)</span>
-            <span class="text-sm font-bold text-white">{{ stats.active }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-400">航行中 (Underway)</span>
-            <span class="text-xs font-mono text-green-400">{{ stats.underway }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-400">作业中 (Dredging)</span>
-            <span class="text-xs font-mono text-blue-400">{{ stats.dredging }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-400">停泊 (Moored)</span>
-            <span class="text-xs font-mono text-yellow-400">{{ stats.moored }}</span>
+          <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/10 pt-1">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+              <span class="text-gray-300">施工中</span>
+              <span class="text-blue-400 font-mono">{{ stats.dredging }}</span>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+              <span class="text-gray-300">航行中</span>
+              <span class="text-green-400 font-mono">{{ stats.underway }}</span>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]"></span>
+              <span class="text-gray-300">停泊</span>
+              <span class="text-yellow-400 font-mono">{{ stats.moored }}</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 
@@ -68,6 +48,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import NavBar from '@/components/NavBar.vue'
 
 interface Vessel {
   id: string
@@ -80,6 +61,7 @@ interface Vessel {
   province?: string
   city?: string
   updated_at?: string
+  company?: string
 }
 
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -187,21 +169,132 @@ function createIcon(color: string) {
   })
 }
 
-const chinaFlagSvg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 22 16" aria-hidden="true">
-    <rect width="22" height="16" rx="2" fill="#E11D48"/>
-    <path fill="#FBBF24" d="M4.6 3.2l.6 1.7h1.8l-1.4 1.1.5 1.7-1.5-1-1.5 1 .6-1.7-1.4-1.1h1.7z"/>
-    <path fill="#FBBF24" d="M7.6 2.3l.2.6h.6l-.5.4.2.6-.5-.4-.5.4.2-.6-.5-.4h.6z"/>
-    <path fill="#FBBF24" d="M9.1 3.5l.2.6h.6l-.5.4.2.6-.5-.4-.5.4.2-.6-.5-.4h.6z"/>
-  </svg>
-`
+/**
+ * 生成船队简称
+ * @param company 公司/船队名称
+ * @returns 简称（最多4个字符）
+ */
+function getCompanyAbbreviation(company: string | undefined): string {
+  if (!company) return ''
+  
+  const cleaned = company.trim()
+  
+  // 中文处理：取前2-4个字符
+  if (/[\u4e00-\u9fa5]/.test(cleaned)) {
+    return cleaned.substring(0, 4)
+  }
+  
+  // 英文处理：取首字母缩写或前几个字符
+  const words = cleaned.split(/\s+/)
+  if (words.length > 1) {
+    return words.map(w => w[0]?.toUpperCase() || '').join('').substring(0, 4)
+  }
+  
+  return cleaned.substring(0, 4).toUpperCase()
+}
 
-const chinaFlagIcon = L.divIcon({
-  className: 'china-flag-marker',
-  html: chinaFlagSvg,
-  iconSize: [22, 16],
-  iconAnchor: [11, 16]
-})
+/**
+ * 国家国旗颜色映射
+ */
+const countryColors: Record<string, { bg: string, text: string }> = {
+  'China': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'CN': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  '中国': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'Netherlands': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'NL': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'Singapore': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'SG': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'United States': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'US': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'USA': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'United Kingdom': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'UK': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'GB': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'Japan': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'JP': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  'Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'KR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'South Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'Germany': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
+  'DE': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
+  'France': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'FR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'Australia': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+  'AU': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' }
+}
+
+/**
+ * 中国船队的红色变体
+ */
+const chinaRedVariants = [
+  { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+  { bg: 'rgba(239, 68, 68, 0.4)', text: 'white' },
+  { bg: 'rgba(185, 28, 28, 0.4)', text: 'white' },
+  { bg: 'rgba(248, 113, 113, 0.4)', text: '#1f2937' },
+  { bg: 'rgba(153, 27, 27, 0.4)', text: 'white' },
+  { bg: 'rgba(252, 165, 165, 0.4)', text: '#1f2937' }
+]
+
+/**
+ * 根据国家和公司名称生成颜色
+ * @param country 国家名称
+ * @param company 公司名称
+ * @returns 颜色对象 { bg: string, text: string }
+ */
+function getTagColor(country: string | undefined, company: string | undefined): { bg: string, text: string } {
+  const isChina = country === 'China' || country === 'CN' || country === '中国'
+  
+  if (isChina) {
+    // 中国船队：红色基调，根据公司名称选择不同变体
+    if (!company) {
+      return chinaRedVariants[0]
+    }
+    let hash = 0
+    for (let i = 0; i < company.length; i++) {
+      hash = company.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const index = Math.abs(hash) % chinaRedVariants.length
+    return chinaRedVariants[index]
+  }
+  
+  // 其他国家：先看是否有国旗颜色映射
+  if (country && countryColors[country]) {
+    return countryColors[country]
+  }
+  
+  // 默认蓝色
+  return { bg: 'rgba(59, 130, 246, 0.4)', text: 'white' }
+}
+
+/**
+ * 创建船队标签图标
+ * @param text 标签文本
+ * @param country 国家名称
+ * @param company 公司名称
+ * @returns Leaflet DivIcon
+ */
+function createCompanyTagIcon(text: string, country: string, company: string) {
+  const color = getTagColor(country, company)
+  const textWidth = text.length * 8 + 16
+  
+  return L.divIcon({
+    className: 'company-tag-icon',
+    html: `<div style="
+      background: ${color.bg};
+      color: ${color.text};
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      backdrop-filter: blur(4px);
+    ">${text}</div>`,
+    iconSize: [textWidth, 20],
+    iconAnchor: [-5, 10]
+  })
+}
 
 const icons: Record<string, L.DivIcon> = {
   dredging: createIcon(statusColors.dredging),
@@ -242,9 +335,12 @@ function renderMarkers() {
     const iconKey = mapStatusToIconKey(v.status)
     const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(map!)
     
-    const isChina = v.country === 'China' || v.country === 'CN' || v.country === '中国'
-    if (isChina) {
-      L.marker([v.lat, v.lng], { icon: chinaFlagIcon, interactive: false, keyboard: false }).addTo(map!)
+    // 所有船舶都添加船队简称标签
+    let tagMarker = null
+    const companyAbbr = getCompanyAbbreviation(v.company)
+    if (companyAbbr) {
+      const tagIcon = createCompanyTagIcon(companyAbbr, v.country, v.company || '')
+      tagMarker = L.marker([v.lat, v.lng], { icon: tagIcon }).addTo(map!)
     }
     
     let timeStr = '未知'
@@ -279,6 +375,7 @@ function renderMarkers() {
           <span class="text-gray-500">状态:</span>
           <span class="${statusClass}">${statusCN}</span>
         </div>
+        ${v.company ? `<div class="flex justify-between mb-1"><span class="text-gray-500">船队:</span><span class="text-gray-300">${v.company}</span></div>` : ''}
         ${locHtml}
         <div class="flex justify-between mt-2 pt-2 border-t border-white/10">
           <span class="text-gray-500">更新时间:</span>
@@ -287,9 +384,17 @@ function renderMarkers() {
       </div>
     `
     
+    // 状态点可点击
     marker.bindPopup(popupContent, {
       className: 'dark-popup'
     })
+    
+    // Tag也可点击
+    if (tagMarker) {
+      tagMarker.bindPopup(popupContent, {
+        className: 'dark-popup'
+      })
+    }
   })
 }
 

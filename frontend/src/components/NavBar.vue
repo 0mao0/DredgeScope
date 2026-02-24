@@ -53,8 +53,12 @@
           </router-link>
           <router-link 
             to="/vessel-map" 
-            target="_blank"
-            class="flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 transition-all text-xs sm:text-sm font-medium whitespace-nowrap"
+            :class="[
+              'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
+              isActive('/vessel-map') 
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+            ]"
           >
             <i class="fa-solid fa-ship text-sm"></i>
             <span class="hidden sm:inline ml-1.5">船舶跟踪</span>
