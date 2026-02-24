@@ -45,9 +45,9 @@ def job_push():
 def job_ship_tracker():
     write_log("启动船舶追踪任务...")
     try:
-        asyncio.run(ship_status_fetcher.fetch_and_update_positions())
-        asyncio.run(vessel_analysis.analyze_vessel_data())
-        write_log("船舶追踪任务完成")
+        ship_status_fetcher.update_ship_statuses()
+        updated = vessel_analysis.analyze_and_update_all_ships()
+        write_log(f"船舶追踪任务完成，分析更新了 {updated} 艘船舶状态")
     except Exception as e:
         write_log(f"船舶追踪任务出错: {e}")
 

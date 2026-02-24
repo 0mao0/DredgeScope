@@ -25,7 +25,7 @@ def get_push_window(now):
     """
     label_prefix = f"{now.month}月{now.day}日"
     hour = now.hour
-    if hour < 8:
+    if hour <= 8:
         start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         label = f"{label_prefix}早报"

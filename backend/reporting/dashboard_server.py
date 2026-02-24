@@ -58,7 +58,7 @@ async def get_events(
             now = datetime.now()
             hour = now.hour
             label_prefix = f"{now.month}月{now.day}日"
-            if hour < 8:
+            if hour <= 8:
                 start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 date_label = f"{label_prefix}凌晨新闻"
