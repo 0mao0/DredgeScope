@@ -102,7 +102,7 @@
                     <h4 class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug">
                       {{ formatTitle(group, key) }}
                     </h4>
-                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{ formatTime(group.created_at) }}</span>
+                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{ formatTime(group.pub_date, group.created_at) }}</span>
                   </div>
                   <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
                     {{ group.summary_cn || group.article_title }}
@@ -271,7 +271,20 @@ function getCategoryMeta(category: string | undefined) {
 }
 
 function getGroupedArticles(category: string) {
-  return newsStore.newsList.filter(item => item.category === category).slice(0, 10)
+  const seen = new Set<string>()
+  const unique: NewsItem[] = []
+  for (const item of newsStore.newsList) {
+    if (item.category !== category) continue
+    const key = item.article_id || item.article_url || item.title_cn || item.article_title || item.id
+    if (!key) {
+      unique.push(item)
+      continue
+    }
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(item)
+  }
+  return unique.slice(0, 10)
 }
 
 function formatTitle(item: NewsItem, category: string) {
@@ -291,9 +304,16 @@ function formatTitle(item: NewsItem, category: string) {
   return title
 }
 
-function formatTime(dateStr: string | undefined) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
+function formatTime(pubDate: string | undefined, createdAt: string | undefined) {
+  if (pubDate) {
+    const date = new Date(pubDate)
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString('zh-CN')
+    }
+  }
+  if (!createdAt) return ''
+  const date = new Date(createdAt)
+  if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 

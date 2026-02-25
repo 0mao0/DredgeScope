@@ -5,6 +5,7 @@ import reporting.report_generation as report_generation
 import config
 import os
 from datetime import datetime
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 import database
 
@@ -26,6 +27,43 @@ JUNK_KEYWORDS_PARTIAL = [
     "404 Not Found", "Page Not Found", "Access Denied",
     "Browser Update", "Enable JavaScript"
 ]
+
+def is_tracking_param(param_key):
+    """判断URL参数是否为追踪参数"""
+    if not param_key:
+        return False
+    key = str(param_key).lower()
+    if key.startswith("utm_"):
+        return True
+    return key in {
+        "gclid",
+        "fbclid",
+        "igshid",
+        "mc_cid",
+        "mc_eid",
+        "mkt_tok",
+        "spm",
+        "ref",
+        "referrer",
+        "from",
+        "share"
+    }
+
+def normalize_article_url(url):
+    """规范化文章URL，移除追踪参数和片段"""
+    if not url:
+        return url
+    try:
+        parts = urlsplit(url)
+        query_params = [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if not is_tracking_param(k)
+        ]
+        normalized_query = urlencode(query_params, doseq=True)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, normalized_query, ""))
+    except Exception:
+        return url
 
 def is_valid_article(item):
     """
@@ -83,6 +121,9 @@ async def main():
     items = []
     skipped_count = 0
     for item in raw_items:
+        normalized_link = normalize_article_url(item.get('link'))
+        if normalized_link:
+            item['link'] = normalized_link
         # 质量过滤
         if not is_valid_article(item):
             skipped_count += 1

@@ -61,15 +61,15 @@ async def get_events(
             if hour <= 8:
                 start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}凌晨新闻"
+                date_label = f"{label_prefix}早报"
             elif hour < 18:
-                start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
-                end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}凌晨新闻"
+                start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
+                end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
+                date_label = f"{label_prefix}白报"
             else:
                 start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}白天新闻"
+                date_label = f"{label_prefix}白报"
             start_time = start_dt.isoformat()
             end_time = end_dt.isoformat()
         elif start and end:
@@ -79,16 +79,20 @@ async def get_events(
         else:
             if not date:
                 date = datetime.now().strftime("%Y-%m-%d")
-            start_time = f"{date}T00:00:00"
-            end_time = f"{date}T23:59:59"
-            date_label = date
+                start_time = f"{date}T00:00:00"
+                end_time = f"{date}T23:59:59"
+                date_label = date
+            else:
+                start_time = f"{date}T00:00:00"
+                end_time = f"{date}T23:59:59"
+                date_label = date
         
         events = database.get_events_by_time_range(start_time, end_time)
         
         # --- Stale News Filter (Added to fix "Old News" issue) ---
         # 无论何种模式，都过滤掉 "发现时已严重过时" 的新闻 (比如今天抓取到了 2024 年的新闻)
         # 阈值设为 90 天 (3个月)
-        STALE_THRESHOLD_DAYS = 90
+        STALE_THRESHOLD_DAYS = 30
         fresh_events = []
         for e in events:
             try:
@@ -174,6 +178,34 @@ async def get_events(
                 if should_keep:
                     filtered_events.append(e)
             events = filtered_events
+
+        def normalize_title(text):
+            if not text:
+                return ""
+            t = str(text).lower()
+            stopwords = [
+                "集团", "公司", "股份", "有限", "有限公司",
+                "达成", "签订", "签署", "修改", "修订", "协议",
+                "合作", "宣布", "公告"
+            ]
+            for w in stopwords:
+                t = t.replace(w, "")
+            t = "".join(ch for ch in t if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
+            return t
+
+        deduped_events = []
+        seen_market = set()
+        for e in events:
+            if e.get("category") == "Market":
+                title_key = normalize_title(e.get("title_cn") or e.get("article_title") or e.get("summary_cn"))
+                if not title_key:
+                    title_key = e.get("article_url") or e.get("article_id")
+                if title_key and title_key in seen_market:
+                    continue
+                if title_key:
+                    seen_market.add(title_key)
+            deduped_events.append(e)
+        events = deduped_events
 
         article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
         article_count = len(article_ids)

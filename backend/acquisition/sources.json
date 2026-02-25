@@ -33,7 +33,11 @@
         "name": "Dredging Contractors of America",
         "url": "https://dredgingcontractors.org/news-1/news-item-list/",
         "type": "web",
-        "selector": ".news-item"
+        "selector": ".news-item",
+        "blacklist": [
+            "/dredging-101/",
+            "/maritime-links/"
+        ]
     },
     {
         "name": "IADC Dredging",
@@ -57,7 +61,36 @@
         "name": "China Dredging Association",
         "url": "http://www.chida.org/Market/",
         "type": "web",
-        "selector": ".content-list"
+        "selector": ".content-list",
+        "max_links": 10
+    },
+    {
+        "name": "CCCC Dredging Group News",
+        "url": "https://www.cccc-cdc.com/channels/1684.html",
+        "type": "web",
+        "selector": "body",
+        "max_links": 30
+    },
+    {
+        "name": "CCCC Shanghai Dredging News",
+        "url": "https://www.cccc-sdc.com/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 30
+    },
+    {
+        "name": "CCCC Guangzhou Dredging News",
+        "url": "https://www.ccgdc.com/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 30
+    },
+    {
+        "name": "CCCC Tianjin Dredging News",
+        "url": "https://www.zjthbh.com/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 30
     },
     {
         "name": "Jan De Nul News",
@@ -82,5 +115,47 @@
         "url": "https://www.deme-group.com/news",
         "type": "web",
         "selector": "article"
+    },
+    {
+        "name": "Atlantic Intracoastal Waterway Association",
+        "url": "https://atlanticintracoastal.org/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
+    },
+    {
+        "name": "American Maritime Partnership",
+        "url": "https://www.americanmaritimepartnership.com/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
+    },
+    {
+        "name": "BOEM Environment",
+        "url": "https://www.boem.gov/environment",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
+    },
+    {
+        "name": "USACE Navigation Gateway",
+        "url": "https://operations.erdc.dren.mil/navigation.cfm",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
+    },
+    {
+        "name": "USACE Navigation Experience",
+        "url": "https://experience.arcgis.com/experience/008394d6b24944f0af4499a1511e7b85/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
+    },
+    {
+        "name": "National Waterways Conference",
+        "url": "https://waterways.org/",
+        "type": "web",
+        "selector": "body",
+        "max_links": 20
     }
 ]

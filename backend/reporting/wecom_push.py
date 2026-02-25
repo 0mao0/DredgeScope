@@ -35,6 +35,40 @@ def get_push_window(now):
         label = f"{label_prefix}日报"
     return start_dt, end_dt, label
 
+def normalize_hot_title(title, max_len=10):
+    """规范化热门新闻标题长度与格式"""
+    if not title:
+        return ""
+    text = str(title).strip().replace("\n", " ").replace("\r", " ")
+    if len(text) <= max_len:
+        return text
+    return text[:max_len]
+
+def build_hot_news_titles(events, max_items=4, title_max_len=10):
+    """构建今日热门新闻标题列表"""
+    seen_keys = set()
+    titles = []
+    has_more = False
+    for e in events:
+        article_id = e.get("article_id")
+        article_url = e.get("article_url")
+        dedup_key = article_id if article_id is not None else article_url
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+        raw_title = e.get("title_cn") or e.get("project_name") or e.get("article_title")
+        title = normalize_hot_title(raw_title, max_len=title_max_len)
+        if not title:
+            continue
+        if len(titles) < max_items:
+            titles.append(title)
+        else:
+            has_more = True
+            break
+    if has_more:
+        titles.append("...")
+    return titles
+
 def push_daily_report():
     """推送日报到企业微信"""
     now = datetime.now()
@@ -72,118 +106,34 @@ def push_daily_report():
                 print(f"[Push] 发送空消息失败: {e}")
         return
 
-    # 1. 统计数据
-    # cat_counts = {k: 0 for k in CATEGORIES_MAP.keys()}
-    # 新逻辑：按文章去重统计 (用户要求：数量是新闻的数量，而不是events的数量)
-    cat_article_ids = {k: set() for k in CATEGORIES_MAP.keys()}
-    
-    # 分组数据用于详情展示 (取每类最重要的1-2条)
-    cat_highlights = {k: [] for k in CATEGORIES_MAP.keys()}
-    
     # 最终决定：直接使用服务器上的静态资源 (假设服务器配置正确)
     # 如果是在本地测试，这个链接可能无法被外网访问，但不影响流程
     cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.png"
     
     found_cover = False
-
     for e in events:
-        cat = e.get('category', DEFAULT_CATEGORY)
-        # 兼容性处理：如果 cat 不在 map 中，归为 DEFAULT
-        if cat not in cat_article_ids:
-            cat = DEFAULT_CATEGORY
-        
-        # 统计文章ID
-        article_id = e.get('article_id')
-        if article_id:
-            cat_article_ids[cat].add(article_id)
-        
         if not found_cover and e.get('screenshot_path'):
             if "127.0.0.1" in config.BACKEND_URL or "localhost" in config.BACKEND_URL:
-                pass 
+                pass
             else:
                 filename = os.path.basename(e['screenshot_path'])
                 encoded_filename = urllib.parse.quote(filename)
                 cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{encoded_filename}"
                 found_cover = True
-        
-        # 添加到高亮列表 (简单的逻辑：按时间倒序，每类存前3个)
-        # 注意：这里需要去重，避免同一篇文章显示多次
-        existing_urls = {h['url'] for h in cat_highlights[cat]}
-        if len(cat_highlights[cat]) < 3 and e.get('article_url') not in existing_urls:
-            # 构造简短描述
-            desc = ""
-            if cat == 'Bid':
-                desc = f"{e.get('location', '')} {e.get('contract_value', '')}"
-            elif cat == 'Market':
-                desc = f"{e.get('details', {}).get('company_name', '')} {e.get('details', {}).get('trend', '')}"
-            elif cat == 'Project':
-                desc = f"{e.get('project_status', '')} {e.get('details', {}).get('completion_percentage', '')}"
-            else:
-                desc = e.get('article_title', '')[:20]
-            
-            # 清理 desc 中的 None
-            desc = desc.replace("None", "").strip()
-            
-            # 优先使用中文标题 (title_cn > project_name > article_title)
-            display_title = e.get('title_cn')
-            if not display_title:
-                display_title = e.get('project_name') or e.get('article_title')
-            
-            cat_highlights[cat].append({
-                "title": display_title,
-                "desc": desc,
-                "url": e.get('article_url')
-            })
-
-    # 计算最终数量
-    cat_counts = {k: len(v) for k, v in cat_article_ids.items()}
 
     # 2. 构造 Template Card
     date_str = label
     unique_article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
     total_count = len(unique_article_ids)
     
-    # 构造 vertical_content_list
-    v_list = []
-    
-    # 企业微信限制：news_notice 类型的 vertical_content_list 最多 4 项
-    # 我们按数量排序，取前 4 个
-    # v_list 已经有了 title 和 desc
-    # 我们需要根据 cat_counts 来排序 v_list 吗？
-    # v_list 目前是按 map 顺序遍历的。
-    # 让我们重新构建 v_list，按数量倒序
-    
-    # 1. 构造 (count, item) 列表
-    sorted_cats = []
-    for cat_key in CATEGORIES_MAP.keys():
-        cat_name = CATEGORIES_MAP[cat_key]
-        count = cat_counts[cat_key]
-        if count > 0:
-            sorted_cats.append((count, cat_key, cat_name))
-    
-    # 2. 排序 (count desc)
-    sorted_cats.sort(key=lambda x: x[0], reverse=True)
-    
-    # 3. 取前 4 个 (企业微信限制)
-    top_cats = sorted_cats[:4]
-    
-    # 4. 重新生成 v_list
-    v_list = []
-    for count, cat_key, cat_name in top_cats:
-        # 格式优化：标题后加括号数字
-        display_title = f"{cat_name} ({count})"
-        
-        v_list.append({
-            "title": display_title,
-            "desc": ""  # 用户要求删除概况详情
-        })
-        
-    # 如果还有更多分类被隐藏
-    if len(sorted_cats) > 4:
-        # 在最后一个条目或副标题中提示？
-        # news_notice 没有 extra footer.
-        # 我们可以在 main_title.desc 中提示 "今日更新 X 条 (显示前4类)"
-        pass
+    hot_titles = build_hot_news_titles(events, max_items=4, title_max_len=10)
+    v_list = [
+        {
+            "title": title,
+            "desc": ""
+        }
+        for title in hot_titles
+    ]
 
 
     # 构造跳转链接 (如果没有配置公网 IP，使用 localhost 也没用，但可以作为占位)

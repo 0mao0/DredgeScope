@@ -381,7 +381,7 @@ def save_article_and_events(article_data, events_data):
             # Check for staleness before insertion
             is_hidden = 0
             valid = 1
-            STALE_THRESHOLD_DAYS = 90
+            STALE_THRESHOLD_DAYS = 30
             try:
                 # Assuming created_at is roughly now
                 c_date = datetime.now()
@@ -461,7 +461,10 @@ def save_article_and_events(article_data, events_data):
                     category = DEFAULT_CATEGORY
 
                 # 提取通用字段
-                details = {k: v for k, v in evt.items() if k not in ['project_name', 'location', 'contract_value', 'currency', 'contractor', 'client', 'category']}
+                details = {k: v for k, v in evt.items()}
+                amount_value = evt.get("amount") or evt.get("contract_value") or ""
+                if amount_value and not details.get("amount"):
+                    details["amount"] = amount_value
                 details_json = json.dumps(details, ensure_ascii=False, sort_keys=True)
                 signature = build_event_signature({
                     "category": category,
@@ -487,7 +490,7 @@ def save_article_and_events(article_data, events_data):
                         category,
                         evt.get('project_name', ''),
                         evt.get('location', ''),
-                        evt.get('contract_value', ''),
+                        amount_value,
                         evt.get('currency', ''),
                         evt.get('contractor', ''),
                         evt.get('client', ''),
@@ -596,6 +599,34 @@ def get_events_by_time_range(start_time, end_time):
         else:
             item['details'] = {}
         item = enrich_event_category(item)
+        pub_date_str = item.get("pub_date")
+        created_at_str = item.get("created_at")
+        ref_date = None
+        if pub_date_str:
+            try:
+                pub_clean = str(pub_date_str).strip()
+                if 'T' in pub_clean:
+                    ref_date = datetime.fromisoformat(pub_clean)
+                elif ' ' in pub_clean and ':' in pub_clean:
+                    ref_date = datetime.fromisoformat(pub_clean.replace(' ', 'T'))
+                else:
+                    ref_date = datetime.strptime(pub_clean, "%Y-%m-%d")
+            except:
+                ref_date = None
+        if not ref_date and created_at_str:
+            try:
+                created_clean = str(created_at_str).split('.')[0]
+                if 'T' in created_clean:
+                    ref_date = datetime.fromisoformat(created_clean)
+                elif ' ' in created_clean and ':' in created_clean:
+                    ref_date = datetime.fromisoformat(created_clean.replace(' ', 'T'))
+                else:
+                    ref_date = datetime.strptime(created_clean, "%Y-%m-%d")
+            except:
+                ref_date = None
+        if ref_date:
+            if (datetime.now().date() - ref_date.date()).days > 30:
+                continue
         signature = build_event_signature(item)
         if not signature:
             signature = f"empty|{item.get('category', '')}"

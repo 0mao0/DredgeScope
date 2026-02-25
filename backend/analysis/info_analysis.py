@@ -178,7 +178,7 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
      - 正确示例："中交二航局在上海中标三个市政项目"、"Van Oord在荷兰完成海滩修复工程"。
    - publish_time: 提取文章的发布日期（格式 YYYY-MM-DD）。如果文中明确提到时间（如"2024年9月2日"），请提取该时间。
    - 重点提取 events 列表。
-   - full_text_cn: 中文全文翻译，尽量保持原文段落结构。
+   - full_text_cn: 中文全文翻译，仅包含正文内容，不要包含导航、菜单、页脚、隐私政策、Cookie提示、社交链接或站内栏目标题；尽量保持原文段落结构。
    - 针对 "连中多标" (e.g. 中交二航局在上海连中3标) 的情况，必须将每个中标项目拆分为独立的 event 对象。
    - 针对政策法规/标准/指南/解读类内容，通常只生成 1 个事件；仅在明确出现多项不同法规/政策并列时才拆分为多条。
    - 每个 event 字段:
@@ -226,6 +226,53 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
         print(f"[Text] 分析失败: {e}")
         return None
 
+def is_security_interstitial(page_title, page_url):
+    """判断是否为证书/安全拦截页"""
+    title = (page_title or "").lower()
+    url = (page_url or "").lower()
+    if url.startswith("chrome-error://") or "net::err_cert" in title:
+        return True
+    keywords = [
+        "your connection is not private",
+        "privacy error",
+        "connection is not secure",
+        "您的连接不是私密连接",
+        "您的连接不是安全连接",
+        "此连接不是私密连接"
+    ]
+    return any(k in title for k in keywords)
+
+def clean_article_text(text_content):
+    normalized = text_content.replace("\r", "\n")
+    lines = [line.strip() for line in normalized.split("\n")]
+    keywords = [
+        "skip to main content",
+        "about",
+        "what we do",
+        "home",
+        "menu",
+        "search",
+        "privacy policy",
+        "terms of use",
+        "cookie",
+        "contact",
+        "subscribe",
+        "sign in",
+        "register",
+        "login",
+        "language"
+    ]
+    cleaned = []
+    for line in lines:
+        if not line:
+            continue
+        lower = line.lower()
+        short_line = len(line) <= 50 and len(line.split()) <= 6
+        if short_line and any(k in lower for k in keywords):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned)
+
 async def analyze_item(context, client, item):
     """
     核心分析流程 (Text-First 模式):
@@ -262,6 +309,15 @@ async def analyze_item(context, client, item):
         except Exception as e:
             print(f"[分析] 加载超时 {url}，尝试继续处理...")
             analysis_log.append(f"2. **页面加载**: 超时 (尝试继续处理)")
+
+        page_title = ""
+        page_url = ""
+        try:
+            page_title = await page.title()
+            page_url = page.url
+        except:
+            page_title = ""
+            page_url = ""
 
         # 模拟滚动
         try:
@@ -364,41 +420,44 @@ async def analyze_item(context, client, item):
         except Exception as e:
             print(f"[Cookie清理] 异常: {e}")
 
-        # 2. 提取文本 (核心)
-        try:
-            # 优先提取 article
-            text_content = await page.evaluate("""() => {
-                const article = document.querySelector('article') || document.querySelector('.post-content') || document.querySelector('.entry-content') || document.body;
-                return article.innerText.slice(0, 15000);
-            }""")
-        except:
-            text_content = ""
+        if is_security_interstitial(page_title, page_url):
+            analysis_log.append("2. **页面加载**: 命中安全拦截页，跳过截图")
+        else:
+            # 2. 提取文本 (核心)
+            try:
+                text_content = await page.evaluate("""() => {
+                    const article = document.querySelector('article') || document.querySelector('.post-content') || document.querySelector('.entry-content') || document.body;
+                    return article.innerText.slice(0, 15000);
+                }""")
+            except:
+                text_content = ""
+            if text_content:
+                text_content = clean_article_text(text_content)
 
-        # 3. 截图 (辅助 & 兜底)
-        try:
-            locator = page.locator('article').first
-            box = None
-            if await locator.count() > 0:
-                box = await locator.bounding_box()
-            if box:
-                screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
-                log_ss = "内容区域截图"
-            else:
-                await page.set_viewport_size({"width": 1280, "height": 1500})
-                screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
-                log_ss = "全页截图"
+            # 3. 截图 (辅助 & 兜底)
+            try:
+                locator = page.locator('article').first
+                box = None
+                if await locator.count() > 0:
+                    box = await locator.bounding_box()
+                if box:
+                    screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
+                    log_ss = "内容区域截图"
+                else:
+                    await page.set_viewport_size({"width": 1280, "height": 1500})
+                    screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
+                    log_ss = "全页截图"
+                    
+                safe_title = "".join([c for c in item['title'] if c.isalnum() or c in (' ','-','_')]).strip()[:50]
+                screenshot_filename = f"{safe_title}.jpg"
+                screenshot_path = os.path.join(config.ASSETS_DIR, screenshot_filename)
+                with open(screenshot_path, 'wb') as f:
+                    f.write(screenshot_bytes)
+                analysis_log.append(f"3. **截图**: {log_ss}成功")
                 
-            # 保存截图
-            safe_title = "".join([c for c in item['title'] if c.isalnum() or c in (' ','-','_')]).strip()[:50]
-            screenshot_filename = f"{safe_title}.jpg"
-            screenshot_path = os.path.join(config.ASSETS_DIR, screenshot_filename)
-            with open(screenshot_path, 'wb') as f:
-                f.write(screenshot_bytes)
-            analysis_log.append(f"3. **截图**: {log_ss}成功")
-            
-        except Exception as e:
-            print(f"截图失败: {e}")
-            analysis_log.append(f"3. **截图**: 失败 ({e})")
+            except Exception as e:
+                print(f"截图失败: {e}")
+                analysis_log.append(f"3. **截图**: 失败 ({e})")
 
     except Exception as e:
         print(f"页面处理异常: {e}")
@@ -546,7 +605,7 @@ async def process_items(items):
             except: pass
         if not browser: browser = await p.chromium.launch(headless=True)
             
-        context = await browser.new_context(viewport={"width": 1280, "height": 800})
+        context = await browser.new_context(viewport={"width": 1280, "height": 800}, ignore_https_errors=True)
         
         results = []
         sem = asyncio.Semaphore(3) # 并发控制

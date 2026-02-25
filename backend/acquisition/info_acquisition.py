@@ -41,14 +41,36 @@ async def fetch_rss(url, hours=24, source_name=None):
         print(f"[RSS] Error {url}: {e}")
         return []
 
+async def goto_with_retry(page, url, attempts):
+    """按多策略尝试打开页面，成功则返回 True，失败抛出最后异常"""
+    last_error = None
+    for attempt in attempts:
+        try:
+            await page.goto(url, wait_until=attempt["wait_until"], timeout=attempt["timeout_ms"])
+            return True
+        except Exception as e:
+            last_error = e
+    if last_error:
+        raise last_error
+    return False
+
 async def fetch_web_index(context, source):
+    """抓取网站索引页并提取候选链接"""
     url = source['url']
     print(f"[Web] 正在扫描索引页: {url}")
     items = []
+    page = None
     try:
         page = await context.new_page()
-        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(3) # 等待渲染
+        await goto_with_retry(
+            page,
+            url,
+            [
+                {"wait_until": "domcontentloaded", "timeout_ms": 30000},
+                {"wait_until": "load", "timeout_ms": 30000}
+            ]
+        )
+        await asyncio.sleep(3)
         
         # Cloudflare / Error Check
         current_url = page.url
@@ -57,30 +79,32 @@ async def fetch_web_index(context, source):
            "Just a moment" in title or "Attention Required" in title or \
            "Security Check" in title:
             print(f"[Web] Skip Cloudflare/Error page: {url} -> {current_url}")
-            await page.close()
             return []
 
         # 提取链接：简单的启发式，查找所有 a 标签
         # 优先使用 selector 限制范围
         selector = source.get('selector', 'body')
+        max_links = source.get('max_links', 10)
         
-        links = await page.evaluate(f"""(selector) => {{
+        links = await page.evaluate("""(params) => {
+            const selector = params.selector;
+            const maxLinks = params.maxLinks;
             const results = [];
-            const container = document.querySelector('{selector}') || document.body;
+            const container = document.querySelector(selector) || document.body;
             const anchors = container.querySelectorAll('a');
-            anchors.forEach(a => {{
+            anchors.forEach(a => {
                 const text = a.innerText.trim();
                 const href = a.href;
                 // 简单过滤：长度大于10，且不是 javascript: 或 #
-                if (text.length > 10 && href.startsWith('http')) {{
+                if (text.length > 10 && href.startsWith('http')) {
                     // 去重
-                    if (!results.find(r => r.link === href)) {{
-                        results.push({{title: text, link: href}});
-                    }}
-                }}
-            }});
-            return results.slice(0, 10); // 只取前10个
-        }}""", selector)
+                    if (!results.find(r => r.link === href)) {
+                        results.push({title: text, link: href});
+                    }
+                }
+            });
+            return results.slice(0, maxLinks);
+        }""", {"selector": selector, "maxLinks": max_links})
         
         for l in links:
             # Filter out cloudflare links
@@ -108,10 +132,11 @@ async def fetch_web_index(context, source):
                 'source_type': 'web',
                 'source_name': source.get('name', '')
             })
-        await page.close()
-            
     except Exception as e:
         print(f"[Web] Error {url}: {e}")
+    finally:
+        if page:
+            await page.close()
     return items
 
 def contains_dredging_keywords(text):
@@ -181,8 +206,7 @@ def is_news_page(url, title):
         "/history", "/milestone", "/milestones", "/achievement",
         "/board", "/directors", "/management", "/executive",
         "/mission", "/vision", "/values", "/who-we-are",
-        "/community", "/forum", "/blog", "/opinion", "/perspective",
-        "/article", "/article/",  # 过滤文章类页面（非新闻）
+        "/community", "/forum", "/blog", "/opinion", "/perspective"
     ]
     
     # 检查URL是否包含非新闻模式
@@ -252,7 +276,8 @@ async def get_all_items():
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                locale="zh-CN"
+                locale="zh-CN",
+                ignore_https_errors=True
             )
             
             for s in sources:
