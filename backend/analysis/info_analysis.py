@@ -73,6 +73,33 @@ def normalize_events(events, fallback_category):
         normalized.append(evt)
     return consolidate_regulation_events(normalized)
 
+def is_relevant_news(item, text_content, final_result):
+    fields = [
+        item.get("title"),
+        final_result.get("title_cn"),
+        final_result.get("summary_cn"),
+        final_result.get("full_text_cn"),
+        text_content
+    ]
+    combined = " ".join([str(f) for f in fields if f])
+    lower = combined.lower()
+    strong_keywords = [
+        "dredg", "dredger", "dredging", "dredged",
+        "疏浚", "清淤", "吹填", "挖泥", "补砂", "海滩补砂", "航道疏浚", "港池疏浚"
+    ]
+    if any(k in lower for k in strong_keywords):
+        return True
+    secondary_keywords = [
+        "port", "harbor", "harbour", "channel", "waterway", "navigation",
+        "sediment", "reclamation", "coastal", "estuary", "river",
+        "terminal", "berth", "quay", "dock", "maritime", "seabed", "offshore",
+        "航道", "港口", "港航", "码头", "航运", "河道", "运河",
+        "海岸", "海工", "海洋工程", "船坞", "泊位", "航道维护",
+        "疏港", "港池", "填海", "围填海", "河口"
+    ]
+    hit_count = sum(1 for k in secondary_keywords if k in lower)
+    return hit_count >= 2
+
 async def analyze_with_vl(client, item, b64_img):
     """
     使用视觉模型进行首要分析
@@ -84,6 +111,7 @@ async def analyze_with_vl(client, item, b64_img):
 标题: {item['title']}
 
 任务说明：
+1. 若内容与疏浚、港航、航道维护、疏浚设备或海洋工程无关，is_junk 必须为 true。
 1. 【深度语义分类】请基于新闻的核心语义和主要事件类型，将其归入以下六类别之一。
    请使用**排除法**进行分类决策：
    - Bid (中标/合同): 仅包含合同签署、项目中标、招标公告发布、资金/预算获批。关键词：Secures, Wins, Contract, Tender, Awarded, Funding, Budget。
@@ -185,6 +213,7 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
 视觉分析参考: {json.dumps(vl_context, ensure_ascii=False) if vl_context else "无"}
 
 任务说明：
+1. 若内容与疏浚、港航、航道维护、疏浚设备或海洋工程无关，is_junk 必须为 true。
 1. 【语义分类】(Category) - 请根据文章描述的核心事件性质进行分类：
    请使用**排除法**进行分类决策：
    - Bid: 仅包含合同签署、中标、招标或资金获批。包括 "secures contract", "wins tender", "funding approved"。
@@ -593,6 +622,10 @@ async def analyze_item(context, client, item):
             seen_signatures.add(sig)
             deduped.append(evt)
         events = deduped
+
+    if not is_relevant_news(item, text_content, final_result):
+        analysis_log.append("4.2. **相关性判断**: 非疏浚主题，已丢弃")
+        return None
 
     # 优先使用分析出的发布时间 (Text First)
     pub_date = final_result.get("publish_time")

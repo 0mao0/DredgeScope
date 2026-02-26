@@ -69,6 +69,80 @@ def build_hot_news_titles(events, max_items=4, title_max_len=10):
         titles.append("...")
     return titles
 
+def parse_event_datetime(value):
+    if not value:
+        return None, False
+    text = str(value).strip()
+    if not text:
+        return None, False
+    try:
+        if "T" in text:
+            return datetime.fromisoformat(text), False
+        if " " in text and ":" in text:
+            return datetime.fromisoformat(text.replace(" ", "T")), False
+        return datetime.strptime(text, "%Y-%m-%d"), True
+    except Exception:
+        return None, False
+
+def filter_events_by_publish_window(events, start_dt, end_dt):
+    filtered = []
+    for e in events:
+        pub_dt, date_only = parse_event_datetime(e.get("pub_date"))
+        if not pub_dt:
+            pub_dt, date_only = parse_event_datetime(e.get("created_at"))
+        if not pub_dt:
+            continue
+        if date_only:
+            if pub_dt.date() < start_dt.date() or pub_dt.date() > end_dt.date():
+                continue
+        else:
+            if pub_dt < start_dt or pub_dt > end_dt:
+                continue
+        filtered.append(e)
+    return filtered
+
+def normalize_title_key(text):
+    if not text:
+        return ""
+    t = str(text).lower()
+    stopwords = [
+        "集团", "公司", "股份", "有限", "有限公司",
+        "达成", "签订", "签署", "修改", "修订", "协议",
+        "合作", "宣布", "公告"
+    ]
+    for w in stopwords:
+        t = t.replace(w, "")
+    t = "".join(ch for ch in t if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
+    return t
+
+def dedupe_market_events(events):
+    deduped_events = []
+    seen_market = set()
+    for e in events:
+        if e.get("category") == "Market":
+            title_key = normalize_title_key(e.get("title_cn") or e.get("article_title") or e.get("summary_cn"))
+            if not title_key:
+                title_key = e.get("article_url") or e.get("article_id")
+            if title_key and title_key in seen_market:
+                continue
+            if title_key:
+                seen_market.add(title_key)
+        deduped_events.append(e)
+    return deduped_events
+
+def build_category_counts(events):
+    buckets = {k: set() for k in CATEGORIES_MAP.keys()}
+    for e in events:
+        cat = e.get("category") or DEFAULT_CATEGORY
+        if cat not in buckets:
+            cat = DEFAULT_CATEGORY
+        article_id = e.get("article_id")
+        key = article_id if article_id is not None else e.get("article_url") or e.get("article_title")
+        if key is None:
+            continue
+        buckets[cat].add(key)
+    return {k: len(v) for k, v in buckets.items()}
+
 def push_daily_report():
     """推送日报到企业微信"""
     now = datetime.now()
@@ -89,6 +163,9 @@ def push_daily_report():
         valid_events.append(e)
     events = valid_events
     
+    events = filter_events_by_publish_window(events, start_dt, end_dt)
+    events = dedupe_market_events(events)
+
     if not events:
         print("无新情报，发送空消息通知")
         if config.WECOM_WEBHOOK_URL:
@@ -121,19 +198,20 @@ def push_daily_report():
                 cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{encoded_filename}"
                 found_cover = True
 
-    # 2. 构造 Template Card
+    # 2. 构造 News Card
     date_str = label
     unique_article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
     total_count = len(unique_article_ids)
-    
-    hot_titles = build_hot_news_titles(events, max_items=4, title_max_len=10)
-    v_list = [
-        {
-            "title": title,
-            "desc": ""
-        }
-        for title in hot_titles
-    ]
+    category_counts = build_category_counts(events)
+    category_labels = {
+        "Market": "市场",
+        "Bid": "中标",
+        "Project": "项目",
+        "Equipment": "设备",
+        "R&D": "研发",
+        "Regulation": "法规"
+    }
+    category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys()])
 
 
     # 构造跳转链接 (如果没有配置公网 IP，使用 localhost 也没用，但可以作为占位)
@@ -144,34 +222,14 @@ def push_daily_report():
         pass
 
     payload = {
-        "msgtype": "template_card",
-        "template_card": {
-            "card_type": "news_notice",
-            "source": {
-                "icon_url": "https://cdn-icons-png.flaticon.com/512/2942/2942544.png", # 挖掘机/地球图标
-                "desc": "全球疏浚情报",
-                "desc_color": 0
-            },
-            "main_title": {
-                "title": f"{date_str}",
-                "desc": f"本次更新: {total_count} 条"
-            },
-            "card_image": {
-                "url": cover_image_url,
-                "aspect_ratio": 1.3
-            },
-            "vertical_content_list": v_list,
-            "card_action": {
-                "type": 1,
-                "url": jump_url,
-                "appid": "APPID", 
-                "pagepath": "PAGEPATH"
-            },
-            "jump_list": [
+        "msgtype": "news",
+        "news": {
+            "articles": [
                 {
-                    "type": 1,
+                    "title": f"{date_str}（本次更新 {total_count} 条）",
+                    "description": f"{category_line}\n点击查看完整 BI 数据大屏",
                     "url": jump_url,
-                    "title": "查看完整 BI 数据大屏"
+                    "picurl": cover_image_url
                 }
             ]
         }
@@ -184,14 +242,13 @@ def push_daily_report():
             resp = requests.post(config.WECOM_WEBHOOK_URL, json=payload)
             print(f"[Push] 响应: {resp.text}")
             
-            # 如果 Template Card 失败 (例如 errcode != 0)，尝试降级为 Text 消息
+            # 如果 News Card 失败 (例如 errcode != 0)，尝试降级为 Text 消息
             resp_json = resp.json()
             if resp_json.get("errcode") != 0:
-                print("Template Card 推送失败，尝试降级为 Text 消息...")
+                print("News Card 推送失败，尝试降级为 Text 消息...")
                 text_content = f"【全球疏浚情报 {date_str}】\n"
                 text_content += f"本次更新: {total_count} 条\n\n"
-                for v in v_list:
-                    text_content += f"{v['title']}\n"
+                text_content += f"{category_line}\n"
                 text_content += f"\n详情请访问: {jump_url}"
                 
                 text_payload = {

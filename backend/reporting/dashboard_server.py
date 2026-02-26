@@ -54,6 +54,21 @@ async def get_events(
 ):
     """获取事件，支持按日期、最近24小时或自定义时间范围"""
     try:
+        def parse_event_datetime(value):
+            if not value:
+                return None, False
+            text = str(value).strip()
+            if not text:
+                return None, False
+            try:
+                if "T" in text:
+                    return datetime.fromisoformat(text), False
+                if " " in text and ":" in text:
+                    return datetime.fromisoformat(text.replace(" ", "T")), False
+                return datetime.strptime(text, "%Y-%m-%d"), True
+            except Exception:
+                return None, False
+
         if mode == 'recent':
             now = datetime.now()
             hour = now.hour
@@ -62,14 +77,10 @@ async def get_events(
                 start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 date_label = f"{label_prefix}早报"
-            elif hour < 18:
-                start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-                end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}白报"
             else:
                 start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}白报"
+                date_label = f"{label_prefix}日报"
             start_time = start_dt.isoformat()
             end_time = end_dt.isoformat()
         elif start and end:
@@ -156,27 +167,19 @@ async def get_events(
         # Filter by pub_date if in recent mode (User request: "How am I seeing 2023 news?")
         if mode == 'recent':
             filtered_events = []
-            cutoff_date = now - timedelta(days=15)
             for e in events:
-                p_date_str = e.get('pub_date')
-                should_keep = True
-                if p_date_str:
-                    try:
-                        # Try parsing standard str(datetime) format 'YYYY-MM-DD HH:MM:SS.mmmmmm'
-                        # normalize string
-                        p_date_str_clean = str(p_date_str).strip()
-                        if ' ' in p_date_str_clean:
-                            p_date_str_clean = p_date_str_clean.replace(' ', 'T')
-                        
-                        p_date = datetime.fromisoformat(p_date_str_clean)
-                        if p_date < cutoff_date:
-                            should_keep = False
-                    except Exception as parse_err:
-                        # If parsing fails, keep it to be safe (or log it)
-                        pass
-                
-                if should_keep:
-                    filtered_events.append(e)
+                pub_dt, date_only = parse_event_datetime(e.get('pub_date'))
+                if not pub_dt:
+                    pub_dt, date_only = parse_event_datetime(e.get('created_at'))
+                if not pub_dt:
+                    continue
+                if date_only:
+                    if pub_dt.date() < start_dt.date() or pub_dt.date() > end_dt.date():
+                        continue
+                else:
+                    if pub_dt < start_dt or pub_dt > end_dt:
+                        continue
+                filtered_events.append(e)
             events = filtered_events
 
         def normalize_title(text):
