@@ -6,6 +6,34 @@ import json
 import os
 import config
 
+async def launch_chromium(p):
+    """启动 Chromium 浏览器，必要时回退到系统浏览器路径"""
+    last_error = None
+    for channel in ["chrome", "msedge", "chromium"]:
+        try:
+            return await p.chromium.launch(channel=channel, headless=True)
+        except Exception as e:
+            last_error = e
+    try:
+        return await p.chromium.launch(headless=True)
+    except Exception as e:
+        last_error = e
+    candidates = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable"
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                return await p.chromium.launch(headless=True, executable_path=path)
+            except Exception as e:
+                last_error = e
+    if last_error:
+        raise last_error
+    raise RuntimeError("Playwright 浏览器启动失败，未找到可用 Chromium 可执行文件")
+
 async def fetch_rss(url, hours=24, source_name=None):
     """抓取 RSS 源"""
     print(f"[RSS] 正在抓取: {url}")
@@ -264,14 +292,7 @@ async def get_all_items():
     has_web = any(s.get('type') == 'web' for s in sources)
     if has_web:
         async with async_playwright() as p:
-            browser = None
-            for channel in ["chrome", "msedge", "chromium"]:
-                try:
-                    browser = await p.chromium.launch(channel=channel, headless=True)
-                    break
-                except: pass
-            if not browser: 
-                browser = await p.chromium.launch(headless=True)
+            browser = await launch_chromium(p)
                 
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},

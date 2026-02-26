@@ -16,6 +16,34 @@ from constants import (
     consolidate_regulation_events
 )
 
+async def launch_chromium(p):
+    """启动 Chromium 浏览器，必要时回退到系统浏览器路径"""
+    last_error = None
+    for channel in ["chrome", "msedge", "chromium"]:
+        try:
+            return await p.chromium.launch(channel=channel, headless=True)
+        except Exception as e:
+            last_error = e
+    try:
+        return await p.chromium.launch(headless=True)
+    except Exception as e:
+        last_error = e
+    candidates = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable"
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                return await p.chromium.launch(headless=True, executable_path=path)
+            except Exception as e:
+                last_error = e
+    if last_error:
+        raise last_error
+    raise RuntimeError("Playwright 浏览器启动失败，未找到可用 Chromium 可执行文件")
+
 def normalize_events(events, fallback_category):
     if events is None:
         return []
@@ -597,13 +625,7 @@ async def process_items(items):
     
     async with async_playwright() as p:
         # 启动浏览器用于分析阶段 (截图)
-        browser = None
-        for channel in ["chrome", "msedge", "chromium"]:
-            try:
-                browser = await p.chromium.launch(channel=channel, headless=True)
-                break
-            except: pass
-        if not browser: browser = await p.chromium.launch(headless=True)
+        browser = await launch_chromium(p)
             
         context = await browser.new_context(viewport={"width": 1280, "height": 800}, ignore_https_errors=True)
         
