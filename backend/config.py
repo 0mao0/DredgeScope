@@ -38,4 +38,4 @@ WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
 BACKEND_URL = os.getenv("WISEFLOW_BACKEND_URL", "http://127.0.0.1:8000")
 
 # Fleet API (船舶追踪)
-FLEET_API_URL = os.getenv("FLEET_API_URL", "http://101.200.125.6:8234/fleets/group/shipposition?usertoken=H2UbIXn52rXHndFrfxWm6i9xthSBK5b4C%2BDcmOwmUbEVu%2FLdfN5ZwQR%2BIP4N%2FxTI&group=group1")
+FLEET_API_URL = os.getenv("FLEET_API_URL")
