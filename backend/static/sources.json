@@ -31,7 +31,7 @@
     },
     {
         "name": "Dredging Contractors of America",
-        "url": "https://dredgingcontractors.org/news-1/news-item-list/",
+        "url": "https://dredgingcontractors.org/news",
         "type": "web",
         "selector": ".news-item",
         "blacklist": [
@@ -73,23 +73,23 @@
     },
     {
         "name": "CCCC Shanghai Dredging News",
-        "url": "https://www.cccc-sdc.com/",
+        "url": "https://www.cccc-sdc.com/cccc-sdc/channels/2207.html",
         "type": "web",
-        "selector": "body",
+        "selector": ".news-list, .content-list, body",
         "max_links": 30
     },
     {
         "name": "CCCC Guangzhou Dredging News",
-        "url": "https://www.ccgdc.com/",
+        "url": "https://www.ccgdc.com/cccc-gdc/channels/1945.html",
         "type": "web",
-        "selector": "body",
+        "selector": ".news-list, .content-list, body",
         "max_links": 30
     },
     {
         "name": "CCCC Tianjin Dredging News",
-        "url": "https://www.zjthbh.com/",
+        "url": "https://www.zjthbh.com/tjsj/channels/870.html",
         "type": "web",
-        "selector": "body",
+        "selector": ".news-list, .content-list, body",
         "max_links": 30
     },
     {

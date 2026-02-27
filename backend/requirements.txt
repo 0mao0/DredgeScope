@@ -2,6 +2,7 @@ fastapi
 uvicorn
 playwright==1.44.0
 openai
+anyio>=4.0.0
 schedule
 requests
 python-dotenv

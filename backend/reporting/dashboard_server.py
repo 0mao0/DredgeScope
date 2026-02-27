@@ -551,8 +551,7 @@ async def get_article_detail(article_id: int):
 
 @app.get("/api/sources")
 async def get_sources():
-    sources_path = os.path.join(os.path.dirname(__file__), "..", "acquisition", "sources.json")
-    sources_path = os.path.abspath(sources_path)
+    sources_path = os.path.abspath(config.SOURCES_FILE)
     if not os.path.exists(sources_path):
         return {"sources": []}
     with open(sources_path, "r", encoding="utf-8") as f:

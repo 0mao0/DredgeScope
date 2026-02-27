@@ -5,7 +5,7 @@ import os
 from playwright.async_api import async_playwright
 from openai import AsyncOpenAI
 import config
-from constants import (
+from static.constants import (
     DEFAULT_CATEGORY,
     ALLOWED_CATEGORIES,
     KEYWORD_CATEGORY_MAP,

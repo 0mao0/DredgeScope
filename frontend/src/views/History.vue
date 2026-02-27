@@ -70,7 +70,12 @@
         >
           <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div class="space-y-2">
-              <h3 class="text-lg font-semibold text-brand-300">{{ item.title_cn || item.title || '未命名' }}</h3>
+              <h3 class="text-lg font-semibold text-brand-300">
+                <span class="text-sm font-normal bg-brand-500/10 text-brand-400 px-2 py-0.5 rounded mr-2 border border-brand-500/20">
+                  {{ getCategoryLabel(item.category || item.categories?.[0]) }}
+                </span>
+                {{ item.title_cn || item.title || '未命名' }}
+              </h3>
               <div class="flex flex-wrap gap-2">
                 <span 
                   v-for="cat in item.categories" 
@@ -131,6 +136,10 @@
           </span>
           <span v-if="currentArticle?.source_name" class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10">
             {{ currentArticle.source_name.slice(0, 5) }}
+          </span>
+          <span class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1">
+            <i class="fa-solid fa-clock"></i>
+            发布时间: {{ currentArticle?.pub_date || '未知' }}
           </span>
         </div>
 

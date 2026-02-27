@@ -3,7 +3,7 @@ import base64
 from datetime import datetime
 import config
 import database
-from constants import (
+from static.constants import (
     DEFAULT_CATEGORY,
     ALLOWED_CATEGORIES,
     KEYWORD_CATEGORY_MAP,

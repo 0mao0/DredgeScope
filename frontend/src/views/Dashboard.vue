@@ -4,13 +4,51 @@
     <NavBar />
     
     <main class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <!-- Report Selector -->
+      <div class="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10">
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-3">
+            <a-date-picker 
+              v-model:value="selectedDate" 
+              :allow-clear="false"
+              class="bg-dark-card border-white/10 w-40"
+            />
+          </div>
+          <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
+            <i class="fa-solid fa-clock text-[9px]"></i>
+            区间: {{ reportTimeRange }}
+          </div>
+        </div>
+        
+        <div class="flex bg-black/20 p-1 rounded-xl border border-white/5">
+          <button 
+            @click="reportType = 'morning'"
+            :class="[
+              'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+              reportType === 'morning' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+            ]"
+          >
+            <i class="fa-solid fa-sun text-xs"></i> 早报
+          </button>
+          <button 
+            @click="reportType = 'evening'"
+            :class="[
+              'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+              reportType === 'evening' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+            ]"
+          >
+            <i class="fa-solid fa-moon text-xs"></i> 晚报
+          </button>
+        </div>
+      </div>
+
       <!-- Stats Overview -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="glass-card rounded-2xl p-5 flex items-center justify-between group">
           <div>
-            <p class="text-sm font-medium text-gray-400">本次情报</p>
+            <p class="text-sm font-medium text-gray-400">本次新闻</p>
             <div class="flex items-end gap-2 mt-1">
-              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ newsStore.currentCount }}</span>
+              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ filteredNews.length }}</span>
               <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
             </div>
           </div>
@@ -35,7 +73,7 @@
       <!-- Main Content Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <!-- Left Column: Quick Summary -->
-        <div class="lg:col-span-1 space-y-6">
+        <div v-show="false" class="lg:col-span-1 space-y-6">
           <div class="glass-card rounded-2xl p-6 h-full">
             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <i class="fa-solid fa-bolt text-yellow-400"></i> 今日速览
@@ -132,6 +170,10 @@
           </span>
           <span v-if="currentArticle?.source_name" class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10">
             {{ currentArticle.source_name.length > 5 ? currentArticle.source_name.slice(0, 5) : currentArticle.source_name }}
+          </span>
+          <span class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1">
+            <i class="fa-solid fa-clock"></i>
+            发布时间: {{ currentArticle?.pub_date || '未知' }}
           </span>
         </div>
 
@@ -233,6 +275,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useNewsStore, useVesselStore, type NewsItem } from '@/stores'
 import NavBar from '@/components/NavBar.vue'
+import dayjs, { Dayjs } from 'dayjs'
 
 const newsStore = useNewsStore()
 const vesselStore = useVesselStore()
@@ -242,6 +285,32 @@ const modalVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
+
+// Report filtering state
+const reportType = ref<'morning' | 'evening'>(dayjs().hour() < 14 ? 'morning' : 'evening')
+const selectedDate = ref<Dayjs>(dayjs())
+
+const reportTimeRange = computed(() => {
+  if (reportType.value === 'morning') {
+    return `${selectedDate.value.subtract(1, 'day').format('MM-DD')} 18:00 至 ${selectedDate.value.format('MM-DD')} 08:00`
+  }
+  return `${selectedDate.value.format('MM-DD')} 08:00 至 ${selectedDate.value.format('MM-DD')} 18:00`
+})
+
+const filteredNews = computed(() => {
+  const start = reportType.value === 'morning' 
+    ? selectedDate.value.subtract(1, 'day').hour(18).minute(0).second(0)
+    : selectedDate.value.hour(8).minute(0).second(0)
+    
+  const end = reportType.value === 'morning'
+    ? selectedDate.value.hour(8).minute(0).second(0)
+    : selectedDate.value.hour(18).minute(0).second(0)
+
+  return newsStore.newsList.filter(item => {
+    const pubTime = dayjs(item.pub_date || item.created_at)
+    return pubTime.isAfter(start) && pubTime.isBefore(end)
+  })
+})
 
 const categories = {
   Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -255,7 +324,7 @@ const categories = {
 const quickSummary = computed(() => {
   const seenTitles = new Set()
   const unique: NewsItem[] = []
-  for (const e of newsStore.newsList) {
+  for (const e of filteredNews.value) {
     const title = e.title_cn || e.article_title
     if (!seenTitles.has(title)) {
       seenTitles.add(title)
@@ -273,7 +342,7 @@ function getCategoryMeta(category: string | undefined) {
 function getGroupedArticles(category: string) {
   const seen = new Set<string>()
   const unique: NewsItem[] = []
-  for (const item of newsStore.newsList) {
+  for (const item of filteredNews.value) {
     if (item.category !== category) continue
     const key = item.article_id || item.article_url || item.title_cn || item.article_title || item.id
     if (!key) {

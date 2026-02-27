@@ -33,6 +33,22 @@ CATEGORY_CN_MAP = {
     "None": "未知"
 }
 
+JUNK_TITLES_EXACT = {
+    "重回主页", "董事会", "监事会", "股东大会", "首页", "主页",
+    "Home", "Back to Home", "Login", "Sign in", "Register",
+    "About Us", "Contact Us", "Site Map", "Privacy Policy",
+    "Terms of Use", "Search", "Menu", "Navigation",
+    "English", "Español", "Français", "Deutsch", "中文",
+    "Skip to main content", "ENTER YOUR ADMIN USERNAME",
+    "Back to Home", "Login", "Sign in", "Register", "Site Map", "Contact Us",
+    "Search", "Menu", "Navigation", "Privacy Policy", "Terms of Use"
+}
+
+JUNK_KEYWORDS_PARTIAL = [
+    "404 Not Found", "Page Not Found", "Access Denied",
+    "Browser Update", "Enable JavaScript"
+]
+
 def normalize_category(value):
     """归一化分类名称"""
     if value is None:
@@ -150,5 +166,7 @@ __all__ = [
     "normalize_event_text",
     "build_event_signature",
     "extract_regulation_core",
-    "consolidate_regulation_events"
+    "consolidate_regulation_events",
+    "JUNK_TITLES_EXACT",
+    "JUNK_KEYWORDS_PARTIAL"
 ]

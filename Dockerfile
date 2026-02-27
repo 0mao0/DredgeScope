@@ -58,7 +58,6 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # 复制后端代码
 COPY backend /app/backend
-COPY scheduler_entry.py /app/scheduler_entry.py
 
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist

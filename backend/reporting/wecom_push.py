@@ -1,8 +1,13 @@
 import requests
 import json
 import os
+import sys
 import urllib.parse
 from datetime import datetime, timedelta
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.dirname(current_dir)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 import config
 import database
 
@@ -17,11 +22,25 @@ CATEGORIES_MAP = {
     "Regulation": "⚖️ 技术法规"
 }
 
+def get_scheduler_log_path():
+    """获取调度日志文件路径"""
+    return os.path.join(backend_dir, "scheduler", "scheduler.log")
+
+def write_scheduler_log(message):
+    """写入调度日志内容"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_msg = f"[{timestamp}] {message}\n"
+    try:
+        with open(get_scheduler_log_path(), "a", encoding="utf-8") as f:
+            f.write(log_msg)
+    except Exception:
+        pass
+
 def get_push_window(now):
     """获取推送窗口的时间范围
     
     早报: 00:00-08:00 -> 昨天18:00 到 今天08:00
-    日报: 08:00-18:00 -> 今天08:00 到 今天18:00
+    晚报: 08:00-18:00 -> 今天08:00 到 今天18:00
     """
     label_prefix = f"{now.month}月{now.day}日"
     hour = now.hour
@@ -32,7 +51,7 @@ def get_push_window(now):
     else:
         start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-        label = f"{label_prefix}日报"
+        label = f"{label_prefix}晚报"
     return start_dt, end_dt, label
 
 def normalize_hot_title(title, max_len=10):
@@ -151,6 +170,7 @@ def push_daily_report():
     end_time = end_dt.isoformat()
     
     events = database.get_events_by_time_range(start_time, end_time)
+    raw_event_count = len(events)
 
     # Filter junk (Sync with dashboard.html logic)
     # 过滤掉无效信息，确保推送数量与前端展示一致
@@ -165,9 +185,11 @@ def push_daily_report():
     
     events = filter_events_by_publish_window(events, start_dt, end_dt)
     events = dedupe_market_events(events)
+    filtered_event_count = len(events)
 
     if not events:
         print("无新情报，发送空消息通知")
+        write_scheduler_log(f"推送统计: 窗口{label} 原始记录{raw_event_count} 过滤后0 推送0")
         if config.WECOM_WEBHOOK_URL:
             try:
                 # 发送纯文本通知
@@ -198,7 +220,7 @@ def push_daily_report():
                 cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{encoded_filename}"
                 found_cover = True
 
-    # 2. 构造 News Card
+    # 2. 构造 Template Card
     date_str = label
     unique_article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
     total_count = len(unique_article_ids)
@@ -212,6 +234,9 @@ def push_daily_report():
         "Regulation": "法规"
     }
     category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys()])
+    write_scheduler_log(
+        f"推送统计: 窗口{label} 原始记录{raw_event_count} 过滤后{filtered_event_count} 推送{total_count}"
+    )
 
 
     # 构造跳转链接 (如果没有配置公网 IP，使用 localhost 也没用，但可以作为占位)
@@ -222,16 +247,34 @@ def push_daily_report():
         pass
 
     payload = {
-        "msgtype": "news",
-        "news": {
-            "articles": [
+        "msgtype": "template_card",
+        "template_card": {
+            "card_type": "news_notice",
+            "source": {
+                "icon_url": "https://cdn-icons-png.flaticon.com/512/2942/2942544.png",
+                "desc": "全球疏浚情报",
+                "desc_color": 0
+            },
+            "main_title": {
+                "title": f"{date_str}",
+                "desc": f"本次更新: {total_count} 条"
+            },
+            "card_image": {
+                "url": cover_image_url,
+                "aspect_ratio": 1.3
+            },
+            "vertical_content_list": [
                 {
-                    "title": f"{date_str}（本次更新 {total_count} 条）",
-                    "description": f"{category_line}\n点击查看完整 BI 数据大屏",
-                    "url": jump_url,
-                    "picurl": cover_image_url
+                    "title": "分类分布",
+                    "desc": category_line
                 }
-            ]
+            ],
+            "card_action": {
+                "type": 1,
+                "url": jump_url,
+                "appid": "APPID",
+                "pagepath": "PAGEPATH"
+            }
         }
     }
 
@@ -242,10 +285,10 @@ def push_daily_report():
             resp = requests.post(config.WECOM_WEBHOOK_URL, json=payload)
             print(f"[Push] 响应: {resp.text}")
             
-            # 如果 News Card 失败 (例如 errcode != 0)，尝试降级为 Text 消息
+            # 如果 Template Card 失败 (例如 errcode != 0)，尝试降级为 Text 消息
             resp_json = resp.json()
             if resp_json.get("errcode") != 0:
-                print("News Card 推送失败，尝试降级为 Text 消息...")
+                print("Template Card 推送失败，尝试降级为 Text 消息...")
                 text_content = f"【全球疏浚情报 {date_str}】\n"
                 text_content += f"本次更新: {total_count} 条\n\n"
                 text_content += f"{category_line}\n"

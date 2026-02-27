@@ -95,10 +95,13 @@ async def fetch_web_index(context, source):
             url,
             [
                 {"wait_until": "domcontentloaded", "timeout_ms": 30000},
+                {"wait_until": "networkidle", "timeout_ms": 30000},
                 {"wait_until": "load", "timeout_ms": 30000}
             ]
         )
-        await asyncio.sleep(3)
+        # 增加滚动以触发懒加载
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(5)
         
         # Cloudflare / Error Check
         current_url = page.url
@@ -284,7 +287,8 @@ async def get_all_items():
     # 2. 抓取 RSS
     for s in sources:
         if s.get('type') == 'rss':
-            items = await fetch_rss(s['url'], source_name=s.get('name'))
+            # 增加抓取时长到 72 小时 (3天)，防止周末断更
+            items = await fetch_rss(s['url'], hours=72, source_name=s.get('name'))
             all_items.extend(items)
     
     # 3. 抓取 Web (需要 Playwright)

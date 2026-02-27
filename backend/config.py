@@ -24,7 +24,7 @@ VL_MODEL = os.getenv("AI_MODEL", "Qwen3-VL-30B-A3B-Instruct-FP8")
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 
-SOURCES_FILE = os.path.join(os.path.dirname(__file__), 'acquisition', 'sources.json')
+SOURCES_FILE = os.path.join(os.path.dirname(__file__), 'static', 'sources.json')
 TEMPLATES_DIR = os.path.join(ROOT_DIR, 'frontend')
 REPORT_FILE = os.path.join(DATA_DIR, 'report.md')
 HISTORY_FILE = os.path.join(DATA_DIR, 'history.jsonl')

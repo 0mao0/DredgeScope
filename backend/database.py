@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 import config
-from constants import (
+from static.constants import (
     DEFAULT_CATEGORY,
     ALLOWED_CATEGORIES,
     KEYWORD_CATEGORY_MAP,

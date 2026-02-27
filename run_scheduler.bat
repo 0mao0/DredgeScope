@@ -1,4 +1,4 @@
 @echo off
 cd backend
-python scheduler.py
+python -m scheduler
 pause

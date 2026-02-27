@@ -24,20 +24,8 @@
                 : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
             ]"
           >
-            <i class="fa-solid fa-chart-line text-sm"></i>
-            <span class="hidden sm:inline ml-1.5">实时情报</span>
-          </router-link>
-          <router-link 
-            to="/statistics" 
-            :class="[
-              'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/statistics') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
-            ]"
-          >
-            <i class="fa-solid fa-chart-pie text-sm"></i>
-            <span class="hidden sm:inline ml-1.5">统计分析</span>
+            <i class="fa-solid fa-calendar-day text-sm"></i>
+            <span class="hidden sm:inline ml-1.5">每日新闻</span>
           </router-link>
           <router-link 
             to="/history" 
@@ -50,6 +38,18 @@
           >
             <i class="fa-solid fa-clock-rotate-left text-sm"></i>
             <span class="hidden sm:inline ml-1.5">历史新闻</span>
+          </router-link>
+          <router-link 
+            to="/statistics" 
+            :class="[
+              'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
+              isActive('/statistics') 
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+            ]"
+          >
+            <i class="fa-solid fa-chart-pie text-sm"></i>
+            <span class="hidden sm:inline ml-1.5">统计分析</span>
           </router-link>
           <router-link 
             to="/vessel-map" 

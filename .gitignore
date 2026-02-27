@@ -23,7 +23,7 @@ backend/data/
 !backend/data/assets/
 !backend/data/assets/.gitkeep
 !backend/data/report.md
-!backend/data/scheduler.log
+!backend/scheduler/scheduler.log
 ships.csv
 《国际疏浚简讯》第30期 2025年1月.pdf
 
