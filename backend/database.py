@@ -187,6 +187,18 @@ def init_db():
             print("[DB] 已成功添加 ships 地理位置列")
         except Exception as e:
             print(f"[DB] 添加 ships 地理位置列失败: {e}")
+
+    # 检查并添加 ships 表缺失的航速航向列
+    try:
+        c.execute("SELECT speed FROM ships LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 ships 表缺失 speed/heading 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE ships ADD COLUMN speed REAL")
+            c.execute("ALTER TABLE ships ADD COLUMN heading REAL")
+            print("[DB] 已成功添加 ships speed/heading 列")
+        except Exception as e:
+            print(f"[DB] 添加 ships speed/heading 列失败: {e}")
     
     # 2. 事件表 (Events)
     c.execute('''CREATE TABLE IF NOT EXISTS events (
@@ -250,15 +262,15 @@ def add_ship_track(mmsi, lat, lng, speed, heading, status_raw, timestamp, vessel
             (mmsi, lat, lng, speed, heading, status_raw, timestamp, datetime.now().isoformat(), vessel_name)
         )
         
-        # 2. 清理旧记录 (保留最近 100 条, 确保足够覆盖24小时)
-        # 稳健的方法：保留最新的 100 条
+        # 2. 清理旧记录 (保留最近 5000 条, 确保足够覆盖30天)
+        # 稳健的方法：保留最新的 5000 条
         c.execute('''
             DELETE FROM ship_tracks 
             WHERE id NOT IN (
                 SELECT id FROM ship_tracks 
                 WHERE mmsi = ? 
                 ORDER BY timestamp DESC 
-                LIMIT 100
+                LIMIT 5000
             ) AND mmsi = ?
         ''', (mmsi, mmsi))
         
@@ -271,15 +283,37 @@ def add_ship_track(mmsi, lat, lng, speed, heading, status_raw, timestamp, vessel
     finally:
         conn.close()
 
-def get_ship_tracks(mmsi, limit=72):
+def get_ship_tracks(mmsi, days=3):
     """获取船舶历史轨迹"""
+    from datetime import timedelta
     conn = sqlite3.connect(TRACK_DB_PATH)
-    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM ship_tracks WHERE mmsi = ? ORDER BY timestamp DESC LIMIT ?", (mmsi, limit))
-    rows = c.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    
+    start_time = (datetime.now() - timedelta(days=days)).isoformat()
+    
+    try:
+        c.execute('''
+            SELECT lat, lng, speed, heading, timestamp 
+            FROM ship_tracks 
+            WHERE mmsi = ? AND timestamp > ?
+            ORDER BY timestamp ASC
+        ''', (mmsi, start_time))
+        
+        tracks = []
+        for row in c.fetchall():
+            tracks.append({
+                "lat": row[0],
+                "lng": row[1],
+                "speed": row[2],
+                "heading": row[3],
+                "timestamp": row[4]
+            })
+        return tracks
+    except Exception as e:
+        print(f"[DB] 获取轨迹失败: {e}")
+        return []
+    finally:
+        conn.close()
 
 def upsert_ships(ships):
     """批量插入或更新船舶记录"""

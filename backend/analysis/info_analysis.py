@@ -482,9 +482,41 @@ async def analyze_item(context, client, item):
         else:
             # 2. 提取文本 (核心)
             try:
+                # 增强版正文提取逻辑
                 text_content = await page.evaluate("""() => {
-                    const article = document.querySelector('article') || document.querySelector('.post-content') || document.querySelector('.entry-content') || document.body;
-                    return article.innerText.slice(0, 15000);
+                    // 1. 定义可能的正文容器选择器
+                    const selectors = [
+                        'article', 
+                        '.post-content', 
+                        '.entry-content', 
+                        '.article-content',
+                        '.article-body',
+                        '.main-content',
+                        'main',
+                        '#content',
+                        '.content'
+                    ];
+                    
+                    let articleElement = null;
+                    for (const selector of selectors) {
+                        const el = document.querySelector(selector);
+                        if (el && el.innerText.trim().length > 200) {
+                            articleElement = el;
+                            break;
+                        }
+                    }
+                    
+                    // 2. 如果没找到明确的容器，或者内容太少，则回退到 body
+                    if (!articleElement) {
+                        articleElement = document.body;
+                    }
+
+                    // 3. 在提取前简单清理：移除脚本、样式、导航等无关元素
+                    const cleanElement = articleElement.cloneNode(true);
+                    const toRemove = cleanElement.querySelectorAll('script, style, nav, header, footer, aside, .sidebar, .ads, .menu');
+                    toRemove.forEach(el => el.remove());
+                    
+                    return cleanElement.innerText.slice(0, 15000);
                 }""")
             except:
                 text_content = ""
@@ -561,6 +593,7 @@ async def analyze_item(context, client, item):
     # Case 1: Text 认为有效
     if text_res and not text_res.get('is_junk'):
         final_result = text_res
+        final_result['content'] = text_content  # 保存原始内容
         analysis_log.append(f"4. **Text分析**: 成功 ({final_result.get('category')})")
         
         # 尝试合并 VL 的图片描述
@@ -625,6 +658,7 @@ async def analyze_item(context, client, item):
             }
         else:
             final_result = vl_res
+            final_result['content'] = text_content  # 保存原始内容 (即使是VL结果也尝试保存文本)
             analysis_log.append(f"4. **VL分析**: 兜底成功 ({final_result.get('category')})")
             
     # Case 4: 都失败

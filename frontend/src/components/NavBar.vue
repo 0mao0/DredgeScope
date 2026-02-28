@@ -25,7 +25,7 @@
             ]"
           >
             <i class="fa-solid fa-calendar-day text-sm"></i>
-            <span class="hidden sm:inline ml-1.5">每日新闻</span>
+            <span class="hidden sm:inline ml-1.5">每日推送</span>
           </router-link>
           <router-link 
             to="/history" 

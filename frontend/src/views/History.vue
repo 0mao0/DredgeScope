@@ -105,6 +105,15 @@
                       {{ getCategoryMeta(undefined).name }}
                     </span>
                     <span class="truncate font-medium flex-1">{{ article.title_cn || article.title }}</span>
+                    <a 
+                      v-if="article.url" 
+                      :href="article.url" 
+                      target="_blank" 
+                      @click.stop
+                      class="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-all text-blue-400"
+                    >
+                      <i class="fa-solid fa-external-link-alt text-[10px]"></i>
+                    </a>
                   </div>
                   <div class="text-[10px] text-gray-500 flex items-center justify-between mt-0.5 px-0.5">
                     <div class="flex items-center gap-1">
@@ -352,13 +361,13 @@
       v-model:open="isSchedulerModalVisible"
       title="调度任务执行历史"
       :footer="null"
-      width="800px"
+      width="1200px"
       centered
       class="scheduler-modal"
     >
-      <div class="flex h-[500px] overflow-hidden">
+      <div class="flex h-[600px] overflow-hidden">
         <!-- Sidebar: List of runs -->
-        <div class="w-1/3 border-r border-white/5 pr-4 overflow-y-auto custom-scrollbar">
+        <div class="w-1/4 border-r border-white/5 pr-4 overflow-y-auto custom-scrollbar">
           <div 
             v-for="run in schedulerRuns" 
             :key="run.id"
@@ -376,13 +385,13 @@
         </div>
         
         <!-- Content: Markdown preview -->
-        <div class="w-2/3 pl-4 overflow-y-auto custom-scrollbar bg-black/10 rounded-lg p-4">
+        <div class="w-3/4 pl-4 overflow-y-auto custom-scrollbar bg-black/10 rounded-lg p-4">
           <div v-if="loadingRun" class="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
             <a-spin />
             <span class="text-[10px]">正在加载详情...</span>
           </div>
           <div v-else-if="selectedRunContent" class="markdown-body">
-            <pre class="whitespace-pre-wrap text-[11px] text-gray-400 font-mono leading-relaxed">{{ selectedRunContent }}</pre>
+            <div class="prose prose-invert max-w-none text-xs" v-html="renderedRunContent"></div>
           </div>
           <div v-else class="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
             <i class="fa-solid fa-list-check text-2xl opacity-20"></i>
@@ -397,6 +406,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import dayjs from 'dayjs'
+import { marked } from 'marked'
 import type { Dayjs } from 'dayjs'
 import type { NewsItem } from '@/stores'
 import NavBar from '@/components/NavBar.vue'
@@ -412,6 +422,11 @@ const isSchedulerModalVisible = ref(false)
 const selectedRunContent = ref('')
 const selectedRunId = ref('')
 const loadingRun = ref(false)
+
+const renderedRunContent = computed(() => {
+  if (!selectedRunContent.value) return ''
+  return marked(selectedRunContent.value)
+})
 
 const latestRunTime = computed(() => {
   if (schedulerRuns.value.length > 0) {
@@ -443,7 +458,6 @@ const fetchRunDetail = async (runId: string) => {
     loadingRun.value = false
   }
 }
-const sources = ref<{ name: string; url?: string }[]>([])
 const expandedGroups = ref<Set<string>>(new Set())
 const selectedArticle = ref<NewsItem | null>(null)
 const zoneBView = ref<'text' | 'screenshot'>('text')
@@ -455,12 +469,12 @@ const filters = reactive({
   category: '',
   sourceType: '',
   sourceName: '',
-  valid: 1 as number | null // 默认显示有效
+  valid: null as number | null // 默认显示全部（包括失效数据）
 })
 
 const dateRange = ref<[Dayjs, Dayjs]>([
-  dayjs().subtract(3, 'month'), // 历史页面默认范围大一点
-  dayjs()
+  dayjs().startOf('day'), // 默认显示今天
+  dayjs().endOf('day')
 ])
 
 // --- 分类元数据 ---
@@ -595,9 +609,9 @@ function resetFilters() {
   filters.category = ''
   filters.sourceType = ''
   filters.sourceName = ''
-  filters.valid = 1
+  filters.valid = null
   filters.page = 1
-  dateRange.value = [dayjs().subtract(3, 'month'), dayjs()]
+  dateRange.value = [dayjs().startOf('day'), dayjs().endOf('day')]
   fetchArticles()
 }
 

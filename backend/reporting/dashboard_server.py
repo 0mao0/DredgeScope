@@ -78,9 +78,10 @@ async def get_events(
                 end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 date_label = f"{label_prefix}早报"
             else:
+                # User feedback: 晚报 (日报) should be today 08:00 - 18:00
                 start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
                 end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}日报"
+                date_label = f"{label_prefix}晚报"
             start_time = start_dt.isoformat()
             end_time = end_dt.isoformat()
         elif start and end:
@@ -381,64 +382,73 @@ async def get_statistics(
 @app.get("/api/ship_tracks")
 async def get_ship_tracks(mmsi: str, days: int = 3):
     """获取指定船舶的历史轨迹 (默认3天)"""
-    # 假设每10分钟一个点，一天144个点，3天约432个点
-    limit = days * 144
-    tracks = database.get_ship_tracks(mmsi, limit=limit)
+    tracks = database.get_ship_tracks(mmsi, days=days)
     return tracks
 
 @app.get("/api/ships")
 async def get_ships():
-    """获取所有船舶位置和状态 (仅展示 24 小时内有 API 更新的船舶)"""
+    """获取所有船舶位置和状态 (返回所有船舶，tracked 为 24 小时内活跃数)"""
     ships = database.get_all_ships()
     total_count = len(ships)
+    # 修正 tracked 逻辑：仅统计有 MMSI 的船舶 (即被监控的船舶)
     tracked_count = 0
-    valid_ships = []
+    active_count = 0
+    all_ships = []
     
     # 定义“活跃”阈值：24 小时
     now = datetime.now()
     threshold = now - timedelta(hours=24)
     
     for ship in ships:
-        # 1. 检查更新时间，如果超过 24 小时未更新，说明不在 API 范围内，直接跳过
-        updated_at_str = ship.get('updated_at')
-        if not updated_at_str:
-            continue
-            
-        try:
-            updated_at = datetime.fromisoformat(updated_at_str)
-            if updated_at < threshold:
-                continue
-        except:
-            continue
-
-        # 2. 统计已跟踪的船舶
-        if ship.get('status') and str(ship.get('status')).strip():
+        mmsi = str(ship.get('mmsi', '')).strip()
+        if mmsi:
             tracked_count += 1
             
-        # 3. 检查位置坐标
-        if ship['location'] and ',' in ship['location']:
+        # 1. 标记是否活跃
+        is_active = False
+        updated_at_str = ship.get('updated_at')
+        if updated_at_str:
             try:
-                lat_str, lng_str = ship['location'].split(',')
-                lat = float(lat_str.strip())
-                lng = float(lng_str.strip())
+                updated_at = datetime.fromisoformat(updated_at_str)
+                if updated_at >= threshold:
+                    is_active = True
+            except:
+                pass
+        
+        if is_active:
+            active_count += 1
+            
+        # 2. 处理位置坐标
+        lat = None
+        lng = None
+        if ship.get('location') and ',' in str(ship.get('location')):
+            try:
+                lat_str, lng_str = str(ship['location']).split(',')
+                lat_val = float(lat_str.strip())
+                lng_val = float(lng_str.strip())
                 
                 # 过滤掉 0, 0 坐标
-                if abs(lat) < 0.01 and abs(lng) < 0.01:
-                    continue
-                    
-                ship['lat'] = lat
-                ship['lng'] = lng
-                valid_ships.append(ship)
+                if abs(lat_val) > 0.01 or abs(lng_val) > 0.01:
+                    lat = lat_val
+                    lng = lng_val
             except:
-                continue
+                pass
+        
+        ship['lat'] = lat
+        ship['lng'] = lng
+        ship['is_active'] = is_active
+        
+        all_ships.append(ship)
                 
-    visible_count = len(valid_ships)
+    visible_count = sum(1 for s in all_ships if s.get('lat') is not None)
+    
     return {
-        "ships": valid_ships, 
+        "ships": all_ships, 
         "total": total_count, 
         "tracked": tracked_count, 
+        "active": active_count,
         "visible": visible_count,
-        "note": "仅展示 24 小时内有 API 动态的船舶"
+        "note": "tracked=MMSI configured count, active=updated < 24h"
     }
 
 @app.get("/api/articles")
@@ -481,10 +491,10 @@ async def get_articles(
         params.append(category)
 
     if date:
-        where.append("date(substr(a.pub_date, 1, 10)) = date(?)")
+        where.append("date(substr(a.created_at, 1, 10)) = date(?)")
         params.append(date)
     elif start and end:
-        where.append("date(substr(a.pub_date, 1, 10)) BETWEEN date(?) AND date(?)")
+        where.append("date(substr(a.created_at, 1, 10)) BETWEEN date(?) AND date(?)")
         params.extend([start, end])
 
     if keyword:
@@ -515,12 +525,13 @@ async def get_articles(
         SELECT 
             a.id, a.title, a.title_cn, a.pub_date, a.source_type, a.source_name,
             a.summary_cn, a.full_text_cn, a.content, a.screenshot_path, a.url, a.created_at,
+            a.valid,
             GROUP_CONCAT(DISTINCT e.category) as categories
         FROM articles a
         {join_sql}
         WHERE {where_sql}
         GROUP BY a.id
-        ORDER BY a.pub_date DESC, a.created_at DESC
+        ORDER BY a.created_at DESC, a.pub_date DESC
         LIMIT ? OFFSET ?
     """
     c.execute(data_query, params + [page_size, offset])
@@ -554,7 +565,7 @@ async def get_article_detail(article_id: int):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
-        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at
+        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at, valid
         FROM articles
         WHERE id = ?
     """, (article_id,))

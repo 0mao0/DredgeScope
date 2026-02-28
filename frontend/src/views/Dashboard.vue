@@ -294,13 +294,13 @@ const reportTimeRange = computed(() => {
   if (reportType.value === 'morning') {
     return `${selectedDate.value.subtract(1, 'day').format('MM-DD')} 18:00 至 ${selectedDate.value.format('MM-DD')} 08:00`
   }
-  return `${selectedDate.value.format('MM-DD')} 08:00 至 ${selectedDate.value.format('MM-DD')} 18:00`
+  return `${selectedDate.value.subtract(1, 'day').format('MM-DD')} 18:00 至 ${selectedDate.value.format('MM-DD')} 18:00`
 })
 
 const filteredNews = computed(() => {
   const start = reportType.value === 'morning' 
     ? selectedDate.value.subtract(1, 'day').hour(18).minute(0).second(0)
-    : selectedDate.value.hour(8).minute(0).second(0)
+    : selectedDate.value.subtract(1, 'day').hour(18).minute(0).second(0) // Evening now covers full 24h cycle from previous evening
     
   const end = reportType.value === 'morning'
     ? selectedDate.value.hour(8).minute(0).second(0)

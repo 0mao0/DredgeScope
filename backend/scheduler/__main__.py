@@ -60,7 +60,7 @@ def setup_schedule():
     schedule.every().day.at("08:00").do(job_push)
     schedule.every().day.at("18:00").do(job_push)
     # 修改为每 1 分钟运行一次
-    schedule.every(1).minutes.do(job_ship_tracker)
+    schedule.every(5).minutes.do(job_ship_tracker)
 
 def main_entry():
     """启动调度器主循环"""
@@ -69,7 +69,7 @@ def main_entry():
     print("计划任务:")
     print("- 采集: 00:00, 04:00, 07:30, 0:00, 12:00, 16:00, 20:00")
     print("- 推送: 08:00, 18:00")
-    print("- 追踪: 每 10 分钟")
+    print("- 追踪: 每 5 分钟")
     print("--------------------------------")
     print("系统正在运行中 (Ctrl+C 停止)...")
     while True:

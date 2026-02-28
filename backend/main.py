@@ -134,7 +134,7 @@ def write_markdown_audit(rows):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     md_path = os.path.join(os.path.dirname(__file__), "scheduler", f"{ts}.md")
     header = [
-        "| 序号 | 网站 | 新闻名称 | 新闻链接 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 备注 |",
+        "| 序号 | 网站 | 新闻名称 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 备注 | 新闻链接 |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     lines = []
@@ -147,7 +147,8 @@ def write_markdown_audit(rows):
         txt_ok = bool_to_cn(r.get("text_ok"))
         vl_ok = bool_to_cn(r.get("vl_ok"))
         remark = r.get("remark") or ""
-        line = f"| {idx} | {site} | {name} | {link} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {remark} |"
+        # 将链接放到最后，方便阅读
+        line = f"| {idx} | {site} | {name} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {remark} | {link} |"
         lines.append(line)
     content = "\n".join(header + lines) + "\n"
     try:

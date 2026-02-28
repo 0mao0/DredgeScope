@@ -49,7 +49,8 @@ def get_push_window(now):
         end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         label = f"{label_prefix}早报"
     else:
-        start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        # User feedback: 晚报 should include overnight news (yesterday 18:00 - today 18:00)
+        start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
         label = f"{label_prefix}晚报"
     return start_dt, end_dt, label

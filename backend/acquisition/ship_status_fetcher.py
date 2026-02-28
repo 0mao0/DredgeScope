@@ -129,7 +129,7 @@ def update_ship_statuses():
 
                 # 更新 ships 表 (Do NOT update status here, let analysis do it)
                 # But we might want to update status_raw if we had such column.
-                # Since we don't, we just update location/time.
+                # Since we don't, we just update location/time/speed/heading.
                 c.execute("""
                     UPDATE ships 
                     SET location = ?, 
@@ -137,10 +137,12 @@ def update_ship_statuses():
                         country = ?,
                         continent = ?,
                         province = ?,
-                        city = ?
+                        city = ?,
+                        speed = ?,
+                        heading = ?
                     WHERE mmsi = ?
                 """, (f"{lat}, {lng}", datetime.now().isoformat(), 
-                      country_name, continent, province, city, mmsi))
+                      country_name, continent, province, city, speed, heading, mmsi))
                 
                 # 记录轨迹
                 database.add_ship_track(
