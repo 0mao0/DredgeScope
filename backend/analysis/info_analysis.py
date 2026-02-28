@@ -581,16 +581,48 @@ async def analyze_item(context, client, item):
             else:
                 analysis_log.append("4.1. **VL辅助**: 图片描述已合并 (无新增事件)")
             
-    # Case 2: Text 认为是 Junk -> 丢弃
+    # Case 2: Text 认为是 Junk -> 标记为无效并归入 Other
     elif text_res and text_res.get('is_junk'):
-        analysis_log.append("4. **Text分析**: 判定为垃圾信息 (已丢弃)")
-        return None
+        analysis_log.append("4. **Text分析**: 判定为垃圾信息 (将归入'其他')")
+        return {
+            "title": item['title'],
+            "title_cn": text_res.get("title_cn", item['title']),
+            "url": url,
+            "pub_date": str(item['pub_date']),
+            "summary_cn": text_res.get("summary_cn", "垃圾信息/非新闻页面"),
+            "full_text_cn": text_res.get("full_text_cn", ""),
+            "content": text_content,
+            "category": "Other",
+            "valid": 0,
+            "events": [],
+            "image_desc": "",
+            "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+            "analysis_log": analysis_log,
+            "source_type": item.get("source_type", "unknown"),
+            "source_name": item.get("source_name", "")
+        }
         
     # Case 3: Text 没跑 (无文本) 或 失败 -> 依赖 VL
     elif vl_res:
         if vl_res.get('is_junk'):
-            analysis_log.append("4. **VL分析**: 判定为垃圾信息")
-            return None
+            analysis_log.append("4. **VL分析**: 判定为垃圾信息 (将归入'其他')")
+            return {
+                "title": item['title'],
+                "title_cn": vl_res.get("title_cn", item['title']),
+                "url": url,
+                "pub_date": str(item['pub_date']),
+                "summary_cn": "垃圾信息/非新闻页面",
+                "full_text_cn": "",
+                "content": text_content,
+                "category": "Other",
+                "valid": 0,
+                "events": [],
+                "image_desc": vl_res.get('image_desc', ''),
+                "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+                "analysis_log": analysis_log,
+                "source_type": item.get("source_type", "unknown"),
+                "source_name": item.get("source_name", "")
+            }
         else:
             final_result = vl_res
             analysis_log.append(f"4. **VL分析**: 兜底成功 ({final_result.get('category')})")
@@ -598,12 +630,27 @@ async def analyze_item(context, client, item):
     # Case 4: 都失败
     else:
         analysis_log.append("4. **分析失败**: 无有效文本且截图分析失败")
-        return None
+        return {
+            "title": item['title'],
+            "title_cn": item['title'],
+            "url": url,
+            "pub_date": str(item['pub_date']),
+            "summary_cn": "分析失败",
+            "full_text_cn": "",
+            "content": text_content,
+            "category": "Other",
+            "valid": 0,
+            "events": [],
+            "image_desc": "",
+            "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+            "analysis_log": analysis_log,
+            "source_type": item.get("source_type", "unknown"),
+            "source_name": item.get("source_name", "")
+        }
 
     # 5. 后处理 (Normalization & Formatting)
-    if final_result.get("is_junk"):
-        return None
-
+    # 移除之前的 is_junk 丢弃逻辑
+    
     # 分类归一化
     article_category = normalize_category(final_result.get("category"))
     if not article_category:
@@ -623,9 +670,12 @@ async def analyze_item(context, client, item):
             deduped.append(evt)
         events = deduped
 
+    # 相关性判断
+    is_valid = 1
     if not is_relevant_news(item, text_content, final_result):
-        analysis_log.append("4.2. **相关性判断**: 非疏浚主题，已丢弃")
-        return None
+        analysis_log.append("4.2. **相关性判断**: 非疏浚主题，标记为无效并归入'其他'")
+        article_category = "Other"
+        is_valid = 0
 
     # 优先使用分析出的发布时间 (Text First)
     pub_date = final_result.get("publish_time")
@@ -639,7 +689,9 @@ async def analyze_item(context, client, item):
         "pub_date": pub_date,
         "summary_cn": final_result.get("summary_cn", "暂无摘要"),
         "full_text_cn": final_result.get("full_text_cn", ""),
+        "content": text_content,
         "category": article_category,
+        "valid": is_valid,
         "events": events,
         "image_desc": final_result.get("image_desc", ""),
         "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",

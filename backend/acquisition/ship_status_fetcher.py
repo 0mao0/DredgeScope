@@ -92,6 +92,11 @@ def update_ship_statuses():
             try:
                 lat = float(ship_info.get("lat", 0))
                 lng = float(ship_info.get("lon", 0))
+                
+                # 如果经纬度为 0，跳过更新位置（避免显示在 0,0 坐标）
+                if abs(lat) < 0.01 and abs(lng) < 0.01:
+                    continue
+                    
                 speed = float(ship_info.get("speed", 0))
                 heading = float(ship_info.get("heading", 0))
                 status_raw = ship_info.get("status", "Unknown")

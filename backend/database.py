@@ -103,6 +103,7 @@ def init_db():
         source_name TEXT,
         summary_cn TEXT,
         full_text_cn TEXT,
+        content TEXT,
         screenshot_path TEXT,
         is_significant BOOLEAN,
         vl_desc TEXT,
@@ -162,6 +163,16 @@ def init_db():
             print("[DB] 已成功添加 full_text_cn 列")
         except Exception as e:
             print(f"[DB] 添加 full_text_cn 列失败: {e}")
+
+    try:
+        c.execute("SELECT content FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 articles 表缺失 content 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE articles ADD COLUMN content TEXT")
+            print("[DB] 已成功添加 content 列")
+        except Exception as e:
+            print(f"[DB] 添加 content 列失败: {e}")
 
     # 检查并添加 ships 表缺失的地理位置列
     try:
@@ -380,7 +391,9 @@ def save_article_and_events(article_data, events_data):
         else:
             # Check for staleness before insertion
             is_hidden = 0
-            valid = 1
+            # 使用传入的 valid，如果未提供则默认为 1
+            valid = article_data.get('valid', 1)
+            
             STALE_THRESHOLD_DAYS = 30
             try:
                 # Assuming created_at is roughly now
@@ -406,8 +419,8 @@ def save_article_and_events(article_data, events_data):
                 pass
 
             c.execute('''INSERT INTO articles 
-                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, screenshot_path, is_significant, vl_desc, is_hidden, valid, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, is_hidden, valid, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     article_data['url'],
                     article_data['title'],
@@ -417,6 +430,7 @@ def save_article_and_events(article_data, events_data):
                     article_data.get('source_name', ''),
                     article_data.get('summary_cn', ''),
                     article_data.get('full_text_cn', ''),
+                    article_data.get('content', ''),
                     article_data.get('screenshot_path', ''),
                     article_data.get('significant', False),
                     article_data.get('image_desc', ''),
@@ -427,9 +441,16 @@ def save_article_and_events(article_data, events_data):
             )
             article_id = c.lastrowid
             
-        # 2. 插入事件 (先删除旧的关联事件以防重复/更新?)
-        # 这里的策略是：如果是新文章，插入事件。如果是旧文章，暂不重复插入事件，防止 duplicate events
+        # 2. 插入事件
+        # 如果是新文章，且没有事件数据，但标记为 Other 类别，则创建一个默认事件
         if not row:
+            # 如果没有事件，但有指定的 category (如 Other)
+            if not events_data and article_data.get('category') == 'Other':
+                events_data = [{
+                    "category": "Other",
+                    "description": article_data.get('summary_cn', '垃圾信息/非新闻页面')
+                }]
+
             seen_signatures = set()
             for evt in events_data:
                 # 防御性编程：如果 evt 是字符串（解析错误导致），尝试解析或跳过

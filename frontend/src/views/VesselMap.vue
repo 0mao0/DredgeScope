@@ -9,12 +9,30 @@
       <div class="relative">
         <div ref="mapContainer" class="glass-card" :style="{ height: 'calc(100vh - 140px)', width: '100%' }"></div>
       
+        <!-- Search Box (Bottom Right) -->
+        <div class="absolute bottom-6 right-6 z-[1000] flex gap-2">
+          <div class="glass-card px-3 py-2 flex items-center gap-2 shadow-2xl">
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="搜索船舶名称..." 
+              class="bg-transparent border-none outline-none text-white text-sm w-40 sm:w-60 placeholder:text-gray-500"
+              @keyup.enter="handleSearch"
+            />
+            <button @click="handleSearch" class="text-gray-400 hover:text-white transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <!-- Status Legend -->
         <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
           <div class="flex flex-wrap gap-x-4 gap-y-1">
             <div class="flex items-center gap-1.5 sm:gap-2">
               <span class="text-gray-400">跟踪</span>
-              <span class="text-white font-bold">{{ stats.active }}</span>
+              <span class="text-white font-bold" title="24小时内有API动态的船舶">{{ stats.active }}</span>
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2">
               <span class="text-gray-400">总计</span>
@@ -52,6 +70,7 @@ import NavBar from '@/components/NavBar.vue'
 
 interface Vessel {
   id: string
+  mmsi: string
   name: string
   status: string
   lat: number
@@ -66,8 +85,10 @@ interface Vessel {
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
+let trackLayer: L.Polyline | null = null
 
 const vessels = ref<Vessel[]>([])
+const searchQuery = ref('')
 const stats = ref({
   total: 0,
   active: 0,
@@ -266,6 +287,53 @@ function getTagColor(country: string | undefined, company: string | undefined): 
   return { bg: 'rgba(59, 130, 246, 0.4)', text: 'white' }
 }
 
+async function showTrack(mmsi: string) {
+  if (!map) return
+  
+  // 清除旧轨迹
+  if (trackLayer) {
+    map.removeLayer(trackLayer)
+    trackLayer = null
+  }
+
+  try {
+    const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=3`)
+    const tracks = await response.json()
+    
+    if (!tracks || tracks.length < 2) {
+      alert('暂无轨迹数据')
+      return
+    }
+
+    const latlngs = tracks.map((t: any) => [t.lat, t.lng])
+    trackLayer = L.polyline(latlngs, {
+      color: '#3b82f6',
+      weight: 3,
+      opacity: 0.8,
+      dashArray: '5, 10'
+    }).addTo(map)
+    
+    // 自动缩放到轨迹范围
+    map.fitBounds(trackLayer.getBounds(), { padding: [50, 50] })
+  } catch (error) {
+    console.error('Failed to fetch tracks:', error)
+  }
+}
+
+function handleSearch() {
+  if (!searchQuery.value.trim() || !map) return
+  
+  const query = searchQuery.value.toLowerCase().trim()
+  const vessel = vessels.value.find(v => v.name.toLowerCase().includes(query))
+  
+  if (vessel) {
+    map.setView([vessel.lat, vessel.lng], 12, { animate: true })
+    // 这里可以触发对应的 popup 弹出，但需要保存 marker 引用
+  } else {
+    alert('未找到该船舶')
+  }
+}
+
 /**
  * 创建船队标签图标
  * @param text 标签文本
@@ -368,19 +436,27 @@ function renderMarkers() {
     const statusClass = iconKey === 'dredging' ? 'text-blue-400 font-bold' : 
                       iconKey === 'underway' ? 'text-green-400' : 'text-yellow-400'
     
-    const popupContent = `
-      <div style="min-width: 200px;">
-        <div class="font-bold text-white mb-2">${v.name}</div>
-        <div class="flex justify-between mb-1">
-          <span class="text-gray-500">状态:</span>
-          <span class="${statusClass}">${statusCN}</span>
-        </div>
-        ${v.company ? `<div class="flex justify-between mb-1"><span class="text-gray-500">船队:</span><span class="text-gray-300">${v.company}</span></div>` : ''}
-        ${locHtml}
-        <div class="flex justify-between mt-2 pt-2 border-t border-white/10">
-          <span class="text-gray-500">更新时间:</span>
-          <span class="text-gray-400 text-xs">${timeStr}</span>
-        </div>
+    const popupContent = document.createElement('div')
+    popupContent.style.minWidth = '200px'
+    popupContent.innerHTML = `
+      <div class="font-bold text-white mb-2">${v.name}</div>
+      <div class="flex justify-between mb-1">
+        <span class="text-gray-500">状态:</span>
+        <span class="${statusClass}">${statusCN}</span>
+      </div>
+      ${v.company ? `<div class="flex justify-between mb-1"><span class="text-gray-500">船队:</span><span class="text-gray-300">${v.company}</span></div>` : ''}
+      ${locHtml}
+      <div class="flex justify-between mt-2 pt-2 border-t border-white/10">
+        <span class="text-gray-500">更新时间:</span>
+        <span class="text-gray-400 text-xs">${timeStr}</span>
+      </div>
+      <div class="mt-3 flex justify-center">
+        <button id="track-btn-${v.mmsi}" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          显示3天轨迹
+        </button>
       </div>
     `
     
@@ -389,10 +465,24 @@ function renderMarkers() {
       className: 'dark-popup'
     })
     
+    // 监听 popup 打开事件来绑定按钮点击
+    marker.on('popupopen', () => {
+      const btn = document.getElementById(`track-btn-${v.mmsi}`)
+      if (btn) {
+        btn.onclick = () => showTrack(v.mmsi)
+      }
+    })
+    
     // Tag也可点击
     if (tagMarker) {
       tagMarker.bindPopup(popupContent, {
         className: 'dark-popup'
+      })
+      tagMarker.on('popupopen', () => {
+        const btn = document.getElementById(`track-btn-${v.mmsi}`)
+        if (btn) {
+          btn.onclick = () => showTrack(v.mmsi)
+        }
       })
     }
   })
@@ -408,9 +498,14 @@ onMounted(async () => {
     attributionControl: false
   })
   
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd'
+  // 使用高德地图暗色瓦片（wprd 接口比 webrd 更稳定）
+  L.tileLayer('https://wprd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: ['1', '2', '3', '4'],
+    maxZoom: 18,
+    minZoom: 3,
+    attribution: '&copy; 高德地图',
+    updateWhenIdle: true, // 仅在停止移动时更新，大幅减少请求被放弃 (ERR_ABORTED) 的情况
+    keepBuffer: 2         // 保留更多缓存瓦片，减少白块
   }).addTo(map)
   
   try {
@@ -418,11 +513,10 @@ onMounted(async () => {
     const data = await res.json()
     L.geoJSON(data, {
       style: {
-        color: '#94a3b8',
-        weight: 1,
-        opacity: 0.5,
-        fillColor: '#cbd5e1',
-        fillOpacity: 0.1
+        color: '#475569', // 边界线条颜色
+        weight: 1.5,      // 线条宽度
+        opacity: 0.8,     // 线条不透明度
+        fillOpacity: 0    // 完全透明，不填充颜色
       }
     }).addTo(map)
   } catch (err) {

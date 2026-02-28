@@ -215,7 +215,7 @@ async def main():
             })
             continue
             
-        # 2. 本次任务内去重
+        # 2. 本次任务内去重 & 数据库去重
         if item['link'] in seen_links:
             duplicate_count += 1
             audit_rows.append({
@@ -226,7 +226,21 @@ async def main():
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
-                "remark": "重复链接"
+                "remark": "重复链接(任务内)"
+            })
+            continue
+        
+        if database.is_article_exists(item['link']):
+            duplicate_count += 1
+            audit_rows.append({
+                "site": item.get("source_name", ""),
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "pub_date": item.get("pub_date"),
+                "keep": False,
+                "text_ok": False,
+                "vl_ok": False,
+                "remark": "库中已存在"
             })
             continue
         

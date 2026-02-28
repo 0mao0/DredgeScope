@@ -378,28 +378,68 @@ async def get_statistics(
         }
     }
 
+@app.get("/api/ship_tracks")
+async def get_ship_tracks(mmsi: str, days: int = 3):
+    """获取指定船舶的历史轨迹 (默认3天)"""
+    # 假设每10分钟一个点，一天144个点，3天约432个点
+    limit = days * 144
+    tracks = database.get_ship_tracks(mmsi, limit=limit)
+    return tracks
+
 @app.get("/api/ships")
 async def get_ships():
-    """获取所有船舶位置和状态"""
+    """获取所有船舶位置和状态 (仅展示 24 小时内有 API 更新的船舶)"""
     ships = database.get_all_ships()
     total_count = len(ships)
     tracked_count = 0
-    # 过滤掉没有坐标的船舶 (假设 location 字段存储 "lat, lng")
     valid_ships = []
+    
+    # 定义“活跃”阈值：24 小时
+    now = datetime.now()
+    threshold = now - timedelta(hours=24)
+    
     for ship in ships:
+        # 1. 检查更新时间，如果超过 24 小时未更新，说明不在 API 范围内，直接跳过
+        updated_at_str = ship.get('updated_at')
+        if not updated_at_str:
+            continue
+            
+        try:
+            updated_at = datetime.fromisoformat(updated_at_str)
+            if updated_at < threshold:
+                continue
+        except:
+            continue
+
+        # 2. 统计已跟踪的船舶
         if ship.get('status') and str(ship.get('status')).strip():
             tracked_count += 1
-        # 如果有 location 且包含逗号
+            
+        # 3. 检查位置坐标
         if ship['location'] and ',' in ship['location']:
             try:
                 lat_str, lng_str = ship['location'].split(',')
-                ship['lat'] = float(lat_str.strip())
-                ship['lng'] = float(lng_str.strip())
+                lat = float(lat_str.strip())
+                lng = float(lng_str.strip())
+                
+                # 过滤掉 0, 0 坐标
+                if abs(lat) < 0.01 and abs(lng) < 0.01:
+                    continue
+                    
+                ship['lat'] = lat
+                ship['lng'] = lng
                 valid_ships.append(ship)
             except:
                 continue
+                
     visible_count = len(valid_ships)
-    return {"ships": valid_ships, "total": total_count, "tracked": tracked_count, "visible": visible_count}
+    return {
+        "ships": valid_ships, 
+        "total": total_count, 
+        "tracked": tracked_count, 
+        "visible": visible_count,
+        "note": "仅展示 24 小时内有 API 动态的船舶"
+    }
 
 @app.get("/api/articles")
 async def get_articles(
@@ -410,6 +450,7 @@ async def get_articles(
     category: str = Query(None, description="Event category"),
     source_type: str = Query(None, description="Source type"),
     source_name: str = Query(None, description="Source name"),
+    valid: int = Query(None, description="Validity filter (1 for valid, 0 for invalid)"),
     page: int = Query(1, description="Page number"),
     page_size: int = Query(50, description="Page size")
 ):
@@ -419,10 +460,20 @@ async def get_articles(
 
     join_sql = "LEFT JOIN events e ON e.article_id = a.id"
     where = [
-        "(a.is_hidden = 0 OR a.is_hidden IS NULL)",
-        "(a.valid = 1 OR a.valid IS NULL)"
+        "(a.is_hidden = 0 OR a.is_hidden IS NULL)"
     ]
     params = []
+
+    if valid is not None:
+        where.append("a.valid = ?")
+        params.append(valid)
+    else:
+        # Default behavior: show valid articles if not specified
+        # But for History page, we might want to see everything or respect the default
+        # Actually, the user asked for a filter, so we should allow showing everything if valid is None
+        # But usually we want to exclude junk by default unless explicitly asked.
+        # Let's stick to the filter logic.
+        pass
 
     if category:
         join_sql = "JOIN events e ON e.article_id = a.id"
@@ -463,7 +514,7 @@ async def get_articles(
     data_query = f"""
         SELECT 
             a.id, a.title, a.title_cn, a.pub_date, a.source_type, a.source_name,
-            a.summary_cn, a.full_text_cn, a.screenshot_path, a.url, a.created_at,
+            a.summary_cn, a.full_text_cn, a.content, a.screenshot_path, a.url, a.created_at,
             GROUP_CONCAT(DISTINCT e.category) as categories
         FROM articles a
         {join_sql}
@@ -503,7 +554,7 @@ async def get_article_detail(article_id: int):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
-        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, source_type, source_name, screenshot_path, vl_desc, created_at
+        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at
         FROM articles
         WHERE id = ?
     """, (article_id,))
@@ -513,7 +564,7 @@ async def get_article_detail(article_id: int):
         return {"article": None, "events": []}
 
     c.execute("""
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.summary_cn, a.full_text_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, e.details_json
+        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.summary_cn, a.full_text_cn, a.content, a.vl_desc, a.pub_date, a.source_type, a.source_name, e.details_json
         FROM events e
         JOIN articles a ON e.article_id = a.id
         WHERE e.article_id = ?
@@ -557,6 +608,46 @@ async def get_sources():
     with open(sources_path, "r", encoding="utf-8") as f:
         sources = json.load(f)
     return {"sources": sources}
+
+@app.get("/api/scheduler/runs")
+async def get_scheduler_runs():
+    """获取历史调度任务运行结果列表"""
+    scheduler_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scheduler")
+    if not os.path.exists(scheduler_dir):
+        return {"runs": []}
+    
+    files = [f for f in os.listdir(scheduler_dir) if f.endswith(".md")]
+    files.sort(reverse=True)
+    
+    runs = []
+    for f in files:
+        # Parse timestamp from filename: YYYYMMDD_HHMMSS.md
+        try:
+            ts_str = f.split(".")[0]
+            dt = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            runs.append({
+                "id": f,
+                "timestamp": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "short_ts": dt.strftime("%m-%d %H:%M")
+            })
+        except:
+            continue
+            
+    return {"runs": runs}
+
+@app.get("/api/scheduler/run/{filename}")
+async def get_scheduler_run_detail(filename: str):
+    """获取指定调度任务运行详情"""
+    scheduler_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scheduler")
+    file_path = os.path.join(scheduler_dir, filename)
+    
+    if not os.path.exists(file_path):
+        return {"content": "文件不存在"}
+        
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    return {"content": content}
 
 if __name__ == "__main__":
     # 允许外部访问

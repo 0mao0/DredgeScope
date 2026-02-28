@@ -16,7 +16,7 @@
           </div>
           <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
             <i class="fa-solid fa-clock text-[9px]"></i>
-            区间: {{ reportTimeRange }}
+             {{ reportTimeRange }}
           </div>
         </div>
         
@@ -107,8 +107,8 @@
         </div>
 
         <!-- Right Column: Categories Grid -->
-        <div class="lg:col-span-3">
-          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div class="lg:col-span-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div 
               v-for="(meta, key) in categories" 
               :key="key"
@@ -318,7 +318,8 @@ const categories = {
   Project: { name: '项目信息', icon: 'fa-building', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
   Equipment: { name: '设备修造', icon: 'fa-gears', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   'R&D': { name: '科技研发', icon: 'fa-flask', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' }
+  Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+  Other: { name: '其他信息', icon: 'fa-circle-info', color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/20' }
 }
 
 const quickSummary = computed(() => {

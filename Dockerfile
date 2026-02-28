@@ -47,9 +47,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Playwright 和 Chromium (使用系统包)
+# 安装 Playwright 和 Chromium
+ENV PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
+ENV PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/chrome-for-testing
 RUN pip install playwright && \
-    apt-get update && apt-get install -y chromium && \
     playwright install chromium || true
 
 # 复制 Python 依赖

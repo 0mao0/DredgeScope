@@ -10,7 +10,8 @@ ALLOWED_CATEGORIES = {
     "Market",
     "Project",
     "Regulation",
-    "R&D"
+    "R&D",
+    "Other"
 }
 
 KEYWORD_CATEGORY_MAP = [
@@ -29,6 +30,7 @@ CATEGORY_CN_MAP = {
     "Project": "项目进展",
     "Regulation": "政策法规",
     "R&D": "科技研发",
+    "Other": "其他",
     "Unknown": "未知",
     "None": "未知"
 }
