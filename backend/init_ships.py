@@ -31,6 +31,12 @@ def import_ships():
     ships_to_insert = []
     
     for _, row in df.iterrows():
+        # Get ID from first column (序号)
+        try:
+            ship_id = int(row.iloc[0])
+        except:
+            ship_id = None
+            
         mmsi = clean_float_str(row.get('MMSI'))
         imo = clean_float_str(row.get('IMO'))
         name = str(row.get('船名', '')).strip()
@@ -39,6 +45,7 @@ def import_ships():
             continue
 
         ship = {
+            "id": ship_id,
             "mmsi": mmsi,
             "imo": imo,
             "name": name,
@@ -60,6 +67,9 @@ def import_ships():
         ships_to_insert.append(ship)
 
     print(f"Found {len(ships_to_insert)} ships in CSV.")
+    
+    # Ensure DB table exists
+    database.init_track_db()
     
     # Batch upsert
     count = database.upsert_ships(ships_to_insert)

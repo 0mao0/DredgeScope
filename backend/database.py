@@ -80,6 +80,30 @@ def init_track_db():
         except Exception as e:
             print(f"[DB] 添加 vessel_name 列失败: {e}")
 
+    # 4. 船舶表 (Ships) - 迁移至 ship_tracks.db
+    c.execute('''CREATE TABLE IF NOT EXISTS ships (
+        id INTEGER PRIMARY KEY, -- Removed AUTOINCREMENT to allow explicit ID insertion
+        imo TEXT, -- Removed UNIQUE constraint due to duplicates in CSV
+        mmsi TEXT,
+        name TEXT,
+        company TEXT,
+        type TEXT,
+        capacity_1 TEXT,
+        capacity_2 TEXT,
+        region TEXT,
+        location TEXT,
+        status TEXT,
+        status_date TEXT,
+        remarks TEXT,
+        updated_at TEXT,
+        country TEXT,
+        continent TEXT,
+        province TEXT,
+        city TEXT,
+        speed REAL,
+        heading REAL
+    )''')
+
     conn.commit()
     conn.close()
     print(f"[DB] 轨迹数据库已初始化: {TRACK_DB_PATH}")
@@ -174,32 +198,6 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 content 列失败: {e}")
 
-    # 检查并添加 ships 表缺失的地理位置列
-    try:
-        c.execute("SELECT country FROM ships LIMIT 1")
-    except sqlite3.OperationalError:
-        print("[DB] 检测到 ships 表缺失地理位置列，正在添加...")
-        try:
-            c.execute("ALTER TABLE ships ADD COLUMN country TEXT")
-            c.execute("ALTER TABLE ships ADD COLUMN continent TEXT")
-            c.execute("ALTER TABLE ships ADD COLUMN province TEXT")
-            c.execute("ALTER TABLE ships ADD COLUMN city TEXT")
-            print("[DB] 已成功添加 ships 地理位置列")
-        except Exception as e:
-            print(f"[DB] 添加 ships 地理位置列失败: {e}")
-
-    # 检查并添加 ships 表缺失的航速航向列
-    try:
-        c.execute("SELECT speed FROM ships LIMIT 1")
-    except sqlite3.OperationalError:
-        print("[DB] 检测到 ships 表缺失 speed/heading 列，正在添加...")
-        try:
-            c.execute("ALTER TABLE ships ADD COLUMN speed REAL")
-            c.execute("ALTER TABLE ships ADD COLUMN heading REAL")
-            print("[DB] 已成功添加 ships speed/heading 列")
-        except Exception as e:
-            print(f"[DB] 添加 ships speed/heading 列失败: {e}")
-    
     # 2. 事件表 (Events)
     c.execute('''CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -225,27 +223,6 @@ def init_db():
         item_count INTEGER
     )''')
 
-    # 4. 船舶表 (Ships)
-    c.execute('''CREATE TABLE IF NOT EXISTS ships (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        imo TEXT UNIQUE,
-        mmsi TEXT,
-        name TEXT,
-        company TEXT,
-        type TEXT,
-        capacity_1 TEXT,
-        capacity_2 TEXT,
-        region TEXT,
-        location TEXT,
-        status TEXT,
-        status_date TEXT,
-        remarks TEXT,
-        updated_at TEXT
-    )''')
-
-    # 5. 船舶轨迹表 (ShipTracks) - 已迁移至 ship_tracks.db
-    # c.execute('''CREATE TABLE IF NOT EXISTS ship_tracks ...''')
-    
     conn.commit()
     conn.close()
     print(f"[DB] 数据库已初始化: {DB_PATH}")
@@ -319,7 +296,7 @@ def upsert_ships(ships):
     """批量插入或更新船舶记录"""
     if not ships:
         return 0
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     now = datetime.now().isoformat()
     updated = 0
@@ -328,12 +305,14 @@ def upsert_ships(ships):
             c.execute(
                 """
                 INSERT INTO ships (
-                    imo, mmsi, name, company, type,
+                    id, imo, mmsi, name, company, type,
                     capacity_1, capacity_2, region, location,
                     status, status_date, remarks, updated_at,
-                    country, continent, province, city
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(imo) DO UPDATE SET
+                    country, continent, province, city,
+                    speed, heading
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET -- Use ID as primary conflict key if provided
+                    imo=excluded.imo,
                     mmsi=excluded.mmsi,
                     name=excluded.name,
                     company=excluded.company,
@@ -352,6 +331,7 @@ def upsert_ships(ships):
                     city=excluded.city
                 """,
                 (
+                    ship.get("id"), # Explicit ID
                     ship.get("imo"),
                     ship.get("mmsi"),
                     ship.get("name"),
@@ -368,7 +348,9 @@ def upsert_ships(ships):
                     ship.get("country"),
                     ship.get("continent"),
                     ship.get("province"),
-                    ship.get("city")
+                    ship.get("city"),
+                    ship.get("speed"),
+                    ship.get("heading")
                 ),
             )
             updated += 1
@@ -383,7 +365,7 @@ def upsert_ships(ships):
 
 def update_ship_status(mmsi, status, status_date, location, region, country=None, continent=None, province=None, city=None):
     """更新单船状态信息"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
         c.execute(
@@ -565,7 +547,7 @@ def save_article_and_events(article_data, events_data):
 
 def add_ship_simple(name, mmsi):
     """添加新船舶（仅名称和MMSI）"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
         c.execute("INSERT INTO ships (name, mmsi, updated_at) VALUES (?, ?, ?)",
@@ -699,7 +681,7 @@ init_db()
 
 def get_all_ships():
     """获取所有船舶信息"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT * FROM ships")
@@ -709,7 +691,7 @@ def get_all_ships():
 
 def update_ship_mmsi(ship_id, mmsi):
     """更新船舶MMSI"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
         c.execute("UPDATE ships SET mmsi = ?, updated_at = ? WHERE id = ?", (mmsi, datetime.now().isoformat(), ship_id))
