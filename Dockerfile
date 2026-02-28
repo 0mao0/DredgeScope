@@ -1,5 +1,5 @@
 # 阶段1: 构建前端
-FROM docker.m.daocloud.io/library/node:20-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -10,13 +10,16 @@ COPY frontend/ ./
 RUN pnpm run build
 
 # 阶段2: 构建后端 + Nginx
-FROM docker.m.daocloud.io/library/python:3.12-slim AS backend
+FROM python:3.12-slim AS backend
 
 WORKDIR /app
 
-# 配置国内镜像源
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
-    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+# 配置国内镜像源 (可选，通过 ARG USE_CHINA_MIRROR=true 启用)
+ARG USE_CHINA_MIRROR=false
+RUN if [ "$USE_CHINA_MIRROR" = "true" ]; then \
+    pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources; \
+    fi
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -48,8 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Playwright 和 Chromium
-ENV PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
-ENV PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/chrome-for-testing
+ARG PLAYWRIGHT_DOWNLOAD_HOST
+ARG PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST
 RUN pip install playwright && \
     playwright install chromium || true
 
