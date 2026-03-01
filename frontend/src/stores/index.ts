@@ -89,15 +89,7 @@ export const useNewsStore = defineStore('news', () => {
         return
       }
       const data = await response.json()
-      const rawEvents = data.events || []
-      
-      const invalidKeywords = ['dredging and maritime', '行业链接', '疏浚: 101', 'dredging 101']
-      const filteredEvents = rawEvents.filter((item: NewsItem) => {
-        const title = (item.title_cn || item.summary_cn || item.article_title || '').toLowerCase()
-        return !invalidKeywords.some(keyword => title.includes(keyword.toLowerCase()))
-      })
-      
-      newsList.value = filteredEvents
+      newsList.value = data.events || []
       historyTotal.value = data.count || data.article_count || data.event_count || 0
     } catch (error) {
       console.error('Failed to fetch news:', error)

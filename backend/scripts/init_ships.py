@@ -3,8 +3,9 @@ import sys
 import os
 import math
 
-# Ensure backend is in path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(backend_dir)
+sys.path.append(backend_dir)
 
 import database
 
@@ -17,7 +18,7 @@ def clean_float_str(val):
         return str(val).strip()
 
 def import_ships():
-    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ships.csv')
+    csv_path = os.path.join(project_root, 'ships.csv')
     if not os.path.exists(csv_path):
         print(f"Error: {csv_path} not found")
         return

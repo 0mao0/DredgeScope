@@ -63,6 +63,8 @@ def normalize_category(value):
         "bid": "Bid",
         "equipment": "Equipment",
         "market": "Market",
+        "news": "Market",
+        "新闻": "Market",
         "project": "Project",
         "regulation": "Regulation",
         "r&d": "R&D",

@@ -1,14 +1,14 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-slate-900 text-white">
+  <div class="h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
     <!-- Navbar -->
     <NavBar />
 
     <!-- Main Content -->
-    <main class="flex-1 flex overflow-hidden relative">
+    <main class="flex-1 flex overflow-hidden relative min-h-0">
       <!-- Sidebar -->
       <aside 
-        class="w-80 glass-card m-4 mr-0 flex flex-col overflow-hidden transition-all duration-300 z-10"
-        :class="{ '-ml-84': !sidebarOpen }"
+        class="glass-card flex flex-col overflow-hidden transition-all duration-300 z-10 flex-shrink-0 transform vessel-sidebar"
+        :class="sidebarOpen ? 'w-64 translate-x-0 m-4 mr-0' : 'w-0 -translate-x-full m-0'"
       >
         <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
           <h2 class="font-bold text-lg">船舶列表</h2>
@@ -61,13 +61,12 @@
                   <div class="flex items-center gap-2 overflow-hidden">
                     <div 
                       class="w-2 h-2 rounded-full flex-shrink-0"
-                      :style="{ backgroundColor: getStatusColor(vessel.status), boxShadow: `0 0 8px ${getStatusColor(vessel.status)}` }"
+                      :style="{ backgroundColor: getStatusColor(vessel), boxShadow: `0 0 8px ${getStatusColor(vessel)}` }"
                     ></div>
-                    <span class="text-sm truncate" :title="vessel.name">{{ vessel.name }}</span>
+                    <span class="text-sm truncate" :style="getStatusTextStyle(vessel)" :title="vessel.name">{{ vessel.name }}</span>
                   </div>
-                  <div class="flex items-center gap-2 text-xs text-gray-400">
-                    <span v-if="vessel.speed" class="font-mono">{{ vessel.speed.toFixed(1) }}kn</span>
-                    <span v-else>-</span>
+                  <div class="flex items-center gap-2 text-xs font-mono" :style="getStatusTextStyle(vessel)">
+                    <span>{{ formatSpeed(vessel.speed) }}</span>
                   </div>
                 </div>
               </div>
@@ -79,7 +78,7 @@
       <!-- Toggle Sidebar Button (When closed) -->
       <div 
         v-if="!sidebarOpen"
-        class="absolute top-8 left-4 z-20 glass-card p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+        class="absolute top-8 left-4 z-20 glass-card p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors vessel-sidebar-toggle"
         @click="sidebarOpen = true"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -88,11 +87,12 @@
       </div>
 
       <!-- Map Container -->
-      <div class="flex-1 relative m-4 ml-0 glass-card overflow-hidden">
-        <div ref="mapContainer" class="w-full h-full z-0"></div>
+      <div class="flex-1 m-4 ml-0 glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="relative flex-1 min-h-[360px]">
+          <div ref="mapContainer" class="w-full h-full z-0"></div>
 
-        <!-- Status Legend -->
-        <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
+          <!-- Status Legend -->
+          <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
           <div class="flex flex-wrap gap-x-4 gap-y-1">
             <div class="flex items-center gap-1.5 sm:gap-2">
               <span class="text-gray-400">监控</span>
@@ -122,23 +122,38 @@
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2">
               <span 
-                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(234,179,8,0.6)]"
+                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.6)]"
                 :style="{ backgroundColor: statusColors.moored }"
               ></span>
               <span class="text-gray-300">停泊</span>
-              <span class="text-yellow-400 font-mono">{{ stats.moored }}</span>
+              <span class="text-red-400 font-mono">{{ stats.moored }}</span>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <span 
+                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(107,114,128,0.6)]"
+                :style="{ backgroundColor: statusColors.offline }"
+              ></span>
+              <span class="text-gray-300">离线</span>
+              <span class="text-gray-400 font-mono">{{ stats.offline }}</span>
             </div>
           </div>
         </div>
         
-        <!-- Map Tools -->
-        <div class="absolute bottom-8 right-4 z-[1000] flex flex-col gap-2">
+          <!-- Map Tools -->
+          <div class="absolute bottom-8 right-4 z-[1000] flex flex-col gap-2">
           <button 
             class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
             title="复位"
             @click="resetView"
           >
             <i class="fa-solid fa-house"></i>
+          </button>
+          <button 
+            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+            title="清空轨迹"
+            @click="clearAllTracks"
+          >
+            <i class="fa-solid fa-trash"></i>
           </button>
           <button 
             class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
@@ -156,6 +171,48 @@
           >
             <i class="fa-solid fa-ruler-horizontal"></i>
           </button>
+          </div>
+        </div>
+
+        <div v-if="trackDisplayList.length" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[240px] flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between mb-2 sticky top-0 z-10 bg-white/5 pb-2">
+            <span class="font-semibold text-gray-200">轨迹点列表</span>
+            <button class="text-gray-400 hover:text-white" @click="clearAllTracks">清空全部</button>
+          </div>
+          <div class="flex-1 overflow-y-auto custom-scrollbar">
+            <div class="flex flex-col gap-3">
+              <div v-for="item in trackDisplayList" :key="item.mmsi" class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col max-h-[180px]">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: item.color }"></span>
+                    <span class="font-semibold text-gray-200">{{ item.name }}</span>
+                    <span class="text-gray-500 font-mono">MMSI {{ item.mmsi }}</span>
+                  </div>
+                  <button class="text-gray-400 hover:text-white" @click="removeTrack(item.mmsi)">删除轨迹</button>
+                </div>
+                <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400">暂无轨迹点</div>
+                <div v-else class="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
+                  <div class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1">
+                    <span>序号</span>
+                    <span>时间</span>
+                    <span>位置</span>
+                    <span class="text-right">拉取时间</span>
+                  </div>
+                  <div v-for="(p, idx) in getTrackPage(item.mmsi)" :key="`${p.timestamp}-${p.created_at}-${idx}`" class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center">
+                    <span class="text-gray-500">#{{ getTrackRowIndex(item.mmsi, idx) }}</span>
+                    <span class="text-gray-400">{{ formatTrackTime(p.timestamp) }}</span>
+                    <span class="font-mono">{{ formatTrackCoord(p.lat) }}, {{ formatTrackCoord(p.lng) }}</span>
+                    <span class="text-gray-500 text-right">{{ formatTrackTime(p.created_at) }}</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                  <button class="px-2 py-1 rounded bg-white/10 hover:bg-white/20" @click="prevTrackPage(item.mmsi)" :disabled="getTrackPageIndex(item.mmsi) <= 1">上一页</button>
+                  <span class="text-gray-400">{{ getTrackPageIndex(item.mmsi) }}/{{ getTrackTotalPages(item.mmsi) }}</span>
+                  <button class="px-2 py-1 rounded bg-white/10 hover:bg-white/20" @click="nextTrackPage(item.mmsi)" :disabled="getTrackPageIndex(item.mmsi) >= getTrackTotalPages(item.mmsi)">下一页</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -163,9 +220,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import L from 'leaflet'
+import type { LeafletMouseEvent } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import NavBar from '@/components/NavBar.vue'
 
@@ -189,8 +247,6 @@ interface Vessel {
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
-let trackLayer: L.Polyline | null = null
-let trackPointsLayer: L.LayerGroup | null = null
 const sidebarOpen = ref(true)
 const loading = ref(false)
 const selectedVesselId = ref<string | null>(null)
@@ -219,24 +275,69 @@ const stats = ref({
   active: 0,
   underway: 0,
   dredging: 0,
-  moored: 0
+  moored: 0,
+  offline: 0
 })
 
 const statusColors: Record<string, string> = {
   dredging: '#3b82f6',
   underway: '#22c55e',
-  moored: '#eab308'
+  moored: '#ef4444',
+  offline: '#6b7280',
+  untracked: '#6b7280'
 }
 
 const currentZoom = ref(3)
 let vesselLayerGroup: L.LayerGroup | null = null
 let tagLayerGroup: L.LayerGroup | null = null
+const vesselMarkerMap = new Map<string, L.Marker>()
+let trackLayerGroup: L.LayerGroup | null = null
+const trackLayerMap = new Map<string, { line: L.Polyline, points: L.LayerGroup, color: string }>()
+const trackOrder = ref<string[]>([])
+const maxTrackCount = 10
+const trackColors = ['#3b82f6', '#22c55e', '#f97316', '#eab308', '#a855f7', '#ec4899', '#ef4444', '#14b8a6', '#38bdf8', '#f472b6']
+const mapZoomDuration = 3
+
+interface TrackPoint {
+  lat: number
+  lng: number
+  timestamp?: string
+  created_at?: string
+}
+
+interface TrackState {
+  points: TrackPoint[]
+  pageIndex: number
+  pageSize: number
+}
+
+const trackStates = ref<Record<string, TrackState>>({})
+const selectedTrackMmsi = computed(() => {
+  if (!selectedVesselId.value) return null
+  const vessel = vessels.value.find(v => v.id === selectedVesselId.value)
+  return vessel?.mmsi || null
+})
+
+const trackDisplayList = computed(() => {
+  const target = selectedTrackMmsi.value
+  const list = target ? trackOrder.value.filter(mmsi => mmsi === target) : []
+  return list.map((mmsi, index) => {
+    const vessel = vessels.value.find(v => v.mmsi === mmsi)
+    return {
+      mmsi,
+      name: vessel?.name || '未知船舶',
+      color: trackLayerMap.get(mmsi)?.color || trackColors[index % trackColors.length]
+    }
+  })
+})
 
 // Map Tools State
 const isPickingPoint = ref(false)
 const isMeasuring = ref(false)
 const measurePoints = ref<L.LatLng[]>([])
 let measureLayerGroup: L.LayerGroup | null = null
+let pickTooltip: L.Tooltip | null = null
+let measureHintTooltip: L.Tooltip | null = null
 
 // Group vessels by company
 const groupedVessels = computed(() => {
@@ -279,7 +380,11 @@ const groupedVessels = computed(() => {
   
   const sortedGroups: Record<string, Vessel[]> = {}
   sortedKeys.forEach(k => {
-    sortedGroups[k] = groups[k].sort((a, b) => a.name.localeCompare(b.name))
+    sortedGroups[k] = groups[k].sort((a, b) => {
+      const rankDiff = getVesselSortRank(a) - getVesselSortRank(b)
+      if (rankDiff !== 0) return rankDiff
+      return a.name.localeCompare(b.name)
+    })
   })
   
   return sortedGroups
@@ -292,60 +397,143 @@ watch(searchQuery, (newVal) => {
   }
 })
 
-function getStatusColor(status: string | undefined): string {
-  const key = mapStatusToIconKey(status)
+/**
+ * 计算船舶的展示状态键
+ */
+function getVesselStatusKey(vessel: Vessel): keyof typeof statusColors {
+  if (!vessel.mmsi) return 'untracked'
+  const key = mapStatusToIconKey(vessel.status)
+  const speed = typeof vessel.speed === 'number' ? vessel.speed : Number(vessel.speed)
+  if (key === 'offline' && Number.isFinite(speed) && speed > 0.2) {
+    return 'underway'
+  }
+  return key
+}
+
+/**
+ * 获取船舶状态颜色
+ */
+function getStatusColor(vessel: Vessel): string {
+  const key = getVesselStatusKey(vessel)
   return statusColors[key]
 }
 
+/**
+ * 获取状态文本颜色样式
+ */
+function getStatusTextStyle(vessel: Vessel): Record<string, string> {
+  return { color: getStatusColor(vessel) }
+}
+
+/**
+ * 获取船舶列表排序权重
+ */
+function getVesselSortRank(vessel: Vessel): number {
+  if (!vessel.mmsi) return 4
+  const key = getVesselStatusKey(vessel)
+  if (key === 'dredging') return 0
+  if (key === 'underway') return 1
+  if (key === 'moored') return 2
+  if (key === 'offline') return 3
+  return 2
+}
+
+/**
+ * 格式化航速文本
+ */
+function formatSpeed(value: number | undefined): string {
+  if (value === undefined || value === null || Number.isNaN(value)) return '-'
+  return `${value.toFixed(1)}节`
+}
+
 function mapStatusToIconKey(status: string | undefined): string {
-  if (!status) return 'moored'
+  if (!status) return 'offline'
   const s = status.toLowerCase()
   
   if (s === 'dredging') return 'dredging'
   if (s === 'underway using engine' || s === 'underway') return 'underway'
   if (s === 'moored' || s === 'at anchor') return 'moored'
   if (s === 'stopped') return 'moored'
+  if (s === 'offline' || s === 'unknown') return 'offline'
   
   if (s.includes('施工') || s.includes('作业') || s.includes('疏浚')) return 'dredging'
   if (s.includes('操纵能力受限')) return 'dredging'
   if (s.includes('机动船在航')) return 'underway'
   if (s.includes('调遣')) return 'underway'
   if (s.includes('锚泊') || s.includes('系泊') || s.includes('停泊') || s.includes('停靠') || s.includes('抛锚')) return 'moored'
+  if (s.includes('离线')) return 'offline'
   
-  return 'moored'
+  return 'offline'
+}
+
+/**
+ * 解析船舶坐标
+ */
+function getVesselLatLng(vessel: Vessel): L.LatLng | null {
+  const lat = typeof vessel.lat === 'number' ? vessel.lat : Number(vessel.lat)
+  const lng = typeof vessel.lng === 'number' ? vessel.lng : Number(vessel.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return L.latLng(lat, lng)
+}
+
+/**
+ * 聚焦并缩放到指定位置
+ */
+function focusMapAt(latlng: L.LatLng, zoom = 12) {
+  if (!map) return
+  const nextZoom = Math.max(zoom, map.getZoom())
+  map.flyTo(latlng, nextZoom, { animate: true, duration: mapZoomDuration })
 }
 
 function handleVesselClick(vessel: Vessel) {
   selectedVesselId.value = vessel.id
-  if (vessel.lat == null || vessel.lng == null) {
-      message.info('该船舶暂无位置信息')
-      return
+  const marker = vessel.mmsi ? vesselMarkerMap.get(vessel.mmsi) : null
+  const latlng = getVesselLatLng(vessel) || marker?.getLatLng() || null
+  if (latlng) {
+    if (map) {
+      map.setView(latlng, Math.max(12, map.getZoom()), { animate: false })
+    }
+  } else {
+    message.info('该船舶暂无位置信息')
   }
-  if (map) {
-    map.setView([vessel.lat, vessel.lng], 12, { animate: true })
-    // Find marker and open popup? 
-    // Since we don't store marker references in a map, we might need to iterate or just highlight.
-    // For now just pan to it.
+  if (!vessel.mmsi) {
+    message.info('该船舶未配置MMSI，无法查询轨迹')
+    return
+  }
+  if (marker) {
+    marker.openPopup()
   }
 }
 
 // ... (keep existing helper functions like translateStatus, translateCountry, createIcon, getCompanyAbbreviation, countryColors, chinaRedVariants, getTagColor)
 
-function translateStatus(status: string | undefined): string {
-  if (!status) return '停泊'
-  const s = status.toLowerCase()
-  
-  if (/[\u4e00-\u9fa5]/.test(status)) {
-    if (s.includes('施工') || s.includes('作业') || s.includes('疏浚') || s.includes('操纵能力受限')) return '作业中'
-    if (s.includes('航') || s.includes('在航') || s.includes('调遣')) return '航行中'
-    if (s.includes('锚泊') || s.includes('系泊') || s.includes('停泊') || s.includes('停靠') || s.includes('抛锚')) return '停泊'
-    return '停泊'
+/**
+ * 根据状态键获取中文状态文本
+ */
+function translateStatusByKey(key: keyof typeof statusColors): string {
+  if (key === 'dredging') return '作业中'
+  if (key === 'underway') return '航行中'
+  if (key === 'moored') return '停泊'
+  if (key === 'untracked') return '未跟踪'
+  return '离线'
+}
+
+/**
+ * 将区域转换为中文
+ */
+function translateContinent(en: string | undefined): string {
+  if (!en) return ''
+  const map: Record<string, string> = {
+    'Asia': '亚洲',
+    'Europe': '欧洲',
+    'Africa': '非洲',
+    'North America': '北美洲',
+    'South America': '南美洲',
+    'Oceania': '大洋洲',
+    'Antarctica': '南极洲',
+    'Unknown': ''
   }
-  
-  if (s === 'dredging') return '作业中'
-  if (s === 'underway using engine' || s === 'underway') return '航行中'
-  if (s === 'moored' || s === 'at anchor' || s === 'stopped' || s === 'unknown') return '停泊'
-  return '停泊'
+  return map[en] || en
 }
 
 function translateCountry(en: string | undefined): string {
@@ -374,20 +562,21 @@ function translateCountry(en: string | undefined): string {
   return map[en] || en
 }
 
-function translateLocation(str: string | undefined): string {
-  if (!str) return ''
-  const map: Record<string, string> = {
-    'Liaoning': '辽宁', 'Guangdong': '广东', 'Guangzhou': '广州', 'Shenzhen': '深圳',
-    'Shanghai': '上海', 'Beijing': '北京', 'Tianjin': '天津',
-    'Zhejiang': '浙江', 'Hangzhou': '杭州', 'Ningbo': '宁波',
-    'Jiangsu': '江苏', 'Nanjing': '南京',
-    'Fujian': '福建', 'Xiamen': '厦门', 'Fuzhou': '福州',
-    'Shandong': '山东', 'Qingdao': '青岛',
-    'Hebei': '河北', 'Tangshan': '唐山',
-    'Guangxi': '广西', 'Beihai': '北海',
-    'Hainan': '海南', 'Haikou': '海口'
-  }
-  return map[str] || str
+/**
+ * 格式化轨迹时间显示
+ */
+function formatTrackTime(value?: string) {
+  if (!value) return '-'
+  const text = String(value).replace('T', ' ')
+  return text.length > 19 ? text.slice(0, 19) : text
+}
+
+/**
+ * 格式化轨迹坐标
+ */
+function formatTrackCoord(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  return value.toFixed(4)
 }
 
 function createIcon(color: string) {
@@ -402,7 +591,7 @@ function createIcon(color: string) {
 
 function resetView() {
   if (!map) return
-  map.setView([25, 110], 3, { animate: true })
+  map.flyTo([25, 110], 3, { animate: true, duration: mapZoomDuration })
 }
 
 function togglePickPoint() {
@@ -410,6 +599,12 @@ function togglePickPoint() {
   isMeasuring.value = false
   if (!isPickingPoint.value && map) {
     map.closePopup()
+  }
+  if (!isPickingPoint.value) {
+    clearPickTooltip()
+  }
+  if (!isMeasuring.value) {
+    clearMeasureHintTooltip()
   }
 }
 
@@ -422,31 +617,33 @@ function toggleMeasure() {
     if (measureLayerGroup) measureLayerGroup.clearLayers()
     measurePoints.value = []
   }
+  if (!isMeasuring.value) {
+    clearMeasureHintTooltip()
+  }
+  if (!isPickingPoint.value) {
+    clearPickTooltip()
+  }
 }
 
-function onMapClick(e: L.LeafletMouseEvent) {
+function onMapClick(e: LeafletMouseEvent) {
+  const latlng = e.latlng
+  
   if (isPickingPoint.value) {
-    L.popup({ className: 'dark-popup' })
-      .setLatLng(e.latlng)
-      .setContent(`
-        <div class="text-white px-2 py-1">
-          <div class="font-bold border-b border-gray-600 mb-1 pb-1">位置坐标</div>
-          <div class="font-mono text-sm">Lat: ${e.latlng.lat.toFixed(6)}</div>
-          <div class="font-mono text-sm">Lng: ${e.latlng.lng.toFixed(6)}</div>
-        </div>
-      `)
-      .openOn(map!)
-  } else if (isMeasuring.value) {
-    const latlng = e.latlng
+    const text = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`
+    navigator.clipboard.writeText(text)
+    togglePickPoint()
+    return
+  }
+  
+  if (isMeasuring.value) {
     measurePoints.value.push(latlng)
     
-    // Draw point
+    // Add marker
     L.circleMarker(latlng, {
       radius: 4,
-      color: '#ef4444', // red-500
-      fillColor: '#fff',
-      fillOpacity: 1,
-      weight: 2
+      color: '#ef4444',
+      fillColor: '#ef4444',
+      fillOpacity: 1
     }).addTo(measureLayerGroup!)
     
     // Draw line if more than 1 point
@@ -481,13 +678,13 @@ function onMapClick(e: L.LeafletMouseEvent) {
         </div>
       `
       
-      L.popup({ autoClose: false, closeOnClick: false, className: 'dark-popup' })
+      L.popup({ autoClose: false, closeOnClick: false, className: 'measure-popup' })
         .setLatLng(latlng)
         .setContent(popupContent)
         .addTo(measureLayerGroup!)
     } else {
        // First point
-       L.popup({ autoClose: false, closeOnClick: false, className: 'dark-popup' })
+       L.popup({ autoClose: false, closeOnClick: false, className: 'measure-popup' })
         .setLatLng(latlng)
         .setContent(`<div class="text-white px-2 py-1 text-sm">起点</div>`)
         .addTo(measureLayerGroup!)
@@ -495,10 +692,59 @@ function onMapClick(e: L.LeafletMouseEvent) {
   }
 }
 
-function onMapRightClick(_e: L.LeafletMouseEvent) {
+/**
+ * 跟随鼠标显示取点或测距提示
+ */
+function onMapMouseMove(e: LeafletMouseEvent) {
+  if (!map) return
+  const latlng = e.latlng
+  if (isPickingPoint.value) {
+    if (!pickTooltip) {
+      pickTooltip = L.tooltip({ direction: 'top', className: 'map-tooltip', opacity: 0.9, offset: [0, -10] })
+      pickTooltip.addTo(map)
+    }
+    pickTooltip.setLatLng(latlng)
+    pickTooltip.setContent(`${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`)
+  } else {
+    clearPickTooltip()
+  }
+
+  if (isMeasuring.value) {
+    if (!measureHintTooltip) {
+      measureHintTooltip = L.tooltip({ direction: 'top', className: 'map-tooltip', opacity: 0.8, offset: [0, -10] })
+      measureHintTooltip.addTo(map)
+    }
+    measureHintTooltip.setLatLng(latlng)
+    measureHintTooltip.setContent('右击退出')
+  } else {
+    clearMeasureHintTooltip()
+  }
+}
+
+function onMapRightClick() {
   if (isMeasuring.value) {
     toggleMeasure() // Cancel measurement
     message.info('已取消测量')
+  }
+}
+
+/**
+ * 清除取点提示
+ */
+function clearPickTooltip() {
+  if (map && pickTooltip) {
+    map.removeLayer(pickTooltip)
+    pickTooltip = null
+  }
+}
+
+/**
+ * 清除测距提示
+ */
+function clearMeasureHintTooltip() {
+  if (map && measureHintTooltip) {
+    map.removeLayer(measureHintTooltip)
+    measureHintTooltip = null
   }
 }
 
@@ -598,19 +844,104 @@ function getTagColor(company: string | undefined): { bg: string, text: string } 
   return { bg: `rgba(${r}, ${g}, ${b}, 0.6)`, text: 'white' }
 }
 
-async function showTrack(mmsi: string) {
-  if (!map) return
-  
-  // 清除旧轨迹
-  if (trackLayer) {
-    map.removeLayer(trackLayer)
-    trackLayer = null
-  }
-  if (trackPointsLayer) {
-    map.removeLayer(trackPointsLayer)
-    trackPointsLayer = null
-  }
+/**
+ * 获取轨迹状态
+ */
+function getTrackState(mmsi: string | undefined): TrackState | null {
+  if (!mmsi) return null
+  return trackStates.value[mmsi] || null
+}
 
+/**
+ * 获取轨迹分页数据
+ */
+function getTrackPage(mmsi: string): TrackPoint[] {
+  const state = getTrackState(mmsi)
+  if (!state) return []
+  const start = (state.pageIndex - 1) * state.pageSize
+  return state.points.slice(start, start + state.pageSize)
+}
+
+function getTrackRowIndex(mmsi: string, idx: number): number {
+  const state = getTrackState(mmsi)
+  if (!state) return idx + 1
+  return (state.pageIndex - 1) * state.pageSize + idx + 1
+}
+
+/**
+ * 获取轨迹当前页码
+ */
+function getTrackPageIndex(mmsi: string): number {
+  const state = getTrackState(mmsi)
+  return state ? state.pageIndex : 1
+}
+
+/**
+ * 获取轨迹总页数
+ */
+function getTrackTotalPages(mmsi: string): number {
+  const state = getTrackState(mmsi)
+  if (!state) return 1
+  return Math.max(1, Math.ceil(state.points.length / state.pageSize))
+}
+
+/**
+ * 翻到上一页
+ */
+function prevTrackPage(mmsi: string) {
+  const state = getTrackState(mmsi)
+  if (!state) return
+  state.pageIndex = Math.max(1, state.pageIndex - 1)
+  trackStates.value = { ...trackStates.value }
+}
+
+/**
+ * 翻到下一页
+ */
+function nextTrackPage(mmsi: string) {
+  const state = getTrackState(mmsi)
+  if (!state) return
+  const maxPage = getTrackTotalPages(mmsi)
+  state.pageIndex = Math.min(maxPage, state.pageIndex + 1)
+  trackStates.value = { ...trackStates.value }
+}
+
+/**
+ * 删除单条轨迹
+ */
+function removeTrack(mmsi: string) {
+  const track = trackLayerMap.get(mmsi)
+  if (track && map) {
+    track.line.remove()
+    track.points.remove()
+  }
+  trackLayerMap.delete(mmsi)
+  trackOrder.value = trackOrder.value.filter(id => id !== mmsi)
+  if (trackStates.value[mmsi]) {
+    const next = { ...trackStates.value }
+    delete next[mmsi]
+    trackStates.value = next
+  }
+}
+
+/**
+ * 清空所有轨迹
+ */
+function clearAllTracks() {
+  trackLayerMap.forEach((track) => {
+    track.line.remove()
+    track.points.remove()
+  })
+  trackLayerMap.clear()
+  trackOrder.value = []
+  trackStates.value = {}
+}
+
+/**
+ * 显示最近三天轨迹
+ */
+async function showTrack(mmsi: string) {
+  if (!map || !trackLayerGroup) return
   try {
     const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=3`)
     const tracks = await response.json()
@@ -619,29 +950,65 @@ async function showTrack(mmsi: string) {
       message.info('暂无轨迹数据')
       return
     }
+    if (trackLayerMap.has(mmsi)) {
+      removeTrack(mmsi)
+    }
+    while (trackOrder.value.length >= maxTrackCount) {
+      const oldest = trackOrder.value.shift()
+      if (oldest) {
+        removeTrack(oldest)
+      }
+    }
 
+    const color = trackColors[trackOrder.value.length % trackColors.length]
     const latlngs = tracks.map((t: any) => [t.lat, t.lng])
-    trackLayer = L.polyline(latlngs, {
-      color: '#3b82f6',
+    const line = L.polyline(latlngs, {
+      color,
       weight: 3,
-      opacity: 0.8,
+      opacity: 0.85,
       dashArray: '5, 10'
-    }).addTo(map)
-    
-    // Add simple points
-    trackPointsLayer = L.layerGroup().addTo(map)
+    }).addTo(trackLayerGroup!)
+    const points = L.layerGroup().addTo(trackLayerGroup!)
     tracks.forEach((t: any) => {
       L.circleMarker([t.lat, t.lng], {
         radius: 2,
-        color: '#3b82f6',
+        color,
         fillColor: '#fff',
         fillOpacity: 1,
         weight: 1
-      }).addTo(trackPointsLayer!)
+      }).addTo(points)
     })
-    
-    // 自动缩放到轨迹范围
-    map.fitBounds(trackLayer.getBounds(), { padding: [50, 50] })
+    line.on('click', () => removeTrack(mmsi))
+
+    trackLayerMap.set(mmsi, { line, points, color })
+    trackOrder.value = [...trackOrder.value, mmsi]
+    trackStates.value = {
+      ...trackStates.value,
+      [mmsi]: {
+        points: tracks.map((t: any) => ({
+          lat: Number(t.lat),
+          lng: Number(t.lng),
+          timestamp: t.timestamp,
+          created_at: t.created_at
+        })),
+        pageIndex: 1,
+        pageSize: 10
+      }
+    }
+
+    const vessel = vessels.value.find(v => v.mmsi === mmsi)
+    if (vessel) {
+      selectedVesselId.value = vessel.id
+    }
+
+    const bounds = line.getBounds()
+    if (bounds.isValid()) {
+      if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+        focusMapAt(bounds.getCenter(), 12)
+      } else {
+        map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 12, duration: mapZoomDuration })
+      }
+    }
   } catch (error) {
     console.error('Failed to fetch tracks:', error)
   }
@@ -679,7 +1046,15 @@ function createCompanyTagIcon(text: string, company: string) {
 const icons: Record<string, L.DivIcon> = {
   dredging: createIcon(statusColors.dredging),
   underway: createIcon(statusColors.underway),
-  moored: createIcon(statusColors.moored)
+  moored: createIcon(statusColors.moored),
+  offline: createIcon(statusColors.offline)
+}
+
+/**
+ * 判断是否为已配置MMSI的船舶
+ */
+function isTrackedVessel(vessel: Vessel): boolean {
+  return Boolean(vessel.mmsi && vessel.mmsi.toString().trim())
 }
 
 async function fetchVessels() {
@@ -689,21 +1064,23 @@ async function fetchVessels() {
     const data = await response.json()
     vessels.value = data.ships || []
     stats.value.total = data.total || 0
-    stats.value.active = data.tracked || 0 // 跟踪 (Tracked) now maps to monitored count (MMSI)
+    stats.value.active = data.tracked || 0
     
-    const statusStats = { underway: 0, dredging: 0, moored: 0 }
+    const statusStats = { underway: 0, dredging: 0, moored: 0, offline: 0 }
     vessels.value.forEach(v => {
-      if (v.is_active) {
-        const key = mapStatusToIconKey(v.status)
+      if (isTrackedVessel(v)) {
+        const key = getVesselStatusKey(v)
         if (key === 'underway') statusStats.underway++
         else if (key === 'dredging') statusStats.dredging++
         else if (key === 'moored') statusStats.moored++
+        else if (key === 'offline') statusStats.offline++
       }
     })
     
     stats.value.underway = statusStats.underway
     stats.value.dredging = statusStats.dredging
     stats.value.moored = statusStats.moored
+    stats.value.offline = statusStats.offline
     // stats.value.active is set from backend data.tracked
     
     renderMarkers()
@@ -722,15 +1099,20 @@ function renderMarkers() {
   
   vesselLayerGroup.clearLayers()
   tagLayerGroup.clearLayers()
+  vesselMarkerMap.clear()
   
   const isCloseZoom = currentZoom.value > 12
 
   vessels.value.forEach(v => {
     if (v.lat == null || v.lng == null) return
+    if (!isTrackedVessel(v)) return
     
-    const iconKey = mapStatusToIconKey(v.status)
+    const iconKey = getVesselStatusKey(v)
     const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(vesselLayerGroup!)
     bindPopup(marker, v, iconKey)
+    if (v.mmsi) {
+      vesselMarkerMap.set(v.mmsi, marker)
+    }
     
     // Tag Logic
     let tagText = getCompanyAbbreviation(v.company)
@@ -757,20 +1139,18 @@ function bindPopup(layer: L.Layer, v: Vessel, iconKey: string) {
     
     let locHtml = ''
     if (v.continent || v.country) {
-      locHtml += `<div class="flex justify-between"><span class="text-gray-500">区域:</span> <span>${v.continent || '-'} / ${translateCountry(v.country)}</span></div>`
-    }
-    
-    if ((v.country === 'China' || v.country === 'CN' || v.country === '中国') && (v.province || v.city)) {
-      locHtml += `<div class="flex justify-between"><span class="text-gray-500">详情:</span> <span>${translateLocation(v.province)} ${translateLocation(v.city)}</span></div>`
+      const continent = translateContinent(v.continent)
+      const country = translateCountry(v.country)
+      locHtml += `<div class="flex justify-between"><span class="text-gray-500">区域:</span> <span>${continent || '-'} / ${country || '-'}</span></div>`
     }
     
     if (!locHtml) {
       locHtml += `<div class="flex justify-between"><span class="text-gray-500">位置:</span> <span class="text-gray-600 italic">数据更新中...</span></div>`
     }
     
-    const statusCN = translateStatus(v.status)
+    const statusCN = translateStatusByKey(getVesselStatusKey(v))
     const statusClass = iconKey === 'dredging' ? 'text-blue-400 font-bold' : 
-                      iconKey === 'underway' ? 'text-green-400' : 'text-yellow-400'
+                      iconKey === 'underway' ? 'text-green-400' : iconKey === 'moored' ? 'text-red-400' : 'text-gray-400'
     
     const popupContent = document.createElement('div')
     popupContent.style.minWidth = '200px'
@@ -782,7 +1162,7 @@ function bindPopup(layer: L.Layer, v: Vessel, iconKey: string) {
       </div>
       <div class="flex justify-between mb-1">
         <span class="text-gray-500">航速:</span>
-        <span class="text-gray-300 font-mono">${v.speed ? v.speed.toFixed(1) + ' kn' : '-'}</span>
+        <span class="text-gray-300 font-mono">${v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'}</span>
       </div>
       ${v.company ? `<div class="flex justify-between mb-1"><span class="text-gray-500">船队:</span><span class="text-gray-300">${v.company}</span></div>` : ''}
       ${locHtml}
@@ -814,35 +1194,62 @@ function bindPopup(layer: L.Layer, v: Vessel, iconKey: string) {
     })
 }
 
+/**
+ * 根据窗口宽度调整侧边栏显示
+ */
+function updateSidebarForViewport() {
+  if (window.innerWidth <= 768) {
+    sidebarOpen.value = false
+  } else {
+    sidebarOpen.value = true
+  }
+}
+
 onMounted(async () => {
   if (!mapContainer.value) return
   
   map = L.map(mapContainer.value, {
     center: [25, 110],
     zoom: 3,
+    maxZoom: 18,
     zoomControl: false,
     attributionControl: false
   })
   
-  // 使用 CartoDB Dark Matter (Stable)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 19
+  const tiandituKey = '3f9084289bc4ee4f8b5ab359f46bc856'
+  const baseUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  const labelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  L.tileLayer(baseUrl, {
+    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+    maxZoom: 18,
+    className: 'tianditu-satellite-layer'
+  }).addTo(map)
+  L.tileLayer(labelUrl, {
+    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+    maxZoom: 18,
+    className: 'tianditu-satellite-layer'
   }).addTo(map)
   
   vesselLayerGroup = L.layerGroup().addTo(map)
   tagLayerGroup = L.layerGroup().addTo(map)
+  trackLayerGroup = L.layerGroup().addTo(map)
   measureLayerGroup = L.layerGroup().addTo(map)
   
   map.on('click', onMapClick)
   map.on('contextmenu', onMapRightClick)
+  map.on('mousemove', onMapMouseMove)
 
   map.on('zoomend', () => {
     if (!map) return
     currentZoom.value = map.getZoom()
     renderMarkers()
   })
+
+  updateSidebarForViewport()
+  window.addEventListener('resize', updateSidebarForViewport)
+
+  await nextTick()
+  map.invalidateSize()
   
   try {
     const res = await fetch('/static/continents.geojson')
@@ -863,6 +1270,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', updateSidebarForViewport)
   if (map) {
     map.remove()
     map = null
@@ -878,6 +1286,10 @@ onUnmounted(() => {
   border-radius: 1rem;
 }
 
+:deep(.tianditu-satellite-layer) {
+  filter: none;
+}
+
 :deep(.leaflet-popup-content-wrapper) {
   background: rgba(30, 41, 59, 0.95);
   backdrop-filter: blur(8px);
@@ -887,6 +1299,23 @@ onUnmounted(() => {
 
 :deep(.leaflet-popup-tip) {
   background: rgba(30, 41, 59, 0.95);
+}
+
+:deep(.measure-popup .leaflet-popup-content-wrapper) {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+:deep(.measure-popup .leaflet-popup-tip) {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+:deep(.map-tooltip) {
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 :deep(.leaflet-container a.leaflet-popup-close-button) {
@@ -935,5 +1364,14 @@ onUnmounted(() => {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+  .vessel-sidebar {
+    display: none !important;
+  }
+  .vessel-sidebar-toggle {
+    display: none !important;
+  }
 }
 </style>

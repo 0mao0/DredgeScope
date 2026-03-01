@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 import json
 import os
+import hashlib
 import config
 
 async def launch_chromium(p):
@@ -170,6 +171,214 @@ async def fetch_web_index(context, source):
             await page.close()
     return items
 
+def _is_security_interstitial(title, url):
+    title = (title or "").lower()
+    url = (url or "").lower()
+    if url.startswith("chrome-error://") or "net::err_cert" in title:
+        return True
+    keywords = [
+        "your connection is not private",
+        "privacy error",
+        "connection is not secure",
+        "您的连接不是私密连接",
+        "您的连接不是安全连接",
+        "此连接不是私密连接"
+    ]
+    return any(k in title for k in keywords)
+
+def _clean_text(text_content):
+    normalized = text_content.replace("\r", "\n")
+    lines = [line.strip() for line in normalized.split("\n")]
+    keywords = [
+        "skip to main content",
+        "about",
+        "what we do",
+        "home",
+        "menu",
+        "search",
+        "privacy policy",
+        "terms of use",
+        "cookie",
+        "contact",
+        "subscribe",
+        "sign in",
+        "register",
+        "login",
+        "language"
+    ]
+    cleaned = []
+    for line in lines:
+        if not line:
+            continue
+        lower = line.lower()
+        short_line = len(line) <= 50 and len(line.split()) <= 6
+        if short_line and any(k in lower for k in keywords):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned)
+
+def _safe_filename(title, url):
+    base = "".join([c for c in str(title or "") if c.isalnum() or c in (" ", "-", "_")]).strip()
+    if not base:
+        base = "article"
+    base = base.replace(" ", "_")[:40]
+    digest = hashlib.md5(f"{title}|{url}".encode("utf-8")).hexdigest()[:8]
+    return f"{base}_{digest}.jpg"
+
+async def fetch_web_article(context, item):
+    url = item.get("link")
+    if not url:
+        return item
+    page = None
+    text_content = ""
+    screenshot_path = ""
+    try:
+        page = await context.new_page()
+        await goto_with_retry(
+            page,
+            url,
+            [
+                {"wait_until": "domcontentloaded", "timeout_ms": 30000},
+                {"wait_until": "networkidle", "timeout_ms": 30000},
+                {"wait_until": "load", "timeout_ms": 30000}
+            ]
+        )
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(2)
+        await page.evaluate("window.scrollTo(0, 0)")
+
+        page_title = ""
+        page_url = ""
+        try:
+            page_title = await page.title()
+            page_url = page.url
+        except:
+            page_title = ""
+            page_url = ""
+
+        if not _is_security_interstitial(page_title, page_url):
+            try:
+                await page.evaluate("""() => {
+                    const keywords = ['cookie', 'consent', 'gdpr', 'banner', 'popup', 'newsletter', 'subscribe', 'ad-', 'notice', 'policy', 'privacy'];
+                    const cmpIds = ['onetrust-banner-sdk', 'CybotCookiebotDialog', 'usercentrics-root', 'cmpbox', 'cmp-container', 'cookie-law-info-bar'];
+                    cmpIds.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.remove();
+                    });
+                    document.querySelectorAll('*').forEach(el => {
+                        const style = window.getComputedStyle(el);
+                        if (style.position === 'fixed' || style.position === 'sticky') {
+                            const id = (el.id || '').toLowerCase();
+                            const className = (el.className || '').toString().toLowerCase();
+                            const zIndex = parseInt(style.zIndex) || 0;
+                            const tagName = el.tagName.toLowerCase();
+                            if (keywords.some(k => id.includes(k) || className.includes(k))) {
+                                el.remove();
+                                return;
+                            }
+                            const rect = el.getBoundingClientRect();
+                            const isBanner = (rect.height < 250 && rect.width > window.innerWidth * 0.8);
+                            const isAtEdge = (rect.top < 100 || rect.bottom > window.innerHeight - 100);
+                            if (isBanner && isAtEdge) {
+                                if (!(id.includes('nav') || id.includes('header') || className.includes('nav') || className.includes('header') || tagName === 'nav' || tagName === 'header')) {
+                                    el.remove();
+                                    return;
+                                }
+                            }
+                            if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9 && zIndex > 50) {
+                                el.remove();
+                                return;
+                            }
+                        }
+                    });
+                    document.querySelectorAll('.modal-backdrop, .overlay, .fade.in, [class*="overlay"], [class*="backdrop"]').forEach(el => el.remove());
+                    document.body.style.overflow = 'auto';
+                    document.documentElement.style.overflow = 'auto';
+                }""")
+                await asyncio.sleep(1.0)
+            except:
+                pass
+
+            try:
+                text_content = await page.evaluate("""() => {
+                    const selectors = [
+                        'article',
+                        '.post-content',
+                        '.entry-content',
+                        '.article-content',
+                        '.article-body',
+                        '.main-content',
+                        'main',
+                        '#content',
+                        '.content'
+                    ];
+                    let articleElement = null;
+                    for (const selector of selectors) {
+                        const el = document.querySelector(selector);
+                        if (el && el.innerText.trim().length > 200) {
+                            articleElement = el;
+                            break;
+                        }
+                    }
+                    if (!articleElement) {
+                        articleElement = document.body;
+                    }
+                    const cleanElement = articleElement.cloneNode(true);
+                    const toRemove = cleanElement.querySelectorAll('script, style, nav, header, footer, aside, .sidebar, .ads, .menu');
+                    toRemove.forEach(el => el.remove());
+                    return cleanElement.innerText.slice(0, 15000);
+                }""")
+            except:
+                text_content = ""
+
+            if text_content:
+                text_content = _clean_text(text_content)
+
+            try:
+                locator = page.locator('article').first
+                box = None
+                if await locator.count() > 0:
+                    box = await locator.bounding_box()
+                if box:
+                    screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
+                else:
+                    await page.set_viewport_size({"width": 1280, "height": 1500})
+                    screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
+                filename = _safe_filename(item.get("title"), url)
+                local_path = os.path.join(config.ASSETS_DIR, filename)
+                with open(local_path, 'wb') as f:
+                    f.write(screenshot_bytes)
+                screenshot_path = f"assets/{filename}"
+            except:
+                screenshot_path = ""
+    except Exception as e:
+        print(f"[Web] 内容抓取失败: {url} -> {e}")
+    finally:
+        if page:
+            await page.close()
+
+    if text_content:
+        item["content"] = text_content
+    if screenshot_path:
+        item["screenshot_path"] = screenshot_path
+    return item
+
+async def enrich_web_items(context, items):
+    if not items:
+        return []
+    results = []
+    sem = asyncio.Semaphore(3)
+
+    async def runner(item):
+        async with sem:
+            if item.get("source_type") == "web":
+                await fetch_web_article(context, item)
+            results.append(item)
+
+    tasks = [runner(item) for item in items]
+    await asyncio.gather(*tasks)
+    return results
+
 def contains_dredging_keywords(text):
     if not text:
         return False
@@ -305,10 +514,14 @@ async def get_all_items():
                 ignore_https_errors=True
             )
             
+            web_items = []
             for s in sources:
                 if s.get('type') == 'web':
-                    web_items = await fetch_web_index(context, s)
-                    all_items.extend(web_items)
+                    source_items = await fetch_web_index(context, s)
+                    web_items.extend(source_items)
+            if web_items:
+                web_items = await enrich_web_items(context, web_items)
+                all_items.extend(web_items)
             
             await browser.close()
 

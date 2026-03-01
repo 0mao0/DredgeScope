@@ -4,14 +4,14 @@
     <NavBar class="flex-shrink-0" />
 
     <!-- Top Filter Area -->
-    <header class="px-4 py-1.5 flex items-center justify-between bg-white/5 border-b border-white/10 flex-shrink-0">
-      <div class="flex items-center gap-4">
-        <div class="text-[10px] text-gray-500 bg-black/20 px-2 py-0.5 rounded border border-white/5">
+    <header class="px-4 py-2 flex items-center justify-between bg-white/5 border-b border-white/10 flex-shrink-0 h-12">
+      <div class="flex items-center gap-4 h-full">
+        <div class="text-[10px] text-gray-500 bg-black/20 px-2 py-0.5 rounded border border-white/5 h-7 flex items-center">
           共 {{ total }} 条记录
         </div>
       </div>
       
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 h-full">
         <!-- 搜索 -->
         <a-input-search
           v-model:value="filters.keyword"
@@ -43,7 +43,7 @@
           @change="handleSearch"
         />
 
-        <a-button type="primary" size="small" ghost @click="resetFilters" class="border-none hover:bg-white/5">
+        <a-button type="primary" size="small" ghost @click="resetFilters" class="border-none hover:bg-white/5 h-7 px-2">
           <i class="fa-solid fa-rotate-right mr-1"></i> 重置
         </a-button>
       </div>
@@ -425,8 +425,34 @@ const loadingRun = ref(false)
 
 const renderedRunContent = computed(() => {
   if (!selectedRunContent.value) return ''
-  return marked(selectedRunContent.value)
+  const rawHtml = marked.parse(selectedRunContent.value, { async: false }) as string
+  return highlightKeepRows(rawHtml)
 })
+
+function highlightKeepRows(html: string) {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    const tables = Array.from(doc.querySelectorAll('table'))
+    tables.forEach(table => {
+      const headerCells = Array.from(table.querySelectorAll('thead th'))
+      const keepIndex = headerCells.findIndex(cell => (cell.textContent || '').trim() === '是否保留')
+      if (keepIndex < 0) return
+      const rows = Array.from(table.querySelectorAll('tbody tr'))
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td')
+        const cell = cells[keepIndex]
+        if (!cell) return
+        if ((cell.textContent || '').trim() === '是') {
+          row.classList.add('keep-yes')
+        }
+      })
+    })
+    return doc.body.innerHTML
+  } catch (error) {
+    return html
+  }
+}
 
 const latestRunTime = computed(() => {
   if (schedulerRuns.value.length > 0) {
@@ -648,6 +674,7 @@ onMounted(() => {
 
 /* 紧凑型页头样式 */
 :deep(.header-filter-input) {
+  height: 28px;
   &.ant-input-search .ant-input,
   &.ant-picker,
   &.ant-select-selector {
@@ -673,6 +700,22 @@ onMounted(() => {
   &.ant-select-selection-placeholder {
     color: #475569 !important; /* text-slate-600 */
   }
+}
+
+:deep(.header-filter-input.ant-input-search .ant-input) {
+  height: 28px;
+  line-height: 28px;
+}
+
+:deep(.header-filter-input.ant-input-search .ant-input-group-addon) {
+  height: 28px;
+}
+
+:deep(.header-filter-input.ant-select .ant-select-selector),
+:deep(.header-filter-input.ant-picker) {
+  height: 28px;
+  display: flex;
+  align-items: center;
 }
 
 :deep(.ant-input-search .ant-input) {
@@ -703,5 +746,23 @@ onMounted(() => {
 :deep(.ant-image) {
   width: 100%;
 }
-</style>
 
+:deep(.markdown-body table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
+:deep(.markdown-body table th:nth-child(9)),
+:deep(.markdown-body table td:nth-child(9)) {
+  width: 50px;
+  max-width: 50px;
+  min-width: 50px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.markdown-body table tr.keep-yes td) {
+  background: rgba(234, 179, 8, 0.2);
+}
+</style>

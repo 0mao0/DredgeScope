@@ -2,7 +2,6 @@ import asyncio
 import json
 import base64
 import os
-from playwright.async_api import async_playwright
 from openai import AsyncOpenAI
 import config
 from static.constants import (
@@ -16,33 +15,6 @@ from static.constants import (
     consolidate_regulation_events
 )
 
-async def launch_chromium(p):
-    """启动 Chromium 浏览器，必要时回退到系统浏览器路径"""
-    last_error = None
-    for channel in ["chrome", "msedge", "chromium"]:
-        try:
-            return await p.chromium.launch(channel=channel, headless=True)
-        except Exception as e:
-            last_error = e
-    try:
-        return await p.chromium.launch(headless=True)
-    except Exception as e:
-        last_error = e
-    candidates = [
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable"
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                return await p.chromium.launch(headless=True, executable_path=path)
-            except Exception as e:
-                last_error = e
-    if last_error:
-        raise last_error
-    raise RuntimeError("Playwright 浏览器启动失败，未找到可用 Chromium 可执行文件")
 
 def normalize_events(events, fallback_category):
     if events is None:
@@ -120,10 +92,10 @@ async def analyze_with_vl(client, item, b64_img):
    - R&D (科技研发): 仅包含技术研发、创新项目、研究成果发布。
    - Regulation (政策法规): 仅包含**官方发布**的政府政策、环保法规、行业标准、限制令、关税、指南/规范/许可审批。
      * 注意：针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
-   - Market (市场情报): 
+   - Market (市场情报/新闻): 
      1. 公司动态：并购、财务报告、人事变动、战略合作。
      2. 市场分析：行业规划、战略、路线图。
-     3. **兜底类别**：所有不属于上述5类的事件（如罢工、抗议、事故、地缘政治影响、无法明确分类的行业新闻），均归入 Market。
+     3. **兜底类别**：所有不属于上述5类的事件（如罢工、抗议、事故、地缘政治影响、无法明确分类的行业新闻），均归入 Market（新闻）。
 
 2. 【信息提取】
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
@@ -222,7 +194,7 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
    - R&D: 仅包含科技研发。
    - Regulation: 仅包含**官方发布**的政策法规、标准、指南、许可审批或政策解读。
      * 针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
-   - Market: 
+   - Market (新闻兜底): 
      1. 核心是关于公司财务、人事、并购或市场分析，以及行业规划/战略。
      2. **兜底类别**：如果事件涉及罢工、抗议、地缘政治影响、意外事故等非标准事件，或者无法归入其他5类，请归入此项。
    - 不允许输出其他类别，必须从上述六类中选择最接近的一类。
@@ -330,320 +302,90 @@ def clean_article_text(text_content):
         cleaned.append(line)
     return "\n".join(cleaned)
 
-async def analyze_item(context, client, item):
-    """
-    核心分析流程 (Text-First 模式):
-   # 1. 访问网页 -> 截图 & 提取文本
-    # Pre-check blacklist
-    if any(x in item['title'].lower() for x in ["about us", "contact us", "privacy policy"]):
-        print(f"[分析] 命中黑名单，跳过: {item['title']}")
-        return None
+def _normalize_llm_result(result, item):
+    if isinstance(result, list):
+        if len(result) == 1 and isinstance(result[0], dict):
+            return result[0]
+        return {
+            "is_junk": False,
+            "category": "Market",
+            "title_cn": item.get("title"),
+            "summary_cn": "",
+            "full_text_cn": "",
+            "publish_time": str(item.get("pub_date") or ""),
+            "events": [e for e in result if isinstance(e, dict)]
+        }
+    return result
 
-    2. Text LLM (主): 负责分类、摘要、事件提取。
-    3. Vision LLM (辅): 负责图片描述、无文本时的兜底。
-    4. 决策逻辑: 
-       - Text 判定 Junk -> 丢弃
-       - Text 成功 -> 采用 Text 结果 + VL 的 image_desc
-       - Text 无内容/失败 -> 采用 VL 结果
-       - 默认分类 -> Market
-    """
-    url = item['link']
-    print(f"[分析] 处理中: {url}")
-    
-    analysis_log = []
-    analysis_log.append(f"1. **访问目标**: [{item['title']}]({url})")
-    
-    page = await context.new_page()
-    screenshot_bytes = None
-    text_content = ""
-    screenshot_filename = ""
-    
-    try:
-        # 1. 访问页面
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-            analysis_log.append(f"2. **页面加载**: 成功")
-        except Exception as e:
-            print(f"[分析] 加载超时 {url}，尝试继续处理...")
-            analysis_log.append(f"2. **页面加载**: 超时 (尝试继续处理)")
+def _resolve_screenshot_path(screenshot_path, screenshot_filename):
+    if screenshot_path:
+        return screenshot_path
+    if screenshot_filename:
+        return f"assets/{screenshot_filename}"
+    return ""
 
-        page_title = ""
-        page_url = ""
-        try:
-            page_title = await page.title()
-            page_url = page.url
-        except:
-            page_title = ""
-            page_url = ""
+def _dedupe_events(events):
+    if not events:
+        return []
+    seen_signatures = set()
+    deduped = []
+    for evt in events:
+        sig = build_event_signature(evt)
+        if not sig:
+            sig = f"empty|{evt.get('category', '')}"
+        if sig in seen_signatures:
+            continue
+        seen_signatures.add(sig)
+        deduped.append(evt)
+    return deduped
 
-        # 模拟滚动
-        try:
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await asyncio.sleep(2)
-            await page.evaluate("window.scrollTo(0, 0)")
-        except: pass
-        
-        # --- 处理 Cookie 弹窗与遮挡 (增强版 v2) ---
-        try:
-            # 1. 尝试点击常见的同意按钮 (非阻塞)
-            try:
-                # 高优先级关键词 (全选)
-                high_priority_keywords = ["Accept All", "Allow All", "Agree All", "全部接受", "全部同意", "Accept cookies"]
-                for kw in high_priority_keywords:
-                     btn = page.locator(f"button:visible:has-text('{kw}'), a:visible:has-text('{kw}')").first
-                     if await btn.count() > 0:
-                        print(f"[Cookie] 尝试点击高优先级: {kw}")
-                        await btn.click(timeout=1000)
-                        await asyncio.sleep(1.0)
-                        break
-
-                # 普通关键词
-                keywords = [
-                    "Accept", "Agree", "Allow", "Got it", "I understand", 
-                    "同意", "接受", "我知道了", "允许", "好", "确定", 
-                    "OK", "Yes", "Close", "关闭"
-                ]
-                for kw in keywords:
-                    # 查找可见的按钮或链接，增加 div[role='button']
-                    btn = page.locator(f"button:visible:has-text('{kw}'), a:visible:has-text('{kw}'), div[role='button']:visible:has-text('{kw}')").first
-                    if await btn.count() > 0:
-                        print(f"[Cookie] 尝试点击: {kw}")
-                        await btn.click(timeout=1000)
-                        await asyncio.sleep(1.0)
-                        break
-            except: 
-                pass
-
-            # 2. 暴力移除干扰元素
-            await page.evaluate("""() => {
-                // 常见 Cookie/广告 ID 和 Class 关键词
-                const keywords = ['cookie', 'consent', 'gdpr', 'banner', 'popup', 'newsletter', 'subscribe', 'ad-', 'notice', 'policy', 'privacy'];
-                
-                // 常见 CMP (Consent Management Platform) 的 ID
-                const cmpIds = ['onetrust-banner-sdk', 'CybotCookiebotDialog', 'usercentrics-root', 'cmpbox', 'cmp-container', 'cookie-law-info-bar'];
-                
-                // 1. 直接移除已知的 CMP
-                cmpIds.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.remove();
-                });
-
-                // 2. 遍历所有元素，移除固定定位且符合特征的元素
-                document.querySelectorAll('*').forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    
-                    // 检查是否固定定位或粘性定位
-                    if (style.position === 'fixed' || style.position === 'sticky') {
-                        const id = el.id.toLowerCase();
-                        const className = el.className.toString().toLowerCase();
-                        const zIndex = parseInt(style.zIndex) || 0;
-                        const tagName = el.tagName.toLowerCase();
-                        
-                        // 2.1 关键词匹配
-                        if (keywords.some(k => id.includes(k) || className.includes(k))) {
-                            el.remove();
-                            return;
-                        }
-                        
-                        // 2.2 位于底部或顶部的横幅 (高度较小，宽度较大)
-                        const rect = el.getBoundingClientRect();
-                        const isBanner = (rect.height < 250 && rect.width > window.innerWidth * 0.8);
-                        const isAtEdge = (rect.top < 100 || rect.bottom > window.innerHeight - 100);
-                        
-                        if (isBanner && isAtEdge) {
-                             // 避免移除顶部导航栏 (通常包含 nav, header 关键词)
-                             if (!(id.includes('nav') || id.includes('header') || className.includes('nav') || className.includes('header') || tagName === 'nav' || tagName === 'header')) {
-                                el.remove();
-                                return;
-                             }
-                        }
-                        
-                        // 2.3 遮挡屏幕大部分的元素 (可能是全屏弹窗，且z-index较高)
-                        if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9 && zIndex > 50) {
-                             el.remove();
-                             return;
-                        }
-                    }
-                });
-                
-                // 3. 移除常见的遮罩层
-                document.querySelectorAll('.modal-backdrop, .overlay, .fade.in, [class*="overlay"], [class*="backdrop"]').forEach(el => el.remove());
-                
-                // 4. 强制恢复滚动
-                document.body.style.overflow = 'auto';
-                document.documentElement.style.overflow = 'auto';
-            }""")
-            await asyncio.sleep(1.0) # 等待移除生效
-        except Exception as e:
-            print(f"[Cookie清理] 异常: {e}")
-
-        if is_security_interstitial(page_title, page_url):
-            analysis_log.append("2. **页面加载**: 命中安全拦截页，跳过截图")
-        else:
-            # 2. 提取文本 (核心)
-            try:
-                # 增强版正文提取逻辑
-                text_content = await page.evaluate("""() => {
-                    // 1. 定义可能的正文容器选择器
-                    const selectors = [
-                        'article', 
-                        '.post-content', 
-                        '.entry-content', 
-                        '.article-content',
-                        '.article-body',
-                        '.main-content',
-                        'main',
-                        '#content',
-                        '.content'
-                    ];
-                    
-                    let articleElement = null;
-                    for (const selector of selectors) {
-                        const el = document.querySelector(selector);
-                        if (el && el.innerText.trim().length > 200) {
-                            articleElement = el;
-                            break;
-                        }
-                    }
-                    
-                    // 2. 如果没找到明确的容器，或者内容太少，则回退到 body
-                    if (!articleElement) {
-                        articleElement = document.body;
-                    }
-
-                    // 3. 在提取前简单清理：移除脚本、样式、导航等无关元素
-                    const cleanElement = articleElement.cloneNode(true);
-                    const toRemove = cleanElement.querySelectorAll('script, style, nav, header, footer, aside, .sidebar, .ads, .menu');
-                    toRemove.forEach(el => el.remove());
-                    
-                    return cleanElement.innerText.slice(0, 15000);
-                }""")
-            except:
-                text_content = ""
-            if text_content:
-                text_content = clean_article_text(text_content)
-
-            # 3. 截图 (辅助 & 兜底)
-            try:
-                locator = page.locator('article').first
-                box = None
-                if await locator.count() > 0:
-                    box = await locator.bounding_box()
-                if box:
-                    screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
-                    log_ss = "内容区域截图"
-                else:
-                    await page.set_viewport_size({"width": 1280, "height": 1500})
-                    screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
-                    log_ss = "全页截图"
-                    
-                safe_title = "".join([c for c in item['title'] if c.isalnum() or c in (' ','-','_')]).strip()[:50]
-                screenshot_filename = f"{safe_title}.jpg"
-                screenshot_path = os.path.join(config.ASSETS_DIR, screenshot_filename)
-                with open(screenshot_path, 'wb') as f:
-                    f.write(screenshot_bytes)
-                analysis_log.append(f"3. **截图**: {log_ss}成功")
-                
-            except Exception as e:
-                print(f"截图失败: {e}")
-                analysis_log.append(f"3. **截图**: 失败 ({e})")
-
-    except Exception as e:
-        print(f"页面处理异常: {e}")
-    finally:
-        await page.close()
-
-    # 4. 智能分析 (Text First, VL Second)
+def _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res):
     final_result = None
-    
-    # 初始化任务
-    text_task = None
-    vl_task = None
-    
-    # 启动 Text Analysis
-    if text_content and len(text_content.strip()) > 50:
-        text_task = analyze_with_text(client, item, text_content)
-        
-    # 启动 VL Analysis
-    if screenshot_bytes:
-        vl_client = AsyncOpenAI(api_key=config.VL_LLM_API_KEY, base_url=config.VL_LLM_API_BASE)
-        b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
-        vl_task = analyze_with_vl(vl_client, item, b64_img)
-        
-    # 并发执行
-    results = await asyncio.gather(
-        text_task if text_task else asyncio.sleep(0), 
-        vl_task if vl_task else asyncio.sleep(0),
-        return_exceptions=True
-    )
-    
-    text_res = results[0] if text_task else None
-    vl_res = results[1] if vl_task else None
-    
-    # 处理异常
-    if isinstance(text_res, Exception):
-        print(f"[Text] Error: {text_res}")
-        text_res = None
-    if isinstance(vl_res, Exception):
-        print(f"[VL] Error: {vl_res}")
-        vl_res = None
-        
-    # 决策逻辑
-    
-    # Case 1: Text 认为有效
     if text_res and not text_res.get('is_junk'):
         final_result = text_res
-        final_result['content'] = text_content  # 保存原始内容
+        final_result['content'] = text_content
         analysis_log.append(f"4. **Text分析**: 成功 ({final_result.get('category')})")
-        
-        # 尝试合并 VL 的图片描述
         if vl_res and not vl_res.get('is_junk'):
-            final_result['image_desc'] = vl_res.get('image_desc', '')
-            
-            # Supplement events logic: Only use VL events if Text events are empty.
-            # This prevents duplicates caused by language differences (EN vs CN) or slightly different extractions.
+            if not final_result.get('image_desc') and vl_res.get('image_desc'):
+                final_result['image_desc'] = vl_res.get('image_desc', '')
+            if not final_result.get('title_cn') and vl_res.get('title_cn'):
+                final_result['title_cn'] = vl_res.get('title_cn')
+            if not final_result.get('summary_cn') and vl_res.get('summary_cn'):
+                final_result['summary_cn'] = vl_res.get('summary_cn')
+            if not final_result.get('publish_time') and vl_res.get('publish_time'):
+                final_result['publish_time'] = vl_res.get('publish_time')
             text_events = final_result.get('events', [])
             vl_events = vl_res.get('events', [])
-            
-            if not text_events and vl_events:
+            if (not text_events) and vl_events:
                 final_result['events'] = vl_events
-                analysis_log.append(f"4.1. **VL辅助**: 文本提取为空，采用了VL提取的 {len(vl_events)} 个事件")
-            elif text_events and vl_events:
-                # Log that we ignored VL events to avoid duplicates
-                analysis_log.append(f"4.1. **VL辅助**: 文本已提取 {len(text_events)} 个事件，忽略VL事件以防重复")
-            else:
-                analysis_log.append("4.1. **VL辅助**: 图片描述已合并 (无新增事件)")
-            
-    # Case 2: Text 认为是 Junk -> 标记为无效并归入 Other
+            analysis_log.append("4.1. **VL辅助**: 完成补充信息")
     elif text_res and text_res.get('is_junk'):
         analysis_log.append("4. **Text分析**: 判定为垃圾信息 (将归入'其他')")
         return {
-            "title": item['title'],
-            "title_cn": text_res.get("title_cn", item['title']),
+            "title": item.get('title', ''),
+            "title_cn": text_res.get("title_cn", item.get('title', '')),
             "url": url,
-            "pub_date": str(item['pub_date']),
+            "pub_date": str(item.get('pub_date', '')),
             "summary_cn": text_res.get("summary_cn", "垃圾信息/非新闻页面"),
             "full_text_cn": text_res.get("full_text_cn", ""),
             "content": text_content,
             "category": "Other",
             "valid": 0,
             "events": [],
-            "image_desc": "",
-            "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+            "image_desc": vl_res.get('image_desc', '') if vl_res else "",
+            "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
             "source_name": item.get("source_name", "")
         }
-        
-    # Case 3: Text 没跑 (无文本) 或 失败 -> 依赖 VL
     elif vl_res:
         if vl_res.get('is_junk'):
             analysis_log.append("4. **VL分析**: 判定为垃圾信息 (将归入'其他')")
             return {
-                "title": item['title'],
-                "title_cn": vl_res.get("title_cn", item['title']),
+                "title": item.get('title', ''),
+                "title_cn": vl_res.get("title_cn", item.get('title', '')),
                 "url": url,
-                "pub_date": str(item['pub_date']),
+                "pub_date": str(item.get('pub_date', '')),
                 "summary_cn": "垃圾信息/非新闻页面",
                 "full_text_cn": "",
                 "content": text_content,
@@ -651,24 +393,22 @@ async def analyze_item(context, client, item):
                 "valid": 0,
                 "events": [],
                 "image_desc": vl_res.get('image_desc', ''),
-                "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+                "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
                 "analysis_log": analysis_log,
                 "source_type": item.get("source_type", "unknown"),
                 "source_name": item.get("source_name", "")
             }
         else:
             final_result = vl_res
-            final_result['content'] = text_content  # 保存原始内容 (即使是VL结果也尝试保存文本)
+            final_result['content'] = text_content
             analysis_log.append(f"4. **VL分析**: 兜底成功 ({final_result.get('category')})")
-            
-    # Case 4: 都失败
     else:
         analysis_log.append("4. **分析失败**: 无有效文本且截图分析失败")
         return {
-            "title": item['title'],
-            "title_cn": item['title'],
+            "title": item.get('title', ''),
+            "title_cn": item.get('title', ''),
             "url": url,
-            "pub_date": str(item['pub_date']),
+            "pub_date": str(item.get('pub_date', '')),
             "summary_cn": "分析失败",
             "full_text_cn": "",
             "content": text_content,
@@ -676,49 +416,32 @@ async def analyze_item(context, client, item):
             "valid": 0,
             "events": [],
             "image_desc": "",
-            "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+            "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
             "source_name": item.get("source_name", "")
         }
 
-    # 5. 后处理 (Normalization & Formatting)
-    # 移除之前的 is_junk 丢弃逻辑
-    
-    # 分类归一化
     article_category = normalize_category(final_result.get("category"))
     if not article_category:
-        article_category = DEFAULT_CATEGORY # Market
-        
-    events = normalize_events(final_result.get("events", []), article_category)
-    if events:
-        seen_signatures = set()
-        deduped = []
-        for evt in events:
-            sig = build_event_signature(evt)
-            if not sig:
-                sig = f"empty|{evt.get('category', '')}"
-            if sig in seen_signatures:
-                continue
-            seen_signatures.add(sig)
-            deduped.append(evt)
-        events = deduped
+        article_category = DEFAULT_CATEGORY
 
-    # 相关性判断
+    events = normalize_events(final_result.get("events", []), article_category)
+    events = _dedupe_events(events)
+
     is_valid = 1
     if not is_relevant_news(item, text_content, final_result):
         analysis_log.append("4.2. **相关性判断**: 非疏浚主题，标记为无效并归入'其他'")
         article_category = "Other"
         is_valid = 0
 
-    # 优先使用分析出的发布时间 (Text First)
     pub_date = final_result.get("publish_time")
     if not pub_date or len(str(pub_date)) < 5:
-         pub_date = str(item['pub_date']) # Fallback to crawl time
+        pub_date = str(item.get('pub_date', ''))
 
     return {
-        "title": item['title'],
-        "title_cn": final_result.get("title_cn", item['title']),
+        "title": item.get('title', ''),
+        "title_cn": final_result.get("title_cn", item.get('title', '')),
         "url": url,
         "pub_date": pub_date,
         "summary_cn": final_result.get("summary_cn", "暂无摘要"),
@@ -728,39 +451,67 @@ async def analyze_item(context, client, item):
         "valid": is_valid,
         "events": events,
         "image_desc": final_result.get("image_desc", ""),
-        "screenshot_path": f"assets/{screenshot_filename}" if screenshot_filename else "",
+        "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
         "analysis_log": analysis_log,
         "source_type": item.get("source_type", "unknown"),
         "source_name": item.get("source_name", "")
     }
 
 
-async def process_items(items):
-    """并发处理所有条目"""
+async def analyze_item_from_db(client, item):
+    url = item.get("url") or item.get("link") or ""
+    analysis_log = []
+    if url:
+        analysis_log.append(f"1. **访问目标**: [{item.get('title', '')}]({url})")
+    text_content = item.get("content") or ""
+    screenshot_path = item.get("screenshot_path") or ""
+    screenshot_filename = os.path.basename(screenshot_path) if screenshot_path else ""
+    screenshot_bytes = None
+    if screenshot_path:
+        img_path = screenshot_path
+        if not os.path.isabs(img_path):
+            img_path = os.path.join(config.DATA_DIR, img_path)
+        if os.path.exists(img_path):
+            try:
+                with open(img_path, "rb") as f:
+                    screenshot_bytes = f.read()
+            except Exception as e:
+                analysis_log.append(f"截图读取失败: {e}")
+
+    text_res = None
+    vl_res = None
+
+    if text_content and len(text_content.strip()) > 50:
+        text_res = await analyze_with_text(client, item, text_content)
+        if isinstance(text_res, Exception):
+            print(f"[Text] Error: {text_res}")
+            text_res = None
+        text_res = _normalize_llm_result(text_res, item)
+
+    if screenshot_bytes:
+        vl_client = AsyncOpenAI(api_key=config.VL_LLM_API_KEY, base_url=config.VL_LLM_API_BASE)
+        b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
+        vl_res = await analyze_with_vl(vl_client, item, b64_img)
+        if isinstance(vl_res, Exception):
+            print(f"[VL] Error: {vl_res}")
+            vl_res = None
+        vl_res = _normalize_llm_result(vl_res, item)
+
+    return _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res)
+
+async def process_items_from_db(items):
     if not items:
         return []
-        
     client = AsyncOpenAI(api_key=config.TEXT_LLM_API_KEY, base_url=config.TEXT_LLM_API_BASE)
-    
-    async with async_playwright() as p:
-        # 启动浏览器用于分析阶段 (截图)
-        browser = await launch_chromium(p)
-            
-        context = await browser.new_context(viewport={"width": 1280, "height": 800}, ignore_https_errors=True)
-        
-        results = []
-        sem = asyncio.Semaphore(3) # 并发控制
-        
-        async def runner(item):
-            async with sem:
-                res = await analyze_item(context, client, item)
-                if res:
-                    results.append(res)
-        
-        # 限制数量用于测试，或者全部
-        # 生产环境应该去掉切片
-        tasks = [runner(item) for item in items] 
-        await asyncio.gather(*tasks)
-        
-        await browser.close()
-        return results
+    results = []
+    sem = asyncio.Semaphore(3)
+
+    async def runner(item):
+        async with sem:
+            res = await analyze_item_from_db(client, item)
+            if res:
+                results.append(res)
+
+    tasks = [runner(item) for item in items]
+    await asyncio.gather(*tasks)
+    return results

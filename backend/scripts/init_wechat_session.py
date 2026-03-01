@@ -1,10 +1,9 @@
-
 import os
 import sys
 import json
 
-# 将 backend 目录添加到路径
-sys.path.append(os.path.join(os.getcwd(), "backend"))
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(root_dir)
 
 from acquisition.wechat_acquisition import wechat_scraper
 

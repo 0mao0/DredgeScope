@@ -6,7 +6,8 @@ import analysis.info_analysis as info_analysis
 import reporting.report_generation as report_generation
 import config
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 import database
@@ -86,7 +87,7 @@ def is_valid_article(item):
 
 def get_scheduler_log_path():
     """获取调度日志文件路径"""
-    return os.path.join(os.path.dirname(__file__), "scheduler", "scheduler.log")
+    return os.path.join(config.DATA_DIR, "scheduler.log")
 
 def write_scheduler_log(message):
     """写入调度日志内容"""
@@ -125,6 +126,31 @@ def format_date(value):
     except Exception:
         return ""
 
+def parse_pub_datetime(value):
+    """解析发布时间为 datetime"""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if "," in text and ":" in text and any(x in text for x in ["GMT", "+", "-"]):
+            return parsedate_to_datetime(text)
+    except Exception:
+        pass
+    try:
+        if "T" in text:
+            return datetime.fromisoformat(text)
+        if " " in text and ":" in text:
+            return datetime.fromisoformat(text.replace(" ", "T"))
+        if len(text) >= 10:
+            return datetime.strptime(text[:10], "%Y-%m-%d")
+    except Exception:
+        return None
+    return None
+
 def bool_to_cn(value):
     """布尔值转中文 是/否"""
     return "是" if bool(value) else "否"
@@ -132,7 +158,9 @@ def bool_to_cn(value):
 def write_markdown_audit(rows):
     """输出调度审核Markdown清单"""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    md_path = os.path.join(os.path.dirname(__file__), "scheduler", f"{ts}.md")
+    scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
+    os.makedirs(scheduler_dir, exist_ok=True)
+    md_path = os.path.join(scheduler_dir, f"{ts}.md")
     header = [
         "| 序号 | 网站 | 新闻名称 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 备注 | 新闻链接 |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -175,7 +203,9 @@ async def main():
         {"name": "中交疏浚", "fakeid": "MzI1NzYwNTQ5Ng=="},
         {"name": "中交天航局", "fakeid": "MzA5NTU2NTYyNQ=="},
         {"name": "中交广航局", "fakeid": "MjM5MjM5NTAyMA=="},
-        {"name": "中交上航局", "fakeid": "MzA3NjA5OTU5Mg=="}
+        {"name": "中交上航局", "fakeid": "MzA3NjA5OTU5Mg=="},
+        {"name": "长江航道局", "fakeid": None},
+        {"name": "长江南京航道局", "fakeid": None}
     ]
     
     # 微信采集 (自动从 backend/data/wechat_session.json 加载持久化的凭证)
@@ -187,22 +217,27 @@ async def main():
 
     print(f"共获取到 {len(raw_items)} 条潜在新闻")
     
-    # 去重 & 质量过滤
+    # 去重 & 入库拦截
     items = []
     skipped_count = 0
     duplicate_count = 0
+    outdated_count = 0
     audit_rows = []
     pending_map = {}
     seen_links = set()
-    
+
     for item in raw_items:
+        if not item.get("pub_date") and item.get("date"):
+            item["pub_date"] = item.get("date")
+        if not item.get("source_name") and item.get("source"):
+            item["source_name"] = item.get("source")
+        if not item.get("source_type") and item.get("source"):
+            item["source_type"] = "wechat"
         normalized_link = normalize_article_url(item.get('link'))
         if normalized_link:
             item['link'] = normalized_link
-            
-        # 1. 质量过滤
-        valid, reason = is_valid_article(item)
-        if not valid:
+
+        if not item.get("title") or not item.get("link"):
             skipped_count += 1
             audit_rows.append({
                 "site": item.get("source_name", ""),
@@ -212,11 +247,11 @@ async def main():
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
-                "remark": reason
+                "remark": "标题或链接为空"
             })
             continue
-            
-        # 2. 本次任务内去重 & 数据库去重
+
+        # 1. 本次任务内去重 & 数据库去重
         if item['link'] in seen_links:
             duplicate_count += 1
             audit_rows.append({
@@ -244,7 +279,24 @@ async def main():
                 "remark": "库中已存在"
             })
             continue
-        
+
+        # 2. 发布时间拦截（5天）
+        pub_dt = parse_pub_datetime(item.get("pub_date"))
+        if pub_dt:
+            if datetime.now() - pub_dt > timedelta(days=5):
+                outdated_count += 1
+                audit_rows.append({
+                    "site": item.get("source_name", ""),
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "pub_date": item.get("pub_date"),
+                    "keep": False,
+                    "text_ok": False,
+                    "vl_ok": False,
+                    "remark": "发布时间早于5天"
+                })
+                continue
+
         seen_links.add(item['link'])
         
         # 3. 标记为待分析
@@ -264,7 +316,7 @@ async def main():
     print(f"过滤掉 {skipped_count} 条垃圾/无效信息")
     print(f"经去重后，剩余 {len(items)} 条新文章需处理")
     write_scheduler_log(
-        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 过滤无效{skipped_count} 去重过滤{duplicate_count} 入库候选{len(items)}"
+        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 过滤无效{skipped_count} 去重过滤{duplicate_count} 超期过滤{outdated_count} 入库候选{len(items)}"
     )
 
     if not items:
@@ -276,9 +328,12 @@ async def main():
         write_scheduler_log("采集完成: 无新文章入库")
         return
 
+    database.save_raw_articles(items)
+
     # 2. 分析信息 (文本 + 视觉)
     print(">>> 阶段2: 智能分析...")
-    results = await info_analysis.process_items(items)
+    analysis_items = database.get_articles_by_urls([item['link'] for item in items])
+    results = await info_analysis.process_items_from_db(analysis_items)
     total_events = 0
     for r in results or []:
         events = r.get("events") if isinstance(r, dict) else None
@@ -301,10 +356,9 @@ async def main():
         if audit_rows[idx]["remark"] == "待分析":
             audit_rows[idx]["remark"] = "分析未通过(可能提取失败)"
 
-    # 3. 生成报告 & 存储
-    print(">>> 阶段3: 生成报告...")
+    # 3. 存储
+    print(">>> 阶段3: 存储结果...")
     report_generation.save_history(results)
-    report_generation.generate_report(results)
     try:
         write_markdown_audit(audit_rows)
     except Exception:

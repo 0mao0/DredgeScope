@@ -22,7 +22,7 @@
         
         <div class="flex bg-black/20 p-1 rounded-xl border border-white/5">
           <button 
-            @click="reportType = 'morning'"
+            @click="handleReportTypeChange('morning')"
             :class="[
               'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
               reportType === 'morning' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
@@ -31,7 +31,7 @@
             <i class="fa-solid fa-sun text-xs"></i> 早报
           </button>
           <button 
-            @click="reportType = 'evening'"
+            @click="handleReportTypeChange('evening')"
             :class="[
               'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
               reportType === 'evening' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
@@ -48,7 +48,7 @@
           <div>
             <p class="text-sm font-medium text-gray-400">本次新闻</p>
             <div class="flex items-end gap-2 mt-1">
-              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ filteredNews.length }}</span>
+              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ reportItems.length }}</span>
               <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
             </div>
           </div>
@@ -97,7 +97,7 @@
                     <i :class="['fa-solid', getCategoryMeta(item.category).icon, getCategoryMeta(item.category).color, 'text-xs']"></i>
                   </div>
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">{{ item.title_cn || item.article_title }}</h4>
+                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">{{ item.title_cn || item.title }}</h4>
                     <p class="text-xs text-gray-400 mt-1 line-clamp-1">{{ item.summary_cn || '暂无摘要' }}</p>
                   </div>
                 </div>
@@ -131,8 +131,8 @@
               </div>
               <div v-else class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
                 <div 
-                  v-for="group in getGroupedArticles(key)" 
-                  :key="group.article_id || group.article_url"
+                  v-for="group in getGroupedArticlesPreview(key)" 
+                  :key="group.id || group.url"
                   @click="openDetail(group)"
                   class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
                 >
@@ -143,7 +143,7 @@
                     <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{ formatTime(group.pub_date, group.created_at) }}</span>
                   </div>
                   <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
-                    {{ group.summary_cn || group.article_title }}
+                    {{ group.summary_cn || group.title }}
                   </p>
                 </div>
               </div>
@@ -156,7 +156,7 @@
     <!-- Detail Modal -->
     <a-modal
       v-model:open="modalVisible"
-      :title="currentArticle?.title_cn || currentArticle?.article_title"
+      :title="currentArticle?.title_cn || currentArticle?.title"
       :footer="null"
       :width="800"
       class="detail-modal"
@@ -260,12 +260,41 @@
 
       <!-- Footer -->
       <div class="mt-4 flex justify-end gap-3">
-        <a :href="currentArticle?.article_url || currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
+        <a :href="currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
         <a-button @click="modalVisible = false" class="h-9">
           <i class="fa-solid fa-xmark mr-1"></i> 关闭
         </a-button>
+      </div>
+    </a-modal>
+
+    <a-modal
+      v-model:open="previewVisible"
+      :title="previewTitle"
+      :footer="null"
+      :width="800"
+      centered
+    >
+      <div class="max-h-[70vh] overflow-y-auto custom-scrollbar">
+        <div class="text-xs text-gray-400 mb-3">时间范围：{{ previewRangeLabel }}</div>
+        <div v-if="previewLoading" class="text-gray-400 text-sm">加载中...</div>
+        <div v-else-if="previewItems.length === 0" class="text-gray-400 text-sm">暂无数据</div>
+        <div v-else class="flex flex-col gap-2">
+          <div v-for="(item, idx) in previewItems" :key="item.id || `${item.url}-${idx}`" class="rounded-lg border border-white/10 bg-white/5 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1">
+                <div class="text-sm text-gray-200 font-medium">{{ item.title_cn || item.title || item.summary_cn || '无标题' }}</div>
+                <div class="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
+                  <span>分类：{{ getCategoryMeta(item.category).name }}</span>
+                  <span>来源：{{ item.source_name || item.source_type || '未知' }}</span>
+                  <span>时间：{{ item.pub_date || item.created_at || '' }}</span>
+                </div>
+              </div>
+              <span class="text-xs text-gray-500 whitespace-nowrap">#{{ idx + 1 }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </a-modal>
   </div>
@@ -289,27 +318,67 @@ const scrollPositions = ref<Record<string, number>>({})
 // Report filtering state
 const reportType = ref<'morning' | 'evening'>(dayjs().hour() < 14 ? 'morning' : 'evening')
 const selectedDate = ref<Dayjs>(dayjs())
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewItems = ref<NewsItem[]>([])
+const previewRangeLabel = ref('')
+const previewTitle = computed(() => (reportType.value === 'morning' ? '早报筛选结果' : '晚报筛选结果'))
+
+/**
+ * 获取早报/晚报的时间区间
+ */
+function getReportRange(type: 'morning' | 'evening', date: Dayjs) {
+  if (type === 'morning') {
+    const start = date.subtract(1, 'day').hour(18).minute(0).second(0)
+    const end = date.hour(8).minute(0).second(0)
+    return { start, end }
+  }
+  const start = date.hour(8).minute(0).second(0)
+  const end = date.hour(18).minute(0).second(0)
+  return { start, end }
+}
+
+/**
+ * 切换早报/晚报并展示筛选结果
+ */
+function handleReportTypeChange(type: 'morning' | 'evening') {
+  reportType.value = type
+  loadReportData(true)
+}
+
+/**
+ * 拉取早晚报数据
+ */
+async function loadReportData(openModal: boolean) {
+  const { start, end } = getReportRange(reportType.value, selectedDate.value)
+  previewRangeLabel.value = `${start.format('MM-DD HH:mm')} 至 ${end.format('MM-DD HH:mm')}`
+  if (openModal) {
+    previewVisible.value = true
+  }
+  previewLoading.value = true
+  try {
+    const startStr = start.format('YYYY-MM-DDTHH:mm:ss')
+    const endStr = end.format('YYYY-MM-DDTHH:mm:ss')
+    const response = await fetch(`/api/events?start=${encodeURIComponent(startStr)}&end=${encodeURIComponent(endStr)}`)
+    const data = await response.json()
+    previewItems.value = data.events || []
+  } catch (error) {
+    console.error('加载早晚报预览失败', error)
+    previewItems.value = []
+  } finally {
+    previewLoading.value = false
+  }
+}
 
 const reportTimeRange = computed(() => {
-  if (reportType.value === 'morning') {
-    return `${selectedDate.value.subtract(1, 'day').format('MM-DD')} 18:00 至 ${selectedDate.value.format('MM-DD')} 08:00`
-  }
-  return `${selectedDate.value.subtract(1, 'day').format('MM-DD')} 18:00 至 ${selectedDate.value.format('MM-DD')} 18:00`
+  const { start, end } = getReportRange(reportType.value, selectedDate.value)
+  return `${start.format('MM-DD HH:mm')} 至 ${end.format('MM-DD HH:mm')}`
 })
 
-const filteredNews = computed(() => {
-  const start = reportType.value === 'morning' 
-    ? selectedDate.value.subtract(1, 'day').hour(18).minute(0).second(0)
-    : selectedDate.value.subtract(1, 'day').hour(18).minute(0).second(0) // Evening now covers full 24h cycle from previous evening
-    
-  const end = reportType.value === 'morning'
-    ? selectedDate.value.hour(8).minute(0).second(0)
-    : selectedDate.value.hour(18).minute(0).second(0)
+const reportItems = computed(() => previewItems.value)
 
-  return newsStore.newsList.filter(item => {
-    const pubTime = dayjs(item.pub_date || item.created_at)
-    return pubTime.isAfter(start) && pubTime.isBefore(end)
-  })
+watch([selectedDate, reportType], () => {
+  loadReportData(false)
 })
 
 const categories = {
@@ -325,8 +394,8 @@ const categories = {
 const quickSummary = computed(() => {
   const seenTitles = new Set()
   const unique: NewsItem[] = []
-  for (const e of filteredNews.value) {
-    const title = e.title_cn || e.article_title
+  for (const e of reportItems.value) {
+    const title = e.title_cn || e.title
     if (!seenTitles.has(title)) {
       seenTitles.add(title)
       unique.push(e)
@@ -343,9 +412,9 @@ function getCategoryMeta(category: string | undefined) {
 function getGroupedArticles(category: string) {
   const seen = new Set<string>()
   const unique: NewsItem[] = []
-  for (const item of filteredNews.value) {
+  for (const item of reportItems.value) {
     if (item.category !== category) continue
-    const key = item.article_id || item.article_url || item.title_cn || item.article_title || item.id
+    const key = item.id || item.url || item.title_cn || item.title
     if (!key) {
       unique.push(item)
       continue
@@ -354,11 +423,18 @@ function getGroupedArticles(category: string) {
     seen.add(key)
     unique.push(item)
   }
-  return unique.slice(0, 10)
+  return unique
+}
+
+/**
+ * 获取分类下用于展示的文章列表
+ */
+function getGroupedArticlesPreview(category: string) {
+  return getGroupedArticles(category).slice(0, 10)
 }
 
 function formatTitle(item: NewsItem, category: string) {
-  let title = item.title_cn || item.summary_cn || item.article_title || ''
+  let title = item.title_cn || item.summary_cn || item.title || ''
   if (title.length > 50) title = title.substring(0, 50) + '...'
   
   if (category === 'Bid' && item.contractor) {
@@ -419,6 +495,7 @@ onMounted(async () => {
     newsStore.fetchNews(),
     vesselStore.fetchVessels()
   ])
+  await loadReportData(false)
   loading.value = false
 })
 

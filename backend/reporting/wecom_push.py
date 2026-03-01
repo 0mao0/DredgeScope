@@ -11,7 +11,7 @@ if backend_dir not in sys.path:
 import config
 import database
 
-DEFAULT_CATEGORY = "Project"
+DEFAULT_CATEGORY = "Market"
 
 CATEGORIES_MAP = {
     "Market": "📈 市场动态",
@@ -22,9 +22,17 @@ CATEGORIES_MAP = {
     "Regulation": "⚖️ 技术法规"
 }
 
+def pick_primary_category(categories):
+    order = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market"]
+    for key in order:
+        if key in categories:
+            return key
+    return categories[0] if categories else DEFAULT_CATEGORY
+
 def get_scheduler_log_path():
     """获取调度日志文件路径"""
-    return os.path.join(backend_dir, "scheduler", "scheduler.log")
+    return os.path.join(config.DATA_DIR, "scheduler.log")
+
 
 def write_scheduler_log(message):
     """写入调度日志内容"""
@@ -49,8 +57,7 @@ def get_push_window(now):
         end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         label = f"{label_prefix}早报"
     else:
-        # User feedback: 晚报 should include overnight news (yesterday 18:00 - today 18:00)
-        start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+        start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
         end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
         label = f"{label_prefix}晚报"
     return start_dt, end_dt, label
@@ -64,19 +71,19 @@ def normalize_hot_title(title, max_len=10):
         return text
     return text[:max_len]
 
-def build_hot_news_titles(events, max_items=4, title_max_len=10):
+def build_hot_news_titles(articles, max_items=4, title_max_len=10):
     """构建今日热门新闻标题列表"""
     seen_keys = set()
     titles = []
     has_more = False
-    for e in events:
-        article_id = e.get("article_id")
-        article_url = e.get("article_url")
+    for e in articles:
+        article_id = e.get("id")
+        article_url = e.get("url")
         dedup_key = article_id if article_id is not None else article_url
         if dedup_key in seen_keys:
             continue
         seen_keys.add(dedup_key)
-        raw_title = e.get("title_cn") or e.get("project_name") or e.get("article_title")
+        raw_title = e.get("title_cn") or e.get("title")
         title = normalize_hot_title(raw_title, max_len=title_max_len)
         if not title:
             continue
@@ -105,8 +112,19 @@ def parse_event_datetime(value):
         return None, False
 
 def filter_events_by_publish_window(events, start_dt, end_dt):
+    """根据时间窗口过滤事件，优先保证入库时间在窗口内的记录保留"""
     filtered = []
     for e in events:
+        created_dt, created_date_only = parse_event_datetime(e.get("created_at"))
+        if created_dt:
+            if created_date_only:
+                if start_dt.date() <= created_dt.date() <= end_dt.date():
+                    filtered.append(e)
+                    continue
+            else:
+                if start_dt <= created_dt <= end_dt:
+                    filtered.append(e)
+                    continue
         pub_dt, date_only = parse_event_datetime(e.get("pub_date"))
         if not pub_dt:
             pub_dt, date_only = parse_event_datetime(e.get("created_at"))
@@ -135,14 +153,14 @@ def normalize_title_key(text):
     t = "".join(ch for ch in t if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
     return t
 
-def dedupe_market_events(events):
+def dedupe_market_events(articles):
     deduped_events = []
     seen_market = set()
-    for e in events:
+    for e in articles:
         if e.get("category") == "Market":
-            title_key = normalize_title_key(e.get("title_cn") or e.get("article_title") or e.get("summary_cn"))
+            title_key = normalize_title_key(e.get("title_cn") or e.get("title") or e.get("summary_cn"))
             if not title_key:
-                title_key = e.get("article_url") or e.get("article_id")
+                title_key = e.get("url") or e.get("id")
             if title_key and title_key in seen_market:
                 continue
             if title_key:
@@ -150,14 +168,14 @@ def dedupe_market_events(events):
         deduped_events.append(e)
     return deduped_events
 
-def build_category_counts(events):
+def build_category_counts(articles):
     buckets = {k: set() for k in CATEGORIES_MAP.keys()}
-    for e in events:
+    for e in articles:
         cat = e.get("category") or DEFAULT_CATEGORY
         if cat not in buckets:
             cat = DEFAULT_CATEGORY
-        article_id = e.get("article_id")
-        key = article_id if article_id is not None else e.get("article_url") or e.get("article_title")
+        article_id = e.get("id")
+        key = article_id if article_id is not None else e.get("url") or e.get("title")
         if key is None:
             continue
         buckets[cat].add(key)
@@ -170,25 +188,10 @@ def push_daily_report():
     start_time = start_dt.isoformat()
     end_time = end_dt.isoformat()
     
-    events = database.get_events_by_time_range(start_time, end_time)
-    raw_event_count = len(events)
+    articles = database.get_articles_by_time_range_strict(start_time, end_time)
+    raw_event_count = len(articles)
 
-    # Filter junk (Sync with dashboard.html logic)
-    # 过滤掉无效信息，确保推送数量与前端展示一致
-    valid_events = []
-    for e in events:
-        title = (e.get('title_cn') or e.get('article_title') or "").lower()
-        cat = e.get('category', DEFAULT_CATEGORY)
-        if "back to home" in title or "page not found" in title:
-            continue
-        valid_events.append(e)
-    events = valid_events
-    
-    events = filter_events_by_publish_window(events, start_dt, end_dt)
-    events = dedupe_market_events(events)
-    filtered_event_count = len(events)
-
-    if not events:
+    if not articles:
         print("无新情报，发送空消息通知")
         write_scheduler_log(f"推送统计: 窗口{label} 原始记录{raw_event_count} 过滤后0 推送0")
         if config.WECOM_WEBHOOK_URL:
@@ -206,12 +209,11 @@ def push_daily_report():
                 print(f"[Push] 发送空消息失败: {e}")
         return
 
-    # 最终决定：直接使用服务器上的静态资源 (假设服务器配置正确)
-    # 如果是在本地测试，这个链接可能无法被外网访问，但不影响流程
     cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.png"
     
     found_cover = False
-    for e in events:
+    for e in articles:
+        e["category"] = pick_primary_category(e.get("categories") or [])
         if not found_cover and e.get('screenshot_path'):
             if "127.0.0.1" in config.BACKEND_URL or "localhost" in config.BACKEND_URL:
                 pass
@@ -223,9 +225,8 @@ def push_daily_report():
 
     # 2. 构造 Template Card
     date_str = label
-    unique_article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
-    total_count = len(unique_article_ids)
-    category_counts = build_category_counts(events)
+    total_count = len(articles)
+    category_counts = build_category_counts(articles)
     category_labels = {
         "Market": "市场",
         "Bid": "中标",
@@ -236,7 +237,7 @@ def push_daily_report():
     }
     category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys()])
     write_scheduler_log(
-        f"推送统计: 窗口{label} 原始记录{raw_event_count} 过滤后{filtered_event_count} 推送{total_count}"
+        f"推送统计: 窗口{label} 原始记录{raw_event_count} 推送{total_count}"
     )
 
 

@@ -54,6 +54,12 @@ def init_track_db():
     """初始化轨迹数据库"""
     conn = sqlite3.connect(TRACK_DB_PATH)
     c = conn.cursor()
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ships'")
+    ships_exists = c.fetchone() is not None
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ship_infos'")
+    ship_infos_exists = c.fetchone() is not None
+    if ships_exists and not ship_infos_exists:
+        c.execute("ALTER TABLE ships RENAME TO ship_infos")
     c.execute('''CREATE TABLE IF NOT EXISTS ship_tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mmsi TEXT,
@@ -80,8 +86,7 @@ def init_track_db():
         except Exception as e:
             print(f"[DB] 添加 vessel_name 列失败: {e}")
 
-    # 4. 船舶表 (Ships) - 迁移至 ship_tracks.db
-    c.execute('''CREATE TABLE IF NOT EXISTS ships (
+    c.execute('''CREATE TABLE IF NOT EXISTS ship_infos (
         id INTEGER PRIMARY KEY, -- Removed AUTOINCREMENT to allow explicit ID insertion
         imo TEXT, -- Removed UNIQUE constraint due to duplicates in CSV
         mmsi TEXT,
@@ -198,10 +203,27 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 content 列失败: {e}")
 
-    # 2. 事件表 (Events)
+    # 2. 事件分组表 (Event Groups)
+    c.execute('''CREATE TABLE IF NOT EXISTS event_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        signature TEXT UNIQUE,
+        category TEXT,
+        project_name TEXT,
+        location TEXT,
+        contractor TEXT,
+        client TEXT,
+        details_json TEXT,
+        first_seen_at TEXT,
+        last_seen_at TEXT
+    )''')
+
+    # 3. 事件表 (Events)
     c.execute('''CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         article_id INTEGER,
+        event_group_id INTEGER,
+        event_signature TEXT,
+        event_time TEXT,
         category TEXT, 
         project_name TEXT,
         location TEXT,
@@ -211,18 +233,40 @@ def init_db():
         client TEXT,
         details_json TEXT, 
         created_at TEXT,
-        FOREIGN KEY(article_id) REFERENCES articles(id)
-    )''')
-    
-    # 3. 推送日志表 (PushLogs)
-    c.execute('''CREATE TABLE IF NOT EXISTS push_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        push_time TEXT,
-        status TEXT, -- 'success', 'failed'
-        message TEXT, -- error message or simple note
-        item_count INTEGER
+        FOREIGN KEY(article_id) REFERENCES articles(id),
+        FOREIGN KEY(event_group_id) REFERENCES event_groups(id)
     )''')
 
+    try:
+        c.execute("SELECT event_group_id FROM events LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 events 表缺失 event_group_id 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE events ADD COLUMN event_group_id INTEGER")
+            print("[DB] 已成功添加 event_group_id 列")
+        except Exception as e:
+            print(f"[DB] 添加 event_group_id 列失败: {e}")
+
+    try:
+        c.execute("SELECT event_signature FROM events LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 events 表缺失 event_signature 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE events ADD COLUMN event_signature TEXT")
+            print("[DB] 已成功添加 event_signature 列")
+        except Exception as e:
+            print(f"[DB] 添加 event_signature 列失败: {e}")
+
+    try:
+        c.execute("SELECT event_time FROM events LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 events 表缺失 event_time 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE events ADD COLUMN event_time TEXT")
+            print("[DB] 已成功添加 event_time 列")
+        except Exception as e:
+            print(f"[DB] 添加 event_time 列失败: {e}")
+    
     conn.commit()
     conn.close()
     print(f"[DB] 数据库已初始化: {DB_PATH}")
@@ -270,7 +314,7 @@ def get_ship_tracks(mmsi, days=3):
     
     try:
         c.execute('''
-            SELECT lat, lng, speed, heading, timestamp 
+            SELECT lat, lng, speed, heading, timestamp, created_at
             FROM ship_tracks 
             WHERE mmsi = ? AND timestamp > ?
             ORDER BY timestamp ASC
@@ -283,7 +327,8 @@ def get_ship_tracks(mmsi, days=3):
                 "lng": row[1],
                 "speed": row[2],
                 "heading": row[3],
-                "timestamp": row[4]
+                "timestamp": row[4],
+                "created_at": row[5]
             })
         return tracks
     except Exception as e:
@@ -304,7 +349,7 @@ def upsert_ships(ships):
         for ship in ships:
             c.execute(
                 """
-                INSERT INTO ships (
+                INSERT INTO ship_infos (
                     id, imo, mmsi, name, company, type,
                     capacity_1, capacity_2, region, location,
                     status, status_date, remarks, updated_at,
@@ -363,23 +408,25 @@ def upsert_ships(ships):
     finally:
         conn.close()
 
-def update_ship_status(mmsi, status, status_date, location, region, country=None, continent=None, province=None, city=None):
+def update_ship_status(mmsi, status, status_date, location, region, country=None, continent=None, province=None, city=None, speed=None, heading=None):
     """更新单船状态信息"""
     conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
         c.execute(
             """
-            UPDATE ships
+            UPDATE ship_infos
             SET status = ?, status_date = ?, location = ?, region = ?, updated_at = ?,
                 country = COALESCE(?, country),
                 continent = COALESCE(?, continent),
                 province = COALESCE(?, province),
-                city = COALESCE(?, city)
+                city = COALESCE(?, city),
+                speed = COALESCE(?, speed),
+                heading = COALESCE(?, heading)
             WHERE mmsi = ?
             """,
             (status, status_date, location, region, datetime.now().isoformat(), 
-             country, continent, province, city, mmsi),
+             country, continent, province, city, speed, heading, mmsi),
         )
         conn.commit()
         return c.rowcount
@@ -389,6 +436,51 @@ def update_ship_status(mmsi, status, status_date, location, region, country=None
         return 0
     finally:
         conn.close()
+
+def get_or_create_event_group(conn, signature, evt, category, details_json, event_time):
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    c.execute("SELECT id, first_seen_at FROM event_groups WHERE signature = ?", (signature,))
+    row = c.fetchone()
+    if row:
+        group_id = row[0]
+        c.execute(
+            '''
+            UPDATE event_groups
+            SET category = ?, project_name = ?, location = ?, contractor = ?, client = ?, details_json = ?, last_seen_at = ?
+            WHERE id = ?
+            ''',
+            (
+                category,
+                evt.get("project_name", ""),
+                evt.get("location", ""),
+                evt.get("contractor", ""),
+                evt.get("client", ""),
+                details_json,
+                now,
+                group_id
+            )
+        )
+        return group_id
+    c.execute(
+        '''
+        INSERT INTO event_groups
+        (signature, category, project_name, location, contractor, client, details_json, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        (
+            signature,
+            category,
+            evt.get("project_name", ""),
+            evt.get("location", ""),
+            evt.get("contractor", ""),
+            evt.get("client", ""),
+            details_json,
+            event_time or now,
+            now
+        )
+    )
+    return c.lastrowid
 
 def save_article_and_events(article_data, events_data):
     """保存文章和关联事件"""
@@ -403,7 +495,42 @@ def save_article_and_events(article_data, events_data):
         
         if row:
             article_id = row[0]
-            # 可选：更新逻辑
+            c.execute(
+                '''
+                UPDATE articles
+                SET
+                    title = COALESCE(NULLIF(?, ''), title),
+                    title_cn = COALESCE(NULLIF(?, ''), title_cn),
+                    pub_date = COALESCE(NULLIF(?, ''), pub_date),
+                    source_type = COALESCE(NULLIF(?, ''), source_type),
+                    source_name = COALESCE(NULLIF(?, ''), source_name),
+                    summary_cn = COALESCE(NULLIF(?, ''), summary_cn),
+                    full_text_cn = COALESCE(NULLIF(?, ''), full_text_cn),
+                    content = COALESCE(NULLIF(?, ''), content),
+                    screenshot_path = COALESCE(NULLIF(?, ''), screenshot_path),
+                    is_significant = COALESCE(?, is_significant),
+                    vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
+                    valid = COALESCE(?, valid),
+                    is_hidden = COALESCE(?, is_hidden)
+                WHERE id = ?
+                ''',
+                (
+                    article_data.get('title', ''),
+                    article_data.get('title_cn', ''),
+                    article_data.get('pub_date', ''),
+                    article_data.get('source_type', ''),
+                    article_data.get('source_name', ''),
+                    article_data.get('summary_cn', ''),
+                    article_data.get('full_text_cn', ''),
+                    article_data.get('content', ''),
+                    article_data.get('screenshot_path', ''),
+                    article_data.get('significant', None),
+                    article_data.get('image_desc', ''),
+                    article_data.get('valid', None),
+                    article_data.get('is_hidden', None),
+                    article_id
+                )
+            )
         else:
             # Check for staleness before insertion
             is_hidden = 0
@@ -503,6 +630,7 @@ def save_article_and_events(article_data, events_data):
                 if amount_value and not details.get("amount"):
                     details["amount"] = amount_value
                 details_json = json.dumps(details, ensure_ascii=False, sort_keys=True)
+                event_time = evt.get("time") or evt.get("publish_time") or evt.get("pub_time") or article_data.get("pub_date") or ""
                 signature = build_event_signature({
                     "category": category,
                     "project_name": evt.get("project_name", ""),
@@ -511,19 +639,38 @@ def save_article_and_events(article_data, events_data):
                     "currency": evt.get("currency", ""),
                     "contractor": evt.get("contractor", ""),
                     "client": evt.get("client", ""),
+                    "time": event_time,
+                    "content": evt.get("content") or evt.get("description") or "",
                     "details_json": details_json
                 })
+                if not signature:
+                    fallback_parts = [
+                        evt.get("project_name"),
+                        evt.get("location"),
+                        evt.get("contractor"),
+                        evt.get("client"),
+                        evt.get("content") or evt.get("description"),
+                        article_data.get("title"),
+                        article_data.get("summary_cn")
+                    ]
+                    normalized_parts = [normalize_event_text(p) for p in fallback_parts if p]
+                    signature = "|".join([p for p in normalized_parts if p])
                 if not signature:
                     signature = f"empty|{category}"
                 if signature in seen_signatures:
                     continue
                 seen_signatures.add(signature)
-                
+
+                event_group_id = get_or_create_event_group(conn, signature, evt, category, details_json, event_time)
+
                 c.execute('''INSERT INTO events 
-                    (article_id, category, project_name, location, amount, currency, contractor, client, details_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (article_id, event_group_id, event_signature, event_time, category, project_name, location, amount, currency, contractor, client, details_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (
                         article_id,
+                        event_group_id,
+                        signature,
+                        event_time,
                         category,
                         evt.get('project_name', ''),
                         evt.get('location', ''),
@@ -550,7 +697,7 @@ def add_ship_simple(name, mmsi):
     conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO ships (name, mmsi, updated_at) VALUES (?, ?, ?)",
+        c.execute("INSERT INTO ship_infos (name, mmsi, updated_at) VALUES (?, ?, ?)",
                   (name, mmsi, datetime.now().isoformat()))
         conn.commit()
         return True
@@ -607,6 +754,64 @@ def is_article_exists(url):
     row = c.fetchone()
     conn.close()
     return row is not None
+
+def save_raw_articles(items):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    inserted = 0
+    try:
+        for item in items or []:
+            url = item.get("link") or item.get("url")
+            if not url:
+                continue
+            c.execute("SELECT id FROM articles WHERE url = ?", (url,))
+            if c.fetchone():
+                continue
+            pub_date = item.get("pub_date") or item.get("date") or datetime.now().isoformat()
+            content = item.get("content") or item.get("summary_raw") or item.get("digest") or ""
+            screenshot_path = item.get("screenshot_path") or ""
+            c.execute('''INSERT INTO articles 
+                (url, title, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, created_at, valid)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    url,
+                    item.get("title", ""),
+                    str(pub_date),
+                    item.get("source_type", "unknown"),
+                    item.get("source_name", ""),
+                    "",
+                    "",
+                    content,
+                    screenshot_path,
+                    datetime.now().isoformat(),
+                    1
+                )
+            )
+            inserted += 1
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] 保存原始文章失败: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    return inserted
+
+def get_articles_by_urls(urls):
+    if not urls:
+        return []
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    placeholders = ",".join(["?"] * len(urls))
+    query = f'''
+        SELECT id, title, url, pub_date, summary_cn, full_text_cn, content, screenshot_path, vl_desc, source_type, source_name, valid
+        FROM articles
+        WHERE url IN ({placeholders})
+    '''
+    c.execute(query, urls)
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 def get_events_by_time_range(start_time, end_time):
     """获取指定时间范围内的事件"""
@@ -676,6 +881,65 @@ def get_events_by_time_range(start_time, end_time):
         results.append(item)
     return results
 
+def get_events_by_time_range_strict(start_time, end_time):
+    """仅按时间窗口获取有效且未隐藏的事件"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    query = '''
+        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.is_significant, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, a.full_text_cn, e.details_json
+        FROM events e
+        JOIN articles a ON e.article_id = a.id
+        WHERE (e.created_at BETWEEN ? AND ?) 
+          AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
+          AND (a.valid = 1 OR a.valid IS NULL)
+        ORDER BY e.created_at DESC
+    '''
+    c.execute(query, (start_time, end_time))
+    rows = c.fetchall()
+    conn.close()
+    
+    results = []
+    for row in rows:
+        item = dict(row)
+        if item['details_json']:
+            item['details'] = json.loads(item['details_json'])
+        else:
+            item['details'] = {}
+        item = enrich_event_category(item)
+        results.append(item)
+    return results
+
+def get_articles_by_time_range_strict(start_time, end_time):
+    """仅按时间窗口获取有效且未隐藏的文章"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    query = '''
+        SELECT 
+            a.id, a.title, a.title_cn, a.url, a.pub_date, a.summary_cn, a.full_text_cn, a.content, 
+            a.screenshot_path, a.vl_desc, a.created_at, a.source_type, a.source_name, a.valid,
+            GROUP_CONCAT(DISTINCT e.category) as categories
+        FROM articles a
+        LEFT JOIN events e ON e.article_id = a.id
+        WHERE (a.created_at BETWEEN ? AND ?)
+          AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
+          AND (a.valid = 1 OR a.valid IS NULL)
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+    '''
+    c.execute(query, (start_time, end_time))
+    rows = c.fetchall()
+    conn.close()
+    results = []
+    for row in rows:
+        item = dict(row)
+        cats = item.get("categories") or ""
+        item["categories"] = [c for c in cats.split(",") if c] if cats else []
+        results.append(item)
+    return results
+
 # 初始化
 init_db()
 
@@ -684,7 +948,7 @@ def get_all_ships():
     conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM ships")
+    c.execute("SELECT * FROM ship_infos")
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -694,7 +958,7 @@ def update_ship_mmsi(ship_id, mmsi):
     conn = sqlite3.connect(TRACK_DB_PATH) # 迁移至 TRACK_DB_PATH
     c = conn.cursor()
     try:
-        c.execute("UPDATE ships SET mmsi = ?, updated_at = ? WHERE id = ?", (mmsi, datetime.now().isoformat(), ship_id))
+        c.execute("UPDATE ship_infos SET mmsi = ?, updated_at = ? WHERE id = ?", (mmsi, datetime.now().isoformat(), ship_id))
         conn.commit()
         return True
     except Exception as e:

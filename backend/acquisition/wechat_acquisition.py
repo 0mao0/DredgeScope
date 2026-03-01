@@ -30,7 +30,7 @@ class WeChatAcquisition:
         self.cookie = cookie
         self.token = token
         self.base_url = "https://mp.weixin.qq.com/cgi-bin/appmsg"
-        self.session_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "wechat_session.json")
+        self.session_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "wechat_session.json")
         
         # 尝试从本地加载持久化的 Session
         self._load_session()

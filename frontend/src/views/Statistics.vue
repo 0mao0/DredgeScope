@@ -6,9 +6,9 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
       <!-- Filter Bar -->
       <div class="glass-card rounded-2xl p-5">
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="flex flex-col">
-            <label class="text-xs text-gray-400 mb-1">时间范围</label>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-400">时间范围</label>
             <a-range-picker 
               v-model:value="dateRange" 
               class="bg-dark-card border border-dark-border"

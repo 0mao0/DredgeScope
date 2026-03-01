@@ -99,127 +99,31 @@ async def get_events(
                 end_time = f"{date}T23:59:59"
                 date_label = date
         
-        events = database.get_events_by_time_range(start_time, end_time)
-        
-        # --- Stale News Filter (Added to fix "Old News" issue) ---
-        # 无论何种模式，都过滤掉 "发现时已严重过时" 的新闻 (比如今天抓取到了 2024 年的新闻)
-        # 阈值设为 90 天 (3个月)
-        STALE_THRESHOLD_DAYS = 30
-        fresh_events = []
-        for e in events:
-            try:
-                # 1. 获取 created_at (抓取/入库时间)
-                c_date_str = e.get('created_at')
-                if not c_date_str:
-                    fresh_events.append(e)
-                    continue
-                if 'T' in str(c_date_str):
-                    c_date = datetime.fromisoformat(str(c_date_str))
-                else:
-                    c_date = datetime.fromisoformat(str(c_date_str).replace(' ', 'T'))
+        articles = database.get_articles_by_time_range_strict(start_time, end_time)
 
-                # 2. 获取 pub_date (发布时间)
-                p_date_str = e.get('pub_date')
-                if not p_date_str:
-                    fresh_events.append(e)
-                    continue
-                
-                # 清洗 pub_date
-                p_date_clean = str(p_date_str).strip()
-                p_date = None
-                
-                # 尝试解析多种格式
-                if 'T' in p_date_clean:
-                    p_date = datetime.fromisoformat(p_date_clean)
-                elif ' ' in p_date_clean and ':' in p_date_clean:
-                    p_date = datetime.fromisoformat(p_date_clean.replace(' ', 'T'))
-                else:
-                    # 尝试 YYYY-MM-DD
-                    try:
-                        p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
-                    except:
-                        pass
-                
-                if p_date:
-                    # 计算 "陈旧度": 抓取时间 - 发布时间
-                    # 注意：如果 p_date 没有时区信息而 c_date 有，或者反之，直接相减可能报错
-                    # 简单起见，比较 date() 部分
-                    age_days = (c_date.date() - p_date.date()).days
-                    if age_days > STALE_THRESHOLD_DAYS:
-                        # 这是一个 "迟到的旧新闻"，过滤掉
-                        continue
-                
-                fresh_events.append(e)
-            except Exception as ex:
-                # 解析出错则保留 (Safe fallback)
-                fresh_events.append(e)
-        
-        events = fresh_events
-        
-        # Format dates for frontend display (remove microseconds)
-        for e in events:
-            if e.get('created_at'):
-                e['created_at'] = str(e['created_at']).split('.')[0]
-            if e.get('pub_date'):
-                e['pub_date'] = str(e['pub_date']).split('.')[0]
-                
-        # -------------------------------------------------------
+        category_priority = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market"]
+        for a in articles:
+            if a.get('created_at'):
+                a['created_at'] = str(a['created_at']).split('.')[0]
+            if a.get('pub_date'):
+                a['pub_date'] = str(a['pub_date']).split('.')[0]
+            cats = a.get("categories") or []
+            primary = None
+            for key in category_priority:
+                if key in cats:
+                    primary = key
+                    break
+            if not primary and cats:
+                primary = cats[0]
+            a["category"] = primary or "Market"
 
-        # Filter by pub_date if in recent mode (User request: "How am I seeing 2023 news?")
-        if mode == 'recent':
-            filtered_events = []
-            for e in events:
-                pub_dt, date_only = parse_event_datetime(e.get('pub_date'))
-                if not pub_dt:
-                    pub_dt, date_only = parse_event_datetime(e.get('created_at'))
-                if not pub_dt:
-                    continue
-                if date_only:
-                    if pub_dt.date() < start_dt.date() or pub_dt.date() > end_dt.date():
-                        continue
-                else:
-                    if pub_dt < start_dt or pub_dt > end_dt:
-                        continue
-                filtered_events.append(e)
-            events = filtered_events
-
-        def normalize_title(text):
-            if not text:
-                return ""
-            t = str(text).lower()
-            stopwords = [
-                "集团", "公司", "股份", "有限", "有限公司",
-                "达成", "签订", "签署", "修改", "修订", "协议",
-                "合作", "宣布", "公告"
-            ]
-            for w in stopwords:
-                t = t.replace(w, "")
-            t = "".join(ch for ch in t if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
-            return t
-
-        deduped_events = []
-        seen_market = set()
-        for e in events:
-            if e.get("category") == "Market":
-                title_key = normalize_title(e.get("title_cn") or e.get("article_title") or e.get("summary_cn"))
-                if not title_key:
-                    title_key = e.get("article_url") or e.get("article_id")
-                if title_key and title_key in seen_market:
-                    continue
-                if title_key:
-                    seen_market.add(title_key)
-            deduped_events.append(e)
-        events = deduped_events
-
-        article_ids = {e.get("article_id") for e in events if e.get("article_id") is not None}
-        article_count = len(article_ids)
-        # 转换为前端友好的格式
+        article_count = len(articles)
         return {
             "date": date_label,
             "count": article_count,
             "article_count": article_count,
-            "event_count": len(events),
-            "events": events
+            "event_count": 0,
+            "events": articles
         }
     except Exception as e:
         print(f"Error getting events: {e}")
@@ -399,9 +303,35 @@ async def get_ships():
     now = datetime.now()
     threshold = now - timedelta(hours=24)
     
+    latest_track_map = {}
+    try:
+        conn = sqlite3.connect(database.TRACK_DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT t.mmsi, t.lat, t.lng
+            FROM ship_tracks t
+            JOIN (
+                SELECT mmsi, MAX(timestamp) AS max_ts
+                FROM ship_tracks
+                GROUP BY mmsi
+            ) latest
+            ON t.mmsi = latest.mmsi AND t.timestamp = latest.max_ts
+            """
+        )
+        for row in c.fetchall():
+            latest_track_map[str(row[0])] = (row[1], row[2])
+    except Exception:
+        latest_track_map = {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
     for ship in ships:
         mmsi = str(ship.get('mmsi', '')).strip()
-        if mmsi:
+        if mmsi and any(ch.isdigit() for ch in mmsi):
             tracked_count += 1
             
         # 1. 标记是否活跃
@@ -433,6 +363,17 @@ async def get_ships():
                     lng = lng_val
             except:
                 pass
+        if lat is None or lng is None:
+            track_point = latest_track_map.get(mmsi)
+            if track_point:
+                try:
+                    lat_val = float(track_point[0])
+                    lng_val = float(track_point[1])
+                    if abs(lat_val) > 0.01 or abs(lng_val) > 0.01:
+                        lat = lat_val
+                        lng = lng_val
+                except Exception:
+                    pass
         
         ship['lat'] = lat
         ship['lng'] = lng
@@ -623,7 +564,7 @@ async def get_sources():
 @app.get("/api/scheduler/runs")
 async def get_scheduler_runs():
     """获取历史调度任务运行结果列表"""
-    scheduler_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scheduler")
+    scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
     if not os.path.exists(scheduler_dir):
         return {"runs": []}
     
@@ -649,7 +590,7 @@ async def get_scheduler_runs():
 @app.get("/api/scheduler/run/{filename}")
 async def get_scheduler_run_detail(filename: str):
     """获取指定调度任务运行详情"""
-    scheduler_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scheduler")
+    scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
     file_path = os.path.join(scheduler_dir, filename)
     
     if not os.path.exists(file_path):

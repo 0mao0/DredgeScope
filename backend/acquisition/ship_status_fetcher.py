@@ -65,6 +65,7 @@ def get_continent_name(country_code):
 def update_ship_statuses():
     """批量更新船舶状态"""
     print("[Status] 开始更新船舶位置信息...")
+    database.init_track_db()
     
     # 1. 获取最新位置数据
     fleet_data = fetch_all_fleet_positions()
@@ -72,11 +73,11 @@ def update_ship_statuses():
         print("[Status] 未获取到船舶位置数据")
         return
 
-    conn = database.sqlite3.connect(database.DB_PATH, timeout=30)
+    conn = database.sqlite3.connect(database.TRACK_DB_PATH, timeout=30)
     c = conn.cursor()
     
     # 2. 获取数据库中需要更新的船舶 (Get name as well)
-    c.execute("SELECT mmsi, name FROM ships WHERE mmsi IS NOT NULL AND mmsi != ''")
+    c.execute("SELECT mmsi, name FROM ship_infos WHERE mmsi IS NOT NULL AND mmsi != ''")
     db_ships = c.fetchall()
     
     updated_count = 0
@@ -131,7 +132,7 @@ def update_ship_statuses():
                 # But we might want to update status_raw if we had such column.
                 # Since we don't, we just update location/time/speed/heading.
                 c.execute("""
-                    UPDATE ships 
+                    UPDATE ship_infos 
                     SET location = ?, 
                         updated_at = ?,
                         country = ?,
@@ -144,17 +145,20 @@ def update_ship_statuses():
                 """, (f"{lat}, {lng}", datetime.now().isoformat(), 
                       country_name, continent, province, city, speed, heading, mmsi))
                 
-                # 记录轨迹
-                database.add_ship_track(
-                    mmsi=mmsi,
-                    lat=lat,
-                    lng=lng,
-                    speed=speed,
-                    heading=heading,
-                    status_raw=status_raw,
-                    timestamp=update_time or datetime.now().isoformat(),
-                    vessel_name=vessel_name
+                c.execute('''INSERT INTO ship_tracks 
+                    (mmsi, lat, lng, speed, heading, status_raw, timestamp, created_at, vessel_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (mmsi, lat, lng, speed, heading, status_raw, update_time or datetime.now().isoformat(), datetime.now().isoformat(), vessel_name)
                 )
+                c.execute('''
+                    DELETE FROM ship_tracks 
+                    WHERE id NOT IN (
+                        SELECT id FROM ship_tracks 
+                        WHERE mmsi = ? 
+                        ORDER BY timestamp DESC 
+                        LIMIT 5000
+                    ) AND mmsi = ?
+                ''', (mmsi, mmsi))
 
                 updated_count += 1
             except Exception as e:

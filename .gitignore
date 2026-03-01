@@ -24,6 +24,7 @@ backend/data/
 !backend/data/assets/.gitkeep
 !backend/data/report.md
 !backend/scheduler/scheduler.log
+backend/static/wechat_session.json
 ships.csv
 《国际疏浚简讯》第30期 2025年1月.pdf
 

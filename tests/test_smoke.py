@@ -82,7 +82,11 @@ async def run_smoke_test():
     # 微信公众号 (自动从 session 文件加载)
     wechat_biz_list = [
         {"name": "中交疏浚", "fakeid": "MzI1NzYwNTQ5Ng=="},
-        {"name": "中交天航局", "fakeid": "MzA5NTU2NTYyNQ=="}
+        {"name": "中交天航局", "fakeid": "MzA5NTU2NTYyNQ=="},
+        {"name": "中交广航局", "fakeid": "MjM5MjM5NTAyMA=="},
+        {"name": "中交上航局", "fakeid": "MzA3NjA5OTU5Mg=="},
+        {"name": "长江航道局", "fakeid": None},
+        {"name": "长江南京航道局", "fakeid": None}
     ]
     wechat_items = wechat_acquisition.wechat_scraper.batch_get_articles(wechat_biz_list, count_per_biz=1)
     if wechat_items:
