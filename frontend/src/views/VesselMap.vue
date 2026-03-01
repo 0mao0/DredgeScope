@@ -495,7 +495,7 @@ function onMapClick(e: L.LeafletMouseEvent) {
   }
 }
 
-function onMapRightClick(e: L.LeafletMouseEvent) {
+function onMapRightClick(_e: L.LeafletMouseEvent) {
   if (isMeasuring.value) {
     toggleMeasure() // Cancel measurement
     message.info('已取消测量')
@@ -529,44 +529,44 @@ function getCompanyAbbreviation(company: string | undefined): string {
 /**
  * 国家国旗颜色映射
  */
-const countryColors: Record<string, { bg: string, text: string }> = {
-  'China': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'CN': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  '中国': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'Netherlands': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'NL': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'Singapore': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'SG': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'United States': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'US': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'USA': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'United Kingdom': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'UK': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'GB': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'Japan': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'JP': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  'Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'KR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'South Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'Germany': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
-  'DE': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
-  'France': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'FR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'Australia': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
-  'AU': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' }
-}
+// const countryColors: Record<string, { bg: string, text: string }> = {
+//   'China': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'CN': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   '中国': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'Netherlands': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'NL': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'Singapore': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'SG': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'United States': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'US': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'USA': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'United Kingdom': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'UK': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'GB': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'Japan': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'JP': { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   'Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'KR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'South Korea': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'Germany': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
+//   'DE': { bg: 'rgba(220, 38, 38, 0.4)', text: '#1f2937' },
+//   'France': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'FR': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'Australia': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' },
+//   'AU': { bg: 'rgba(37, 99, 235, 0.4)', text: 'white' }
+// }
 
 /**
  * 中国船队的红色变体
  */
-const chinaRedVariants = [
-  { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
-  { bg: 'rgba(239, 68, 68, 0.4)', text: 'white' },
-  { bg: 'rgba(185, 28, 28, 0.4)', text: 'white' },
-  { bg: 'rgba(248, 113, 113, 0.4)', text: '#1f2937' },
-  { bg: 'rgba(153, 27, 27, 0.4)', text: 'white' },
-  { bg: 'rgba(252, 165, 165, 0.4)', text: '#1f2937' }
-]
+// const chinaRedVariants = [
+//   { bg: 'rgba(220, 38, 38, 0.4)', text: 'white' },
+//   { bg: 'rgba(239, 68, 68, 0.4)', text: 'white' },
+//   { bg: 'rgba(185, 28, 28, 0.4)', text: 'white' },
+//   { bg: 'rgba(248, 113, 113, 0.4)', text: '#1f2937' },
+//   { bg: 'rgba(153, 27, 27, 0.4)', text: 'white' },
+//   { bg: 'rgba(252, 165, 165, 0.4)', text: '#1f2937' }
+// ]
 
 /**
  * 根据公司名称生成颜色
