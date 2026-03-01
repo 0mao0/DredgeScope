@@ -174,10 +174,9 @@
           </div>
         </div>
 
-        <div v-if="trackDisplayList.length" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[240px] flex flex-col overflow-hidden">
+        <div v-if="trackDisplayList.length" ref="trackListRef" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[240px] flex flex-col overflow-hidden">
           <div class="flex items-center justify-between mb-2 sticky top-0 z-10 bg-white/5 pb-2">
-            <span class="font-semibold text-gray-200">轨迹点列表</span>
-            <button class="text-gray-400 hover:text-white" @click="clearAllTracks">清空全部</button>
+            <span class="font-semibold text-gray-200">最近3天轨迹</span>
           </div>
           <div class="flex-1 overflow-y-auto custom-scrollbar">
             <div class="flex flex-col gap-3">
@@ -188,15 +187,14 @@
                     <span class="font-semibold text-gray-200">{{ item.name }}</span>
                     <span class="text-gray-500 font-mono">MMSI {{ item.mmsi }}</span>
                   </div>
-                  <button class="text-gray-400 hover:text-white" @click="removeTrack(item.mmsi)">删除轨迹</button>
                 </div>
                 <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400">暂无轨迹点</div>
                 <div v-else class="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
-                  <div class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1">
-                    <span>序号</span>
-                    <span>时间</span>
-                    <span>位置</span>
-                    <span class="text-right">拉取时间</span>
+                  <div class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1 text-center">
+                    <span class="text-center">序号</span>
+                    <span class="text-center">时间</span>
+                    <span class="text-center">位置</span>
+                    <span class="text-center">拉取时间</span>
                   </div>
                   <div v-for="(p, idx) in getTrackPage(item.mmsi)" :key="`${p.timestamp}-${p.created_at}-${idx}`" class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center">
                     <span class="text-gray-500">#{{ getTrackRowIndex(item.mmsi, idx) }}</span>
@@ -297,6 +295,7 @@ const trackOrder = ref<string[]>([])
 const maxTrackCount = 10
 const trackColors = ['#3b82f6', '#22c55e', '#f97316', '#eab308', '#a855f7', '#ec4899', '#ef4444', '#14b8a6', '#38bdf8', '#f472b6']
 const mapZoomDuration = 3
+const trackListRef = ref<HTMLDivElement | null>(null)
 
 interface TrackPoint {
   lat: number
@@ -342,12 +341,13 @@ let measureHintTooltip: L.Tooltip | null = null
 // Group vessels by company
 const groupedVessels = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
-  const filtered = vessels.value.filter(v => 
-    !query || 
-    v.name.toLowerCase().includes(query) || 
-    v.mmsi.includes(query) ||
-    (v.company && v.company.toLowerCase().includes(query))
-  )
+  const filtered = vessels.value.filter(v => {
+    if (!query) return true
+    const name = String(v.name || '').toLowerCase()
+    const mmsi = String(v.mmsi || '')
+    const company = String(v.company || '').toLowerCase()
+    return name.includes(query) || mmsi.includes(query) || company.includes(query)
+  })
   
   const groups: Record<string, Vessel[]> = {}
   filtered.forEach(v => {
@@ -395,6 +395,17 @@ watch(searchQuery, (newVal) => {
   if (newVal) {
     activeKeys.value = Object.keys(groupedVessels.value)
   }
+})
+
+const scheduleMapResize = async () => {
+  await nextTick()
+  if (map) {
+    map.invalidateSize()
+  }
+}
+
+watch([sidebarOpen, () => trackDisplayList.value.length], () => {
+  scheduleMapResize()
 })
 
 /**
@@ -476,29 +487,21 @@ function getVesselLatLng(vessel: Vessel): L.LatLng | null {
   return L.latLng(lat, lng)
 }
 
-/**
- * 聚焦并缩放到指定位置
- */
-function focusMapAt(latlng: L.LatLng, zoom = 12) {
-  if (!map) return
-  const nextZoom = Math.max(zoom, map.getZoom())
-  map.flyTo(latlng, nextZoom, { animate: true, duration: mapZoomDuration })
-}
-
-function handleVesselClick(vessel: Vessel) {
+async function handleVesselClick(vessel: Vessel) {
   selectedVesselId.value = vessel.id
   const marker = vessel.mmsi ? vesselMarkerMap.get(vessel.mmsi) : null
   const latlng = getVesselLatLng(vessel) || marker?.getLatLng() || null
-  if (latlng) {
-    if (map) {
-      map.setView(latlng, Math.max(12, map.getZoom()), { animate: false })
-    }
-  } else {
-    message.info('该船舶暂无位置信息')
-  }
   if (!vessel.mmsi) {
     message.info('该船舶未配置MMSI，无法查询轨迹')
     return
+  }
+  const hasTrack = await showTrack(vessel.mmsi, { animate: false, includeLatLng: latlng })
+  if (!hasTrack) {
+    if (latlng && map) {
+      map.setView(latlng, Math.max(12, map.getZoom()), { animate: false })
+    } else {
+      message.info('该船舶暂无位置信息')
+    }
   }
   if (marker) {
     marker.openPopup()
@@ -940,7 +943,7 @@ function clearAllTracks() {
 /**
  * 显示最近三天轨迹
  */
-async function showTrack(mmsi: string) {
+async function showTrack(mmsi: string, options?: { animate?: boolean; includeLatLng?: L.LatLng | null }) {
   if (!map || !trackLayerGroup) return
   try {
     const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=3`)
@@ -948,7 +951,7 @@ async function showTrack(mmsi: string) {
     
     if (!tracks || tracks.length < 2) {
       message.info('暂无轨迹数据')
-      return
+      return false
     }
     if (trackLayerMap.has(mmsi)) {
       removeTrack(mmsi)
@@ -970,13 +973,15 @@ async function showTrack(mmsi: string) {
     }).addTo(trackLayerGroup!)
     const points = L.layerGroup().addTo(trackLayerGroup!)
     tracks.forEach((t: any) => {
-      L.circleMarker([t.lat, t.lng], {
+      const point = L.circleMarker([t.lat, t.lng], {
         radius: 2,
         color,
         fillColor: '#fff',
         fillOpacity: 1,
         weight: 1
       }).addTo(points)
+      const timeText = formatTrackTime(t.timestamp || t.created_at)
+      point.bindTooltip(timeText, { direction: 'top', className: 'map-tooltip', opacity: 0.9, offset: [0, -6] })
     })
     line.on('click', () => removeTrack(mmsi))
 
@@ -1002,15 +1007,39 @@ async function showTrack(mmsi: string) {
     }
 
     const bounds = line.getBounds()
+    const includeLatLng = options?.includeLatLng
+    if (includeLatLng) {
+      bounds.extend(includeLatLng)
+    }
     if (bounds.isValid()) {
+      const animate = options?.animate !== false
       if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
-        focusMapAt(bounds.getCenter(), 12)
+        const center = bounds.getCenter()
+        const singleBounds = L.latLngBounds(center, center)
+        const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
+        map.fitBounds(singleBounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
       } else {
-        map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 12, duration: mapZoomDuration })
+        const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
+        map.fitBounds(bounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
       }
     }
+    return true
   } catch (error) {
     console.error('Failed to fetch tracks:', error)
+    return false
+  }
+}
+
+/**
+ * 计算轨迹视野的边距，避免被下方轨迹列表遮挡
+ */
+function getTrackFitPadding() {
+  const basePadding = 40
+  const listHeight = trackListRef.value?.offsetHeight || 0
+  const bottomPadding = Math.max(basePadding, listHeight + 20)
+  return {
+    paddingTopLeft: [basePadding, basePadding] as L.PointExpression,
+    paddingBottomRight: [basePadding, bottomPadding] as L.PointExpression
   }
 }
 
@@ -1018,11 +1047,15 @@ async function showTrack(mmsi: string) {
  * 创建船队标签图标
  * @param text 标签文本
  * @param company 公司名称
+ * @param subText 次行文本
  * @returns Leaflet DivIcon
  */
-function createCompanyTagIcon(text: string, company: string) {
+function createCompanyTagIcon(text: string, company: string, subText?: string) {
   const color = getTagColor(company)
-  const textWidth = text.length * 8 + 16
+  const maxLen = Math.max(text.length, subText?.length || 0)
+  const textWidth = maxLen * 8 + 16
+  const height = subText ? 30 : 20
+  const secondLine = subText ? `<div style="font-size: 10px; font-weight: 500; opacity: 0.9;">${subText}</div>` : ''
   
   return L.divIcon({
     className: 'company-tag-icon',
@@ -1037,8 +1070,12 @@ function createCompanyTagIcon(text: string, company: string) {
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       border: 1px solid rgba(255,255,255,0.3);
       backdrop-filter: blur(4px);
-    ">${text}</div>`,
-    iconSize: [textWidth, 20],
+       display: flex;
+       flex-direction: column;
+       align-items: center;
+       line-height: 1.2;
+    "><div>${text}</div>${secondLine}</div>`,
+    iconSize: [textWidth, height],
     iconAnchor: [-5, 10]
   })
 }
@@ -1101,7 +1138,7 @@ function renderMarkers() {
   tagLayerGroup.clearLayers()
   vesselMarkerMap.clear()
   
-  const isCloseZoom = currentZoom.value > 12
+  const isCloseZoom = currentZoom.value >= 11
 
   vessels.value.forEach(v => {
     if (v.lat == null || v.lng == null) return
@@ -1115,13 +1152,11 @@ function renderMarkers() {
     }
     
     // Tag Logic
-    let tagText = getCompanyAbbreviation(v.company)
+    const companyName = v.company || '其他'
+    const tagText = isCloseZoom ? `${companyName}|${v.name}` : getCompanyAbbreviation(companyName)
     if (tagText) {
-      if (isCloseZoom) {
-        tagText = `${tagText} ${v.name}`
-      }
-      
-      const tagIcon = createCompanyTagIcon(tagText, v.company || '')
+      const speedText = isCloseZoom ? formatSpeed(v.speed) : undefined
+      const tagIcon = createCompanyTagIcon(tagText, companyName, speedText)
       const tagMarker = L.marker([v.lat, v.lng], { icon: tagIcon }).addTo(tagLayerGroup!)
       bindPopup(tagMarker, v, iconKey)
     }
@@ -1203,6 +1238,7 @@ function updateSidebarForViewport() {
   } else {
     sidebarOpen.value = true
   }
+  scheduleMapResize()
 }
 
 onMounted(async () => {
@@ -1217,16 +1253,36 @@ onMounted(async () => {
   })
   
   const tiandituKey = '3f9084289bc4ee4f8b5ab359f46bc856'
-  const baseUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-  const labelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  const baseUrl = `https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  const labelUrl = `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  const satUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  const satLabelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
   L.tileLayer(baseUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
     maxZoom: 18,
-    className: 'tianditu-satellite-layer'
+    minZoom: 2,
+    keepBuffer: 3,
+    className: 'tianditu-vector-layer'
   }).addTo(map)
   L.tileLayer(labelUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
     maxZoom: 18,
+    minZoom: 2,
+    keepBuffer: 3,
+    className: 'tianditu-vector-layer'
+  }).addTo(map)
+  L.tileLayer(satUrl, {
+    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+    maxZoom: 18,
+    minZoom: 6,
+    keepBuffer: 3,
+    className: 'tianditu-satellite-layer'
+  }).addTo(map)
+  L.tileLayer(satLabelUrl, {
+    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+    maxZoom: 18,
+    minZoom: 6,
+    keepBuffer: 3,
     className: 'tianditu-satellite-layer'
   }).addTo(map)
   
@@ -1284,6 +1340,10 @@ onUnmounted(() => {
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
+}
+
+:deep(.leaflet-container) {
+  background: #0f172a;
 }
 
 :deep(.tianditu-satellite-layer) {

@@ -46,6 +46,20 @@ def normalize_events(events, fallback_category):
     return consolidate_regulation_events(normalized)
 
 def is_relevant_news(item, text_content, final_result):
+    source_name = str(item.get("source_name") or "")
+    if source_name:
+        source_lower = source_name.lower()
+        source_keywords = ["疏浚", "航道", "港航", "港口", "港务", "航务", "水道", "水运", "海工", "中交", "dredg", "dredging", "waterway", "harbor", "harbour", "port"]
+        if any(k in source_lower for k in source_keywords):
+            return True
+    url = str(item.get("link") or item.get("url") or "")
+    if url:
+        url_lower = url.lower()
+        if any(k in url_lower for k in ["dredg", "dredging", "waterway", "harbor", "harbour", "port", "channel"]):
+            return True
+    category = normalize_category(final_result.get("category")) if isinstance(final_result, dict) else None
+    if category and category != "Other":
+        return True
     fields = [
         item.get("title"),
         final_result.get("title_cn"),
@@ -250,7 +264,12 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
             messages=[{"role": "user", "content": filter_prompt}],
             response_format={"type": "json_object"}
         )
-        return json.loads(resp.choices[0].message.content)
+        content = resp.choices[0].message.content
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+        return json.loads(content)
     except Exception as e:
         print(f"[Text] 分析失败: {e}")
         return None

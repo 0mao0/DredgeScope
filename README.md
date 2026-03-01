@@ -136,5 +136,51 @@ dredgescope
 - 定时任务入口：`run_scheduler.bat`
 
 
+flowchart TB
+    subgraph 采集层["📥 采集层 acquisition"]
+        S1[sources.json 数据源配置] --> RSS[RSS 抓取]
+        S1 --> WEB[Web 索引抓取]
+        S1 --> WECHAT[微信公众号采集]
+        RSS --> RAW[raw_items 原始候选]
+        WEB --> RAW
+        WECHAT --> RAW
+    end
 
+    subgraph 过滤层["🔍 过滤层 main.py"]
+        RAW --> NORM[URL 规范化]
+        NORM --> BASIC[标题/链接有效性]
+        BASIC --> DEDUP[任务内去重 + 数据库去重]
+        DEDUP --> TIME[发布时间 5 天窗口]
+        TIME --> PENDING[待分析列表 items]
+        TIME --> AUDIT[审核清单 scheduler/*.md]
+    end
 
+    subgraph 入库层["💾 入库 - 原始记录"]
+        PENDING --> RAWDB[save_raw_articles 入库 articles]
+    end
+
+    subgraph 分析层["🤖 分析层 info_analysis.py"]
+        RAWDB --> TEXT[Text LLM]
+        RAWDB --> VL[视觉 VL 模型]
+        TEXT --> MERGE[Text优先 + VL补充]
+        VL --> MERGE
+        MERGE --> REL[相关性判定 is_relevant_news]
+        REL --> RESULT[结果结构化: title_cn/summary/events/category]
+    end
+
+    subgraph 输出层["📦 输出层 reporting + database"]
+        RESULT --> SAVE[save_history -> save_article_and_events]
+        SAVE --> DB[(SQLite: articles/events/event_groups)]
+        SAVE --> REPORT[report.md + scheduler审核]
+    end
+
+    subgraph 展示层["🖥️ 展示 API"]
+        DB --> API1[/api/articles 列表/筛选]
+        DB --> API2[/api/article/{id} 详情]
+        DB --> API3[/api/sources /api/scheduler]
+    end
+
+    subgraph 推送层["📨 企业微信推送"]
+        DB --> PUSH[push_daily_report]
+        PUSH --> WECOM[Webhook 模板卡/降级文本]
+    end

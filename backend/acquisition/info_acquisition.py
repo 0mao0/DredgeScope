@@ -5,6 +5,8 @@ from playwright.async_api import async_playwright
 import json
 import os
 import hashlib
+import re
+from email.utils import parsedate_to_datetime
 import config
 
 async def launch_chromium(p):
@@ -46,21 +48,28 @@ async def fetch_rss(url, hours=24, source_name=None):
         items = []
         cutoff = datetime.now() - timedelta(hours=hours)
         for entry in d.entries:
-            pub_date = None
+            pub_dt = None
+            pub_text = None
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                pub_date = datetime(*entry.published_parsed[:6])
+                pub_dt = datetime(*entry.published_parsed[:6])
             elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                pub_date = datetime(*entry.updated_parsed[:6])
-            
-            # Fallback to now if no date found, but maybe mark it
-            if not pub_date: 
-                pub_date = datetime.now()
-            
-            if pub_date > cutoff:
+                pub_dt = datetime(*entry.updated_parsed[:6])
+            else:
+                pub_text = _normalize_publish_date(entry.get("published") or entry.get("updated"))
+                if pub_text:
+                    try:
+                        pub_dt = datetime.strptime(pub_text, "%Y-%m-%d")
+                    except Exception:
+                        pub_dt = None
+
+            if not pub_dt:
+                continue
+
+            if pub_dt > cutoff:
                 items.append({
                     'title': entry.title,
                     'link': entry.link,
-                    'pub_date': pub_date,
+                    'pub_date': pub_dt.strftime("%Y-%m-%d"),
                     'summary_raw': entry.summary if hasattr(entry, 'summary') else '',
                     'source_type': 'rss',
                     'source_name': source_name or ''
@@ -159,7 +168,7 @@ async def fetch_web_index(context, source):
             items.append({
                 'title': l['title'],
                 'link': l['link'],
-                'pub_date': datetime.now(), # 暂无准确时间，默认最新
+                'pub_date': '',
                 'summary_raw': '',
                 'source_type': 'web',
                 'source_name': source.get('name', '')
@@ -216,6 +225,41 @@ def _clean_text(text_content):
             continue
         cleaned.append(line)
     return "\n".join(cleaned)
+
+def _normalize_publish_date(value):
+    """解析发布日期并返回 YYYY-MM-DD"""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if "," in text and any(x in text for x in ["GMT", "+", "-"]):
+            dt = parsedate_to_datetime(text)
+            if dt:
+                return dt.date().isoformat()
+    except Exception:
+        pass
+    try:
+        cleaned = text.replace("年", "-").replace("月", "-").replace("日", "")
+        cleaned = cleaned.replace("/", "-")
+        if cleaned.endswith("Z"):
+            cleaned = cleaned[:-1] + "+00:00"
+        if "T" in cleaned:
+            dt = datetime.fromisoformat(cleaned)
+            return dt.date().isoformat()
+        if " " in cleaned and ":" in cleaned:
+            dt = datetime.fromisoformat(cleaned.replace(" ", "T"))
+            return dt.date().isoformat()
+    except Exception:
+        pass
+    match = re.search(r"(\d{4})[./\-年](\d{1,2})[./\-月](\d{1,2})", text)
+    if match:
+        y, m, d = match.groups()
+        return f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+    return None
 
 def _safe_filename(title, url):
     base = "".join([c for c in str(title or "") if c.isalnum() or c in (" ", "-", "_")]).strip()
@@ -334,6 +378,39 @@ async def fetch_web_article(context, item):
             if text_content:
                 text_content = _clean_text(text_content)
 
+            if not item.get("pub_date"):
+                try:
+                    raw_date = await page.evaluate("""() => {
+                        const selectors = [
+                            'meta[property="article:published_time"]',
+                            'meta[property="og:published_time"]',
+                            'meta[name="publishdate"]',
+                            'meta[name="pubdate"]',
+                            'meta[name="publish-date"]',
+                            'meta[name="date"]',
+                            'meta[itemprop="datePublished"]',
+                            'meta[name="parsely-pub-date"]'
+                        ];
+                        for (const sel of selectors) {
+                            const el = document.querySelector(sel);
+                            if (el && el.content) return el.content;
+                        }
+                        const timeEl = document.querySelector('time[datetime]');
+                        if (timeEl && timeEl.getAttribute('datetime')) {
+                            return timeEl.getAttribute('datetime');
+                        }
+                        const timeText = document.querySelector('time');
+                        if (timeText && timeText.innerText) {
+                            return timeText.innerText;
+                        }
+                        return '';
+                    }""")
+                except Exception:
+                    raw_date = ""
+                normalized = _normalize_publish_date(raw_date)
+                if normalized:
+                    item["pub_date"] = normalized
+
             try:
                 locator = page.locator('article').first
                 box = None
@@ -371,7 +448,9 @@ async def enrich_web_items(context, items):
 
     async def runner(item):
         async with sem:
-            if item.get("source_type") == "web":
+            source_type = (item.get("source_type") or "").lower()
+            link = (item.get("link") or "").lower()
+            if source_type in ["web", "wechat", "official", "rsshub"] or "mp.weixin.qq.com" in link:
                 await fetch_web_article(context, item)
             results.append(item)
 

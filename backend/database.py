@@ -50,6 +50,26 @@ def enrich_event_category(item):
         item["category"] = "Regulation"
     return item
 
+def pick_primary_category(article_data, events_data):
+    category = normalize_category(article_data.get("category") if isinstance(article_data, dict) else None)
+    if category in ALLOWED_CATEGORIES:
+        return category
+    priority = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market", "Other"]
+    found = set()
+    for evt in events_data or []:
+        if not isinstance(evt, dict):
+            continue
+        evt_cat = normalize_category(evt.get("category"))
+        if not evt_cat:
+            evt_type = evt.get("event_type") or evt.get("type") or evt.get("eventType")
+            evt_cat = normalize_category(evt_type)
+        if evt_cat in ALLOWED_CATEGORIES:
+            found.add(evt_cat)
+    for key in priority:
+        if key in found:
+            return key
+    return None
+
 def init_track_db():
     """初始化轨迹数据库"""
     conn = sqlite3.connect(TRACK_DB_PATH)
@@ -136,6 +156,7 @@ def init_db():
         screenshot_path TEXT,
         is_significant BOOLEAN,
         vl_desc TEXT,
+        category TEXT,
         is_hidden INTEGER DEFAULT 0,
         valid INTEGER DEFAULT 1,
         created_at TEXT
@@ -184,6 +205,16 @@ def init_db():
             print(f"[DB] 添加 valid 列失败: {e}")
 
     try:
+        c.execute("SELECT category FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 articles 表缺失 category 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE articles ADD COLUMN category TEXT")
+            print("[DB] 已成功添加 category 列")
+        except Exception as e:
+            print(f"[DB] 添加 category 列失败: {e}")
+
+    try:
         c.execute("SELECT full_text_cn FROM articles LIMIT 1")
     except sqlite3.OperationalError:
         print("[DB] 检测到 articles 表缺失 full_text_cn 列，正在添加...")
@@ -202,6 +233,31 @@ def init_db():
             print("[DB] 已成功添加 content 列")
         except Exception as e:
             print(f"[DB] 添加 content 列失败: {e}")
+
+    try:
+        c.execute("""
+            UPDATE articles
+            SET category = (
+                SELECT e.category
+                FROM events e
+                WHERE e.article_id = articles.id
+                ORDER BY CASE e.category
+                    WHEN 'Bid' THEN 1
+                    WHEN 'Project' THEN 2
+                    WHEN 'Equipment' THEN 3
+                    WHEN 'Regulation' THEN 4
+                    WHEN 'R&D' THEN 5
+                    WHEN 'Market' THEN 6
+                    WHEN 'Other' THEN 7
+                    ELSE 99
+                END
+                LIMIT 1
+            )
+            WHERE (category IS NULL OR category = '')
+              AND EXISTS (SELECT 1 FROM events e2 WHERE e2.article_id = articles.id)
+        """)
+    except Exception as e:
+        print(f"[DB] 回填 category 列失败: {e}")
 
     # 2. 事件分组表 (Event Groups)
     c.execute('''CREATE TABLE IF NOT EXISTS event_groups (
@@ -488,6 +544,7 @@ def save_article_and_events(article_data, events_data):
     c = conn.cursor()
     
     try:
+        primary_category = pick_primary_category(article_data, events_data)
         # 1. 插入或忽略文章 (避免重复)
         # 注意：如果文章已存在，我们跳过插入，但可能需要检查是否需要更新（目前简化为跳过）
         c.execute("SELECT id FROM articles WHERE url = ?", (article_data['url'],))
@@ -510,6 +567,7 @@ def save_article_and_events(article_data, events_data):
                     screenshot_path = COALESCE(NULLIF(?, ''), screenshot_path),
                     is_significant = COALESCE(?, is_significant),
                     vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
+                    category = COALESCE(NULLIF(?, ''), category),
                     valid = COALESCE(?, valid),
                     is_hidden = COALESCE(?, is_hidden)
                 WHERE id = ?
@@ -526,6 +584,7 @@ def save_article_and_events(article_data, events_data):
                     article_data.get('screenshot_path', ''),
                     article_data.get('significant', None),
                     article_data.get('image_desc', ''),
+                    primary_category or '',
                     article_data.get('valid', None),
                     article_data.get('is_hidden', None),
                     article_id
@@ -562,8 +621,8 @@ def save_article_and_events(article_data, events_data):
                 pass
 
             c.execute('''INSERT INTO articles 
-                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, is_hidden, valid, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     article_data['url'],
                     article_data['title'],
@@ -577,6 +636,7 @@ def save_article_and_events(article_data, events_data):
                     article_data.get('screenshot_path', ''),
                     article_data.get('significant', False),
                     article_data.get('image_desc', ''),
+                    primary_category,
                     is_hidden,
                     valid,
                     datetime.now().isoformat()
@@ -767,7 +827,7 @@ def save_raw_articles(items):
             c.execute("SELECT id FROM articles WHERE url = ?", (url,))
             if c.fetchone():
                 continue
-            pub_date = item.get("pub_date") or item.get("date") or datetime.now().isoformat()
+            pub_date = item.get("pub_date") or item.get("date") or ""
             content = item.get("content") or item.get("summary_raw") or item.get("digest") or ""
             screenshot_path = item.get("screenshot_path") or ""
             c.execute('''INSERT INTO articles 

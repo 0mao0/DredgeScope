@@ -122,12 +122,12 @@ class WeChatAcquisition:
             logger.error(f"RSSHub 采集异常: {e}")
             return []
 
-    def get_articles_by_biz(self, fakeid: str, count: int = 5) -> List[Dict[str, Any]]:
+    def get_articles_by_biz(self, fakeid: str, count: int = 5, max_pages: int = 5) -> List[Dict[str, Any]]:
         """
         获取指定公众号的文章列表 (带自动回退逻辑)
         """
         # 1. 优先尝试官方接口
-        articles = self._get_articles_official(fakeid, count)
+        articles = self._get_articles_official(fakeid, count, max_pages=max_pages)
         
         # 2. 如果官方接口失败 (可能是 Cookie 过期)，尝试 RSSHub
         if not articles:
@@ -136,52 +136,58 @@ class WeChatAcquisition:
             
         return articles
 
-    def _get_articles_official(self, fakeid: str, count: int = 5) -> List[Dict[str, Any]]:
+    def _get_articles_official(self, fakeid: str, count: int = 5, max_pages: int = 5) -> List[Dict[str, Any]]:
         """
         (内部方法) 官方后台接口采集逻辑
         """
         if not self.cookie or not self.token:
             return []
 
-        params = {
-            "action": "list_ex",
-            "begin": "0",
-            "count": str(count),
-            "query": "",
-            "fakeid": fakeid,
-            "type": "9",
-            "token": self.token,
-            "lang": "zh_CN",
-            "f": "json",
-            "ajax": "1"
-        }
-
         try:
-            time.sleep(random.uniform(1, 3))
-            response = requests.get(self.base_url, headers=self.headers, params=params, timeout=15)
-            
-            if response.status_code != 200:
-                return []
-
-            data = response.json()
-            if data.get("base_resp", {}).get("ret") != 0:
-                # 如果是 session 过期 (ret=200003 或 200040 等)
-                ret = data.get("base_resp", {}).get("ret")
-                if ret in [200003, 200040, -1]:
-                    logger.warning(f"微信 Session 可能已过期 (ret={ret})")
-                return []
-
             articles = []
-            for msg in data.get("app_msg_list", []):
-                articles.append({
-                    "title": msg.get("title"),
-                    "link": msg.get("link"),
-                    "date": time.strftime("%Y-%m-%d", time.localtime(msg.get("update_time"))),
-                    "source": "微信公众号",
-                    "digest": msg.get("digest"),
-                    "cover": msg.get("cover"),
-                    "source_type": "official"
-                })
+            begin = 0
+            page = 0
+            while len(articles) < count and page < max_pages:
+                page_size = min(20, count - len(articles))
+                params = {
+                    "action": "list_ex",
+                    "begin": str(begin),
+                    "count": str(page_size),
+                    "query": "",
+                    "fakeid": fakeid,
+                    "type": "9",
+                    "token": self.token,
+                    "lang": "zh_CN",
+                    "f": "json",
+                    "ajax": "1"
+                }
+                time.sleep(random.uniform(1, 3))
+                response = requests.get(self.base_url, headers=self.headers, params=params, timeout=15)
+                if response.status_code != 200:
+                    break
+                data = response.json()
+                if data.get("base_resp", {}).get("ret") != 0:
+                    ret = data.get("base_resp", {}).get("ret")
+                    if ret in [200003, 200040, -1]:
+                        logger.warning(f"微信 Session 可能已过期 (ret={ret})")
+                    break
+                app_list = data.get("app_msg_list", [])
+                if not app_list:
+                    break
+                for msg in app_list:
+                    articles.append({
+                        "title": msg.get("title"),
+                        "link": msg.get("link"),
+                        "date": time.strftime("%Y-%m-%d", time.localtime(msg.get("update_time"))),
+                        "source": "微信公众号",
+                        "digest": msg.get("digest"),
+                        "cover": msg.get("cover"),
+                        "source_type": "official"
+                    })
+                    if len(articles) >= count:
+                        break
+                begin += page_size
+                page += 1
             return articles
         except Exception as e:
             logger.error(f"官方接口采集异常: {e}")
@@ -203,7 +209,7 @@ class WeChatAcquisition:
                 continue
                 
             logger.info(f"正在采集公众号: {name} ({fakeid})")
-            articles = self.get_articles_by_biz(fakeid, count=count_per_biz)
+            articles = self.get_articles_by_biz(fakeid, count=count_per_biz, max_pages=3)
             
             # 注入来源名称
             for a in articles:

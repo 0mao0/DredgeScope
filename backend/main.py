@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from playwright.async_api import async_playwright
 
 import database
 from static.constants import JUNK_TITLES_EXACT, JUNK_KEYWORDS_PARTIAL
@@ -210,8 +211,21 @@ async def main():
     
     # 微信采集 (自动从 backend/data/wechat_session.json 加载持久化的凭证)
     # 如果 Session 失效，会自动回退到 RSSHub 方案
-    wechat_items = wechat_acquisition.wechat_scraper.batch_get_articles(wechat_biz_list, count_per_biz=3)
+    wechat_items = wechat_acquisition.wechat_scraper.batch_get_articles(wechat_biz_list, count_per_biz=10)
     if wechat_items:
+        try:
+            async with async_playwright() as p:
+                browser = await info_acquisition.launch_chromium(p)
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 800},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    locale="zh-CN",
+                    ignore_https_errors=True
+                )
+                wechat_items = await info_acquisition.enrich_web_items(context, wechat_items)
+                await browser.close()
+        except Exception as e:
+            print(f"[WeChat] 页面抓取失败: {e}")
         print(f"成功获取 {len(wechat_items)} 条微信公众号新闻")
         raw_items.extend(wechat_items)
 
@@ -224,6 +238,7 @@ async def main():
     outdated_count = 0
     audit_rows = []
     pending_map = {}
+    pub_date_map = {}
     seen_links = set()
 
     for item in raw_items:
@@ -282,22 +297,35 @@ async def main():
 
         # 2. 发布时间拦截（5天）
         pub_dt = parse_pub_datetime(item.get("pub_date"))
-        if pub_dt:
-            if datetime.now() - pub_dt > timedelta(days=5):
-                outdated_count += 1
-                audit_rows.append({
-                    "site": item.get("source_name", ""),
-                    "title": item.get("title", ""),
-                    "link": item.get("link", ""),
-                    "pub_date": item.get("pub_date"),
-                    "keep": False,
-                    "text_ok": False,
-                    "vl_ok": False,
-                    "remark": "发布时间早于5天"
-                })
-                continue
+        if not pub_dt:
+            outdated_count += 1
+            audit_rows.append({
+                "site": item.get("source_name", ""),
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "pub_date": item.get("pub_date"),
+                "keep": False,
+                "text_ok": False,
+                "vl_ok": False,
+                "remark": "发布时间缺失"
+            })
+            continue
+        if datetime.now() - pub_dt > timedelta(days=5):
+            outdated_count += 1
+            audit_rows.append({
+                "site": item.get("source_name", ""),
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "pub_date": item.get("pub_date"),
+                "keep": False,
+                "text_ok": False,
+                "vl_ok": False,
+                "remark": "发布时间早于5天"
+            })
+            continue
 
         seen_links.add(item['link'])
+        pub_date_map[item['link']] = item.get("pub_date")
         
         # 3. 标记为待分析
         items.append(item)
@@ -335,11 +363,22 @@ async def main():
     analysis_items = database.get_articles_by_urls([item['link'] for item in items])
     results = await info_analysis.process_items_from_db(analysis_items)
     total_events = 0
+    cutoff_dt = datetime.now() - timedelta(days=5)
+    kept_results = []
     for r in results or []:
-        events = r.get("events") if isinstance(r, dict) else None
-        if events:
-            total_events += len(events)
         link_key = r.get("url") if isinstance(r, dict) else None
+        if isinstance(r, dict):
+            original_pub = parse_pub_datetime(pub_date_map.get(link_key)) if link_key else None
+            if not original_pub or original_pub < cutoff_dt:
+                if link_key and link_key in pending_map:
+                    idx = pending_map[link_key]
+                    audit_rows[idx]["remark"] = "发布时间早于5天"
+                continue
+            r["pub_date"] = pub_date_map.get(link_key)
+            kept_results.append(r)
+            events = r.get("events") if isinstance(r, dict) else None
+            if events:
+                total_events += len(events)
         if link_key and link_key in pending_map:
             idx = pending_map[link_key]
             is_junk = r.get("is_junk", False)
@@ -358,12 +397,12 @@ async def main():
 
     # 3. 存储
     print(">>> 阶段3: 存储结果...")
-    report_generation.save_history(results)
+    report_generation.save_history(kept_results)
     try:
         write_markdown_audit(audit_rows)
     except Exception:
         pass
-    write_scheduler_log(f"分析完成: 文章{len(results)} 事件{total_events}")
+    write_scheduler_log(f"分析完成: 文章{len(kept_results)} 事件{total_events}")
     
 
 if __name__ == "__main__":
