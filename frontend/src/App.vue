@@ -1,6 +1,11 @@
 <template>
   <a-config-provider :theme="themeConfig">
-    <router-view />
+    <div class="h-screen w-screen overflow-hidden flex flex-col bg-[#0f172a] text-slate-200">
+      <NavBar class="flex-shrink-0 z-50 relative mb-6" />
+      <div class="flex-1 overflow-hidden relative min-h-0 w-full">
+        <router-view />
+      </div>
+    </div>
   </a-config-provider>
 </template>
 
@@ -8,6 +13,7 @@
 import { onMounted, provide, reactive } from 'vue'
 import { theme } from 'ant-design-vue'
 import { useNewsStore, useVesselStore } from '@/stores'
+import NavBar from '@/components/NavBar.vue'
 
 const newsStore = useNewsStore()
 const vesselStore = useVesselStore()
@@ -35,7 +41,5 @@ onMounted(() => {
 </script>
 
 <style>
-#app {
-  min-height: 100vh;
-}
+/* Global styles */
 </style>

@@ -1,9 +1,6 @@
 <template>
-  <div class="min-h-screen">
-    <!-- Navbar -->
-    <NavBar class="mb-6" />
-    
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+  <div class="h-full overflow-y-auto custom-scrollbar">
+    <main class="w-full px-4 sm:px-6 lg:px-8 space-y-6 pb-6">
       <!-- Filter Bar -->
       <div class="glass-card rounded-2xl p-5">
         <div class="flex flex-wrap items-center gap-3">
@@ -63,7 +60,6 @@ import { ref, onMounted } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import NavBar from '@/components/NavBar.vue'
 
 Chart.register(...registerables)
 
@@ -247,21 +243,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-:deep(.ant-picker) {
-  background: transparent;
-  border: none;
-}
-
-:deep(.ant-picker-input > input) {
-  color: #fff;
-}
-
-:deep(.ant-picker-suffix) {
-  color: #9ca3af;
-}
-
-:deep(.glass-card) {
-  background: rgba(30, 41, 59, 0.7);
+.glass-card {
+  background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -276,5 +259,40 @@ onMounted(() => {
   position: relative;
   height: 400px;
   width: 100%;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Custom Ant Design Overrides for dark theme consistency */
+:deep(.ant-picker) {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  height: 38px !important;
+}
+
+:deep(.ant-picker-input > input) {
+  color: #e2e8f0 !important;
+  font-size: 0.875rem !important;
+}
+
+:deep(.ant-picker-suffix) {
+  color: #94a3b8 !important;
 }
 </style>

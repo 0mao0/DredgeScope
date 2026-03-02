@@ -1,8 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
-    <!-- Navbar -->
-    <NavBar class="mb-6" />
-
+  <div class="h-full flex flex-col text-white overflow-hidden">
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden relative min-h-0">
       <!-- Sidebar -->
@@ -228,7 +225,6 @@ import { message } from 'ant-design-vue'
 import L from 'leaflet'
 import type { LeafletMouseEvent } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import NavBar from '@/components/NavBar.vue'
 
 interface Vessel {
   id: string

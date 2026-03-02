@@ -1,32 +1,34 @@
 <template>
-  <div class="min-h-screen flex flex-col h-screen overflow-hidden bg-[#0f172a]">
-    <!-- Navbar -->
-    <NavBar class="flex-shrink-0 mb-6" />
-
+  <div class="h-full flex flex-col overflow-hidden">
     <!-- Top Filter Area -->
-    <header class="px-2 sm:px-4 lg:px-8 py-2 flex items-center justify-between bg-white/5 border-b border-white/10 flex-shrink-0 h-12">
-      <div class="flex items-center gap-4 h-full">
-        <div class="text-[10px] text-gray-500 bg-black/20 px-2 py-0.5 rounded border border-white/5 h-7 flex items-center">
-          共 {{ total }} 条记录
+    <header class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]">
+      <div class="flex items-center gap-4 flex-wrap">
+        <div class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
+          共 <span class="text-white font-bold mx-1">{{ total }}</span> 条记录
         </div>
       </div>
       
-      <div class="flex items-center gap-2 h-full">
+      <div class="flex items-center gap-3 flex-wrap">
         <!-- 搜索 -->
-        <a-input-search
-          v-model:value="filters.keyword"
-          placeholder="搜索标题/摘要..."
-          size="small"
-          class="w-56 header-filter-input"
-          @search="handleSearch"
-        />
+        <div class="relative w-64">
+          <input 
+            v-model="filters.keyword" 
+            type="text" 
+            placeholder="搜索标题/摘要..." 
+            class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:border-blue-500 transition-colors text-white placeholder-gray-500"
+            @keyup.enter="handleSearch"
+          />
+          <i 
+            class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-gray-500 text-xs cursor-pointer hover:text-blue-400 transition-colors"
+            @click="handleSearch"
+          ></i>
+        </div>
         
         <!-- 有效/失效筛选 -->
         <a-select 
           v-model:value="filters.valid" 
           placeholder="数据状态"
-          size="small"
-          class="w-28 header-filter-input"
+          class="w-32 custom-select"
           @change="handleSearch"
         >
           <a-select-option :value="null">全部状态</a-select-option>
@@ -37,19 +39,21 @@
         <!-- 时间维度 -->
         <a-range-picker 
           v-model:value="dateRange" 
-          size="small"
-          class="w-64 header-filter-input"
+          class="w-64 custom-picker"
           format="YYYY-MM-DD"
           @change="handleSearch"
         />
 
-        <a-button type="primary" size="small" ghost @click="resetFilters" class="border-none hover:bg-white/5 h-7 px-2">
-          <i class="fa-solid fa-rotate-right mr-1"></i> 重置
-        </a-button>
+        <button 
+          @click="resetFilters" 
+          class="h-9 px-4 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex items-center gap-2"
+        >
+          <i class="fa-solid fa-rotate-right"></i> 重置
+        </button>
       </div>
     </header>
 
-    <main class="flex-1 flex overflow-hidden px-2 sm:px-4 lg:px-8 py-4 gap-4">
+    <main class="flex-1 flex overflow-hidden px-4 py-4 gap-4">
       <!-- Zone A: Tree (20%) -->
       <aside class="w-1/5 glass-card rounded-xl flex flex-col overflow-hidden border border-white/10">
         <div class="p-3 border-b border-white/5 bg-white/5 flex items-center justify-between">
@@ -403,7 +407,6 @@ import dayjs from 'dayjs'
 import { marked } from 'marked'
 import type { Dayjs } from 'dayjs'
 import type { NewsItem } from '@/stores'
-import NavBar from '@/components/NavBar.vue'
 
 // --- 状态定义 ---
 const loading = ref(false)
@@ -656,94 +659,46 @@ onMounted(() => {
 
 <style scoped>
 .glass-card {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.3);
 }
 
-/* 紧凑型页头样式 */
-:deep(.header-filter-input) {
-  height: 28px;
-  &.ant-input-search .ant-input,
-  &.ant-picker,
-  &.ant-select-selector {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #94a3b8 !important; /* text-slate-400 */
-    font-size: 11px !important;
-  }
-  
-  &.ant-input-search .ant-input-search-button {
-    background: transparent !important;
-    border: none !important;
-    color: #475569 !important; /* text-slate-600 */
-    &:hover {
-      color: #38bdf8 !important; /* text-brand-400 */
-    }
-  }
-
-  /* 调整 placeholder 颜色 */
-  &.ant-input-search .ant-input::placeholder,
-  &.ant-picker .ant-picker-input > input::placeholder,
-  &.ant-select-selection-placeholder {
-    color: #475569 !important; /* text-slate-600 */
-  }
-}
-
-:deep(.header-filter-input.ant-input-search .ant-input) {
-  height: 28px;
-  line-height: 28px;
-}
-
-:deep(.header-filter-input.ant-input-search .ant-input-group-addon) {
-  height: 28px;
-}
-
-:deep(.header-filter-input.ant-select .ant-select-selector),
-:deep(.header-filter-input.ant-picker) {
-  height: 28px;
-  display: flex;
-  align-items: center;
-}
-
-:deep(.ant-input-search .ant-input) {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
-}
-
+/* Custom Ant Design Overrides for dark theme consistency */
+:deep(.ant-select-selector),
 :deep(.ant-picker) {
-  background: rgba(15, 23, 42, 0.6) !important;
+  background-color: rgba(30, 41, 59, 0.5) !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  border-radius: 0.5rem !important; /* rounded-lg */
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  height: 38px !important; /* Match input height */
 }
 
+:deep(.ant-select-selection-item),
+:deep(.ant-select-selection-placeholder),
 :deep(.ant-picker-input > input) {
-  color: #e2e8f0;
+  color: #e2e8f0 !important;
+  font-size: 0.875rem !important; /* text-sm */
 }
 
-:deep(.ant-select-selector) {
-  background: rgba(15, 23, 42, 0.6) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: #e2e8f0 !important;
-}
-
-:deep(.ant-select-selection-item) {
-  color: #e2e8f0 !important;
+:deep(.ant-picker-suffix) {
+  color: #94a3b8 !important;
 }
 
 :deep(.ant-image) {

@@ -1,5 +1,5 @@
 <template>
-  <nav class="sticky top-0 z-40 w-full glass-card border-b border-white/5">
+  <nav class="mx-4 mt-4 rounded-2xl glass-card border border-white/5 z-40">
     <div class="w-full px-2 sm:px-4 lg:px-8">
       <div class="flex items-center justify-between h-14 sm:h-16">
         <div class="flex items-center gap-2">
