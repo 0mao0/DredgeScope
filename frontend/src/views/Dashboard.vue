@@ -314,6 +314,7 @@ const modalVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
+let refreshTimer: number | null = null
 
 // Report filtering state
 const currentHour = dayjs().hour()
@@ -500,6 +501,23 @@ onMounted(async () => {
   ])
   await loadReportData(false)
   loading.value = false
+
+  // Auto-refresh every 5 minutes
+  refreshTimer = window.setInterval(async () => {
+    await Promise.all([
+      newsStore.fetchNews(),
+      vesselStore.fetchVessels()
+    ])
+    // Also refresh report data if needed, but maybe less frequently or just with the others
+    await loadReportData(false)
+  }, 5 * 60 * 1000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 
 watch(modalVisible, (isOpen) => {

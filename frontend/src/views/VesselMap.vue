@@ -143,6 +143,13 @@
           <div class="absolute bottom-8 right-4 z-[1000] flex flex-col gap-2">
           <button 
             class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+            title="刷新数据"
+            @click="fetchVessels"
+          >
+            <i class="fa-solid fa-rotate" :class="{ 'fa-spin': loading }"></i>
+          </button>
+          <button 
+            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
             title="复位"
             @click="resetView"
           >
@@ -243,6 +250,7 @@ interface Vessel {
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: L.Map | null = null
+let refreshTimer: number | null = null
 const sidebarOpen = ref(true)
 const loading = ref(false)
 const selectedVesselId = ref<string | null>(null)
@@ -1218,7 +1226,7 @@ function renderMarkers() {
     if (v.updated_at) {
       try {
         const date = new Date(v.updated_at)
-        timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:00`
+        timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
       } catch (e) {}
     }
     
@@ -1353,9 +1361,16 @@ onMounted(async () => {
   }
   
   await fetchVessels()
+  
+  // Auto-refresh every 5 minutes
+  refreshTimer = window.setInterval(fetchVessels, 5 * 60 * 1000)
 })
 
 onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
   window.removeEventListener('resize', updateSidebarForViewport)
   if (map) {
     map.remove()
