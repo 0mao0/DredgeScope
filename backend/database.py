@@ -1,74 +1,16 @@
 import sqlite3
-import json
 import os
 from datetime import datetime
 import config
 from static.constants import (
     DEFAULT_CATEGORY,
     ALLOWED_CATEGORIES,
-    KEYWORD_CATEGORY_MAP,
     normalize_category,
-    infer_category_from_text,
-    text_contains_any,
-    normalize_event_text,
-    build_event_signature
+    infer_category_from_text
 )
 
 DB_PATH = os.path.join(config.DATA_DIR, 'dredge_intel.db')
 TRACK_DB_PATH = os.path.join(config.DATA_DIR, 'ship_tracks.db')
-
-def enrich_event_category(item):
-    category = normalize_category(item.get("category"))
-    details = item.get("details") or {}
-    candidate_values = []
-    for key in ["event_type", "type", "eventType", "description", "trend", "technology_name", "regulation_name", "project_status", "company", "institution", "vessel_name"]:
-        val = details.get(key)
-        if val:
-            candidate_values.append(str(val))
-    for key in ["project_name", "location", "contractor", "client", "amount", "currency", "article_title", "summary_cn", "title_cn"]:
-        val = item.get(key)
-        if val:
-            candidate_values.append(str(val))
-    text_blob = " ".join(candidate_values)
-    inferred = infer_category_from_text(text_blob)
-    if inferred and inferred in ALLOWED_CATEGORIES:
-        item["category"] = inferred
-    else:
-        item["category"] = category if category in ALLOWED_CATEGORIES else DEFAULT_CATEGORY
-    lower = text_blob.lower()
-    bid_keywords = KEYWORD_CATEGORY_MAP[0][0]
-    market_keywords = KEYWORD_CATEGORY_MAP[2][0]
-    project_keywords = KEYWORD_CATEGORY_MAP[3][0]
-    regulation_keywords = KEYWORD_CATEGORY_MAP[4][0]
-    has_bid = text_contains_any(lower, bid_keywords)
-    has_market = text_contains_any(lower, market_keywords)
-    has_project = text_contains_any(lower, project_keywords)
-    has_regulation = text_contains_any(lower, regulation_keywords)
-    if item["category"] == "Bid" and not has_bid and has_market:
-        item["category"] = "Market"
-    if item["category"] == "Project" and has_regulation and not has_project:
-        item["category"] = "Regulation"
-    return item
-
-def pick_primary_category(article_data, events_data):
-    category = normalize_category(article_data.get("category") if isinstance(article_data, dict) else None)
-    if category in ALLOWED_CATEGORIES:
-        return category
-    priority = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market", "Other"]
-    found = set()
-    for evt in events_data or []:
-        if not isinstance(evt, dict):
-            continue
-        evt_cat = normalize_category(evt.get("category"))
-        if not evt_cat:
-            evt_type = evt.get("event_type") or evt.get("type") or evt.get("eventType")
-            evt_cat = normalize_category(evt_type)
-        if evt_cat in ALLOWED_CATEGORIES:
-            found.add(evt_cat)
-    for key in priority:
-        if key in found:
-            return key
-    return None
 
 def init_track_db():
     """初始化轨迹数据库"""
@@ -234,94 +176,8 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 content 列失败: {e}")
 
-    try:
-        c.execute("""
-            UPDATE articles
-            SET category = (
-                SELECT e.category
-                FROM events e
-                WHERE e.article_id = articles.id
-                ORDER BY CASE e.category
-                    WHEN 'Bid' THEN 1
-                    WHEN 'Project' THEN 2
-                    WHEN 'Equipment' THEN 3
-                    WHEN 'Regulation' THEN 4
-                    WHEN 'R&D' THEN 5
-                    WHEN 'Market' THEN 6
-                    WHEN 'Other' THEN 7
-                    ELSE 99
-                END
-                LIMIT 1
-            )
-            WHERE (category IS NULL OR category = '')
-              AND EXISTS (SELECT 1 FROM events e2 WHERE e2.article_id = articles.id)
-        """)
-    except Exception as e:
-        print(f"[DB] 回填 category 列失败: {e}")
-
-    # 2. 事件分组表 (Event Groups)
-    c.execute('''CREATE TABLE IF NOT EXISTS event_groups (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        signature TEXT UNIQUE,
-        category TEXT,
-        project_name TEXT,
-        location TEXT,
-        contractor TEXT,
-        client TEXT,
-        details_json TEXT,
-        first_seen_at TEXT,
-        last_seen_at TEXT
-    )''')
-
-    # 3. 事件表 (Events)
-    c.execute('''CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        article_id INTEGER,
-        event_group_id INTEGER,
-        event_signature TEXT,
-        event_time TEXT,
-        category TEXT, 
-        project_name TEXT,
-        location TEXT,
-        amount TEXT,
-        currency TEXT,
-        contractor TEXT,
-        client TEXT,
-        details_json TEXT, 
-        created_at TEXT,
-        FOREIGN KEY(article_id) REFERENCES articles(id),
-        FOREIGN KEY(event_group_id) REFERENCES event_groups(id)
-    )''')
-
-    try:
-        c.execute("SELECT event_group_id FROM events LIMIT 1")
-    except sqlite3.OperationalError:
-        print("[DB] 检测到 events 表缺失 event_group_id 列，正在添加...")
-        try:
-            c.execute("ALTER TABLE events ADD COLUMN event_group_id INTEGER")
-            print("[DB] 已成功添加 event_group_id 列")
-        except Exception as e:
-            print(f"[DB] 添加 event_group_id 列失败: {e}")
-
-    try:
-        c.execute("SELECT event_signature FROM events LIMIT 1")
-    except sqlite3.OperationalError:
-        print("[DB] 检测到 events 表缺失 event_signature 列，正在添加...")
-        try:
-            c.execute("ALTER TABLE events ADD COLUMN event_signature TEXT")
-            print("[DB] 已成功添加 event_signature 列")
-        except Exception as e:
-            print(f"[DB] 添加 event_signature 列失败: {e}")
-
-    try:
-        c.execute("SELECT event_time FROM events LIMIT 1")
-    except sqlite3.OperationalError:
-        print("[DB] 检测到 events 表缺失 event_time 列，正在添加...")
-        try:
-            c.execute("ALTER TABLE events ADD COLUMN event_time TEXT")
-            print("[DB] 已成功添加 event_time 列")
-        except Exception as e:
-            print(f"[DB] 添加 event_time 列失败: {e}")
+    c.execute("DROP TABLE IF EXISTS events")
+    c.execute("DROP TABLE IF EXISTS event_groups")
     
     conn.commit()
     conn.close()
@@ -493,63 +349,30 @@ def update_ship_status(mmsi, status, status_date, location, region, country=None
     finally:
         conn.close()
 
-def get_or_create_event_group(conn, signature, evt, category, details_json, event_time):
-    c = conn.cursor()
-    now = datetime.now().isoformat()
-    c.execute("SELECT id, first_seen_at FROM event_groups WHERE signature = ?", (signature,))
-    row = c.fetchone()
-    if row:
-        group_id = row[0]
-        c.execute(
-            '''
-            UPDATE event_groups
-            SET category = ?, project_name = ?, location = ?, contractor = ?, client = ?, details_json = ?, last_seen_at = ?
-            WHERE id = ?
-            ''',
-            (
-                category,
-                evt.get("project_name", ""),
-                evt.get("location", ""),
-                evt.get("contractor", ""),
-                evt.get("client", ""),
-                details_json,
-                now,
-                group_id
-            )
-        )
-        return group_id
-    c.execute(
-        '''
-        INSERT INTO event_groups
-        (signature, category, project_name, location, contractor, client, details_json, first_seen_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''',
-        (
-            signature,
-            category,
-            evt.get("project_name", ""),
-            evt.get("location", ""),
-            evt.get("contractor", ""),
-            evt.get("client", ""),
-            details_json,
-            event_time or now,
-            now
-        )
-    )
-    return c.lastrowid
-
-def save_article_and_events(article_data, events_data):
-    """保存文章和关联事件"""
+def save_article(article_data):
+    if not article_data:
+        return False
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
     try:
-        primary_category = pick_primary_category(article_data, events_data)
-        # 1. 插入或忽略文章 (避免重复)
-        # 注意：如果文章已存在，我们跳过插入，但可能需要检查是否需要更新（目前简化为跳过）
-        c.execute("SELECT id FROM articles WHERE url = ?", (article_data['url'],))
+        url = article_data.get('url')
+        if not url:
+            return False
+        c.execute("SELECT id FROM articles WHERE url = ?", (url,))
         row = c.fetchone()
-        
+
+        primary_category = normalize_category(article_data.get("category"))
+        if not primary_category:
+            primary_category = infer_category_from_text(" ".join([
+                str(article_data.get("title", "")),
+                str(article_data.get("title_cn", "")),
+                str(article_data.get("summary_cn", "")),
+                str(article_data.get("full_text_cn", ""))
+            ]))
+        if not primary_category or primary_category not in ALLOWED_CATEGORIES:
+            primary_category = DEFAULT_CATEGORY
+        primary_category = normalize_category(primary_category)
+
         if row:
             article_id = row[0]
             c.execute(
@@ -591,14 +414,10 @@ def save_article_and_events(article_data, events_data):
                 )
             )
         else:
-            # Check for staleness before insertion
             is_hidden = 0
-            # 使用传入的 valid，如果未提供则默认为 1
             valid = article_data.get('valid', 1)
-            
             STALE_THRESHOLD_DAYS = 30
             try:
-                # Assuming created_at is roughly now
                 c_date = datetime.now()
                 p_date_str = article_data.get('pub_date')
                 if p_date_str:
@@ -613,13 +432,11 @@ def save_article_and_events(article_data, events_data):
                              p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
                          except:
                              pass
-                     
                      if p_date and (c_date.date() - p_date.date()).days > STALE_THRESHOLD_DAYS:
                          is_hidden = 1
                          valid = 0
             except:
                 pass
-
             c.execute('''INSERT INTO articles 
                 (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -642,107 +459,6 @@ def save_article_and_events(article_data, events_data):
                     datetime.now().isoformat()
                 )
             )
-            article_id = c.lastrowid
-            
-        # 2. 插入事件
-        # 如果是新文章，且没有事件数据，但标记为 Other 类别，则创建一个默认事件
-        if not row:
-            # 如果没有事件，但有指定的 category (如 Other)
-            if not events_data and article_data.get('category') == 'Other':
-                events_data = [{
-                    "category": "Other",
-                    "description": article_data.get('summary_cn', '垃圾信息/非新闻页面')
-                }]
-
-            seen_signatures = set()
-            for evt in events_data:
-                # 防御性编程：如果 evt 是字符串（解析错误导致），尝试解析或跳过
-                if isinstance(evt, str):
-                    try:
-                        evt = json.loads(evt)
-                    except:
-                        print(f"[DB] 跳过无效的事件数据格式: {evt[:50]}...")
-                        continue
-                        
-                if not isinstance(evt, dict):
-                     continue
-
-                category = normalize_category(evt.get("category"))
-                if not category:
-                    evt_type = evt.get("event_type") or evt.get("type") or evt.get("eventType")
-                    category = normalize_category(evt_type)
-                if not category:
-                    candidate_values = []
-                    for key in ["project_name", "location", "contract_value", "currency", "contractor", "client", "event_type", "type", "description"]:
-                        val = evt.get(key)
-                        if val:
-                            candidate_values.append(str(val))
-                    category = infer_category_from_text(" ".join(candidate_values))
-                
-                if not category:
-                    category = DEFAULT_CATEGORY
-                if category not in ALLOWED_CATEGORIES:
-                    category = DEFAULT_CATEGORY
-
-                # 提取通用字段
-                details = {k: v for k, v in evt.items()}
-                amount_value = evt.get("amount") or evt.get("contract_value") or ""
-                if amount_value and not details.get("amount"):
-                    details["amount"] = amount_value
-                details_json = json.dumps(details, ensure_ascii=False, sort_keys=True)
-                event_time = evt.get("time") or evt.get("publish_time") or evt.get("pub_time") or article_data.get("pub_date") or ""
-                signature = build_event_signature({
-                    "category": category,
-                    "project_name": evt.get("project_name", ""),
-                    "location": evt.get("location", ""),
-                    "amount": evt.get("amount") or evt.get("contract_value", ""),
-                    "currency": evt.get("currency", ""),
-                    "contractor": evt.get("contractor", ""),
-                    "client": evt.get("client", ""),
-                    "time": event_time,
-                    "content": evt.get("content") or evt.get("description") or "",
-                    "details_json": details_json
-                })
-                if not signature:
-                    fallback_parts = [
-                        evt.get("project_name"),
-                        evt.get("location"),
-                        evt.get("contractor"),
-                        evt.get("client"),
-                        evt.get("content") or evt.get("description"),
-                        article_data.get("title"),
-                        article_data.get("summary_cn")
-                    ]
-                    normalized_parts = [normalize_event_text(p) for p in fallback_parts if p]
-                    signature = "|".join([p for p in normalized_parts if p])
-                if not signature:
-                    signature = f"empty|{category}"
-                if signature in seen_signatures:
-                    continue
-                seen_signatures.add(signature)
-
-                event_group_id = get_or_create_event_group(conn, signature, evt, category, details_json, event_time)
-
-                c.execute('''INSERT INTO events 
-                    (article_id, event_group_id, event_signature, event_time, category, project_name, location, amount, currency, contractor, client, details_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (
-                        article_id,
-                        event_group_id,
-                        signature,
-                        event_time,
-                        category,
-                        evt.get('project_name', ''),
-                        evt.get('location', ''),
-                        amount_value,
-                        evt.get('currency', ''),
-                        evt.get('contractor', ''),
-                        evt.get('client', ''),
-                        details_json,
-                        datetime.now().isoformat()
-                    )
-                )
-        
         conn.commit()
         return True
     except Exception as e:
@@ -767,44 +483,6 @@ def add_ship_simple(name, mmsi):
         return False
     finally:
         conn.close()
-
-def get_recent_events(limit=50):
-    """获取最近的事件用于生成报告"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    query = '''
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.summary_cn, a.screenshot_path, a.is_significant, a.vl_desc, a.full_text_cn, e.details_json
-        FROM events e
-        JOIN articles a ON e.article_id = a.id
-        ORDER BY e.created_at DESC
-        LIMIT ?
-    '''
-    c.execute(query, (limit,))
-    rows = c.fetchall()
-    conn.close()
-    
-    results = []
-    seen_by_article = {}
-    for row in rows:
-        item = dict(row)
-        if item['details_json']:
-            item['details'] = json.loads(item['details_json'])
-        else:
-            item['details'] = {}
-        item = enrich_event_category(item)
-        signature = build_event_signature(item)
-        if not signature:
-            signature = f"empty|{item.get('category', '')}"
-        article_id = item.get("article_id")
-        if article_id is not None:
-            seen = seen_by_article.setdefault(article_id, set())
-            if signature in seen:
-                continue
-            seen.add(signature)
-        results.append(item)
-    return results
 
 def is_article_exists(url):
     """检查文章是否已存在"""
@@ -873,103 +551,22 @@ def get_articles_by_urls(urls):
     conn.close()
     return [dict(row) for row in rows]
 
-def get_events_by_time_range(start_time, end_time):
-    """获取指定时间范围内的事件"""
+def get_articles_by_time_range(start_time, end_time):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    
     query = '''
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.is_significant, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, a.full_text_cn, e.details_json
-        FROM events e
-        JOIN articles a ON e.article_id = a.id
-        WHERE (e.created_at BETWEEN ? AND ?) 
-          AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
-          AND (a.valid = 1 OR a.valid IS NULL)
-        ORDER BY e.created_at DESC
+        SELECT 
+            id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content,
+            screenshot_path, vl_desc, created_at, source_type, source_name, valid, category
+        FROM articles
+        WHERE created_at BETWEEN ? AND ?
+        ORDER BY created_at DESC
     '''
     c.execute(query, (start_time, end_time))
     rows = c.fetchall()
     conn.close()
-    
-    results = []
-    seen_by_article = {}
-    for row in rows:
-        item = dict(row)
-        if item['details_json']:
-            item['details'] = json.loads(item['details_json'])
-        else:
-            item['details'] = {}
-        item = enrich_event_category(item)
-        pub_date_str = item.get("pub_date")
-        created_at_str = item.get("created_at")
-        ref_date = None
-        if pub_date_str:
-            try:
-                pub_clean = str(pub_date_str).strip()
-                if 'T' in pub_clean:
-                    ref_date = datetime.fromisoformat(pub_clean)
-                elif ' ' in pub_clean and ':' in pub_clean:
-                    ref_date = datetime.fromisoformat(pub_clean.replace(' ', 'T'))
-                else:
-                    ref_date = datetime.strptime(pub_clean, "%Y-%m-%d")
-            except:
-                ref_date = None
-        if not ref_date and created_at_str:
-            try:
-                created_clean = str(created_at_str).split('.')[0]
-                if 'T' in created_clean:
-                    ref_date = datetime.fromisoformat(created_clean)
-                elif ' ' in created_clean and ':' in created_clean:
-                    ref_date = datetime.fromisoformat(created_clean.replace(' ', 'T'))
-                else:
-                    ref_date = datetime.strptime(created_clean, "%Y-%m-%d")
-            except:
-                ref_date = None
-        if ref_date:
-            if (datetime.now().date() - ref_date.date()).days > 30:
-                continue
-        signature = build_event_signature(item)
-        if not signature:
-            signature = f"empty|{item.get('category', '')}"
-        article_id = item.get("article_id")
-        if article_id is not None:
-            seen = seen_by_article.setdefault(article_id, set())
-            if signature in seen:
-                continue
-            seen.add(signature)
-        results.append(item)
-    return results
-
-def get_events_by_time_range_strict(start_time, end_time):
-    """仅按时间窗口获取有效且未隐藏的事件"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    query = '''
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.is_significant, a.summary_cn, a.vl_desc, a.pub_date, a.source_type, a.source_name, a.full_text_cn, e.details_json
-        FROM events e
-        JOIN articles a ON e.article_id = a.id
-        WHERE (e.created_at BETWEEN ? AND ?) 
-          AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
-          AND (a.valid = 1 OR a.valid IS NULL)
-        ORDER BY e.created_at DESC
-    '''
-    c.execute(query, (start_time, end_time))
-    rows = c.fetchall()
-    conn.close()
-    
-    results = []
-    for row in rows:
-        item = dict(row)
-        if item['details_json']:
-            item['details'] = json.loads(item['details_json'])
-        else:
-            item['details'] = {}
-        item = enrich_event_category(item)
-        results.append(item)
-    return results
+    return [dict(row) for row in rows]
 
 def get_articles_by_time_range_strict(start_time, end_time):
     """仅按时间窗口获取有效且未隐藏的文章"""
@@ -980,13 +577,11 @@ def get_articles_by_time_range_strict(start_time, end_time):
         SELECT 
             a.id, a.title, a.title_cn, a.url, a.pub_date, a.summary_cn, a.full_text_cn, a.content, 
             a.screenshot_path, a.vl_desc, a.created_at, a.source_type, a.source_name, a.valid,
-            GROUP_CONCAT(DISTINCT e.category) as categories
+            a.category
         FROM articles a
-        LEFT JOIN events e ON e.article_id = a.id
         WHERE (a.created_at BETWEEN ? AND ?)
           AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
           AND (a.valid = 1 OR a.valid IS NULL)
-        GROUP BY a.id
         ORDER BY a.created_at DESC
     '''
     c.execute(query, (start_time, end_time))
@@ -995,8 +590,8 @@ def get_articles_by_time_range_strict(start_time, end_time):
     results = []
     for row in rows:
         item = dict(row)
-        cats = item.get("categories") or ""
-        item["categories"] = [c for c in cats.split(",") if c] if cats else []
+        category = item.get("category")
+        item["categories"] = [category] if category else []
         results.append(item)
     return results
 

@@ -163,10 +163,17 @@ def write_markdown_audit(rows):
     os.makedirs(scheduler_dir, exist_ok=True)
     md_path = os.path.join(scheduler_dir, f"{ts}.md")
     header = [
-        "| 序号 | 网站 | 新闻名称 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 备注 | 新闻链接 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 序号 | 网站 | 新闻名称 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 数据来源 | 备注 | 新闻链接 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     lines = []
+    source_map = {
+        "rss": "RSS",
+        "web": "Web",
+        "wechat": "公众号",
+        "rsshub": "公众号",
+        "official": "公众号"
+    }
     for idx, r in enumerate(rows, 1):
         name = (r.get("title_cn") or r.get("title") or "").replace("|", " ")
         link = r.get("link") or ""
@@ -175,9 +182,10 @@ def write_markdown_audit(rows):
         keep_str = "是" if r.get("keep") else "否"
         txt_ok = bool_to_cn(r.get("text_ok"))
         vl_ok = bool_to_cn(r.get("vl_ok"))
+        source_raw = (r.get("source_type") or "").lower()
+        source_label = source_map.get(source_raw, "Web")
         remark = r.get("remark") or ""
-        # 将链接放到最后，方便阅读
-        line = f"| {idx} | {site} | {name} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {remark} | {link} |"
+        line = f"| {idx} | {site} | {name} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {source_label} | {remark} | {link} |"
         lines.append(line)
     content = "\n".join(header + lines) + "\n"
     try:
@@ -208,6 +216,23 @@ async def main():
         {"name": "长江航道局", "fakeid": None},
         {"name": "长江南京航道局", "fakeid": None}
     ]
+
+    # 尝试从 SOURCES_FILE 加载额外的微信公众号配置
+    try:
+        with open(config.SOURCES_FILE, "r", encoding="utf-8") as f:
+            file_sources = json.load(f)
+            for src in file_sources:
+                if src.get("type") == "wechat" and src.get("fakeid"):
+                    # 避免重复添加 (通过 fakeid 判断)
+                    existing_fakeids = [b.get("fakeid") for b in wechat_biz_list]
+                    if src.get("fakeid") not in existing_fakeids:
+                        wechat_biz_list.append({
+                            "name": src.get("name"),
+                            "fakeid": src.get("fakeid")
+                        })
+                        print(f"已加载额外微信源: {src.get('name')}")
+    except Exception as e:
+        print(f"加载额外微信源失败: {e}")
     
     # 微信采集 (自动从 backend/data/wechat_session.json 加载持久化的凭证)
     # 如果 Session 失效，会自动回退到 RSSHub 方案
@@ -259,6 +284,7 @@ async def main():
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
+                "source_type": item.get("source_type"),
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
@@ -274,6 +300,7 @@ async def main():
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
+                "source_type": item.get("source_type"),
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
@@ -288,6 +315,7 @@ async def main():
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
+                "source_type": item.get("source_type"),
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
@@ -304,6 +332,7 @@ async def main():
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
+                "source_type": item.get("source_type"),
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
@@ -317,6 +346,7 @@ async def main():
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
+                "source_type": item.get("source_type"),
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
@@ -334,6 +364,7 @@ async def main():
             "title": item.get("title", ""),
             "link": item.get("link", ""),
             "pub_date": item.get("pub_date"),
+            "source_type": item.get("source_type"),
             "keep": False,
             "text_ok": False,
             "vl_ok": False,
@@ -362,7 +393,6 @@ async def main():
     print(">>> 阶段2: 智能分析...")
     analysis_items = database.get_articles_by_urls([item['link'] for item in items])
     results = await info_analysis.process_items_from_db(analysis_items)
-    total_events = 0
     cutoff_dt = datetime.now() - timedelta(days=5)
     kept_results = []
     for r in results or []:
@@ -376,9 +406,6 @@ async def main():
                 continue
             r["pub_date"] = pub_date_map.get(link_key)
             kept_results.append(r)
-            events = r.get("events") if isinstance(r, dict) else None
-            if events:
-                total_events += len(events)
         if link_key and link_key in pending_map:
             idx = pending_map[link_key]
             is_junk = r.get("is_junk", False)
@@ -402,7 +429,7 @@ async def main():
         write_markdown_audit(audit_rows)
     except Exception:
         pass
-    write_scheduler_log(f"分析完成: 文章{len(kept_results)} 事件{total_events}")
+    write_scheduler_log(f"分析完成: 文章{len(kept_results)}")
     
 
 if __name__ == "__main__":

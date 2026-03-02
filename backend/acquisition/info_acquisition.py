@@ -79,15 +79,42 @@ async def fetch_rss(url, hours=24, source_name=None):
         print(f"[RSS] Error {url}: {e}")
         return []
 
+def _is_retryable_playwright_error(error: Exception) -> bool:
+    """判断 Playwright 导航错误是否可重试"""
+    text = str(error).lower()
+    keywords = [
+        "timeout",
+        "err_network_io_suspended",
+        "err_name_not_resolved",
+        "net::err_connection_closed",
+        "net::err_connection_reset",
+        "net::err_connection_timed_out",
+        "net::err_timed_out",
+        "net::err_failed",
+        "net::err_connection_refused"
+    ]
+    return any(k in text for k in keywords)
+
+def _next_retry_delay(delay: float) -> float:
+    """计算下一次重试等待时长"""
+    return min(delay * 1.7, 8.0)
+
 async def goto_with_retry(page, url, attempts):
     """按多策略尝试打开页面，成功则返回 True，失败抛出最后异常"""
     last_error = None
+    delay = 1.5
     for attempt in attempts:
-        try:
-            await page.goto(url, wait_until=attempt["wait_until"], timeout=attempt["timeout_ms"])
-            return True
-        except Exception as e:
-            last_error = e
+        for _ in range(2):
+            try:
+                await page.goto(url, wait_until=attempt["wait_until"], timeout=attempt["timeout_ms"])
+                return True
+            except Exception as e:
+                last_error = e
+                if _is_retryable_playwright_error(e):
+                    await asyncio.sleep(delay)
+                    delay = _next_retry_delay(delay)
+                    continue
+                break
     if last_error:
         raise last_error
     return False
@@ -106,73 +133,122 @@ async def fetch_web_index(context, source):
             [
                 {"wait_until": "domcontentloaded", "timeout_ms": 30000},
                 {"wait_until": "networkidle", "timeout_ms": 30000},
-                {"wait_until": "load", "timeout_ms": 30000}
+                {"wait_until": "load", "timeout_ms": 30000},
+                {"wait_until": "domcontentloaded", "timeout_ms": 45000}
             ]
         )
-        # 增加滚动以触发懒加载
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(5)
-        
-        # Cloudflare / Error Check
-        current_url = page.url
-        title = await page.title()
-        if "cloudflare.com" in current_url or "5xx-error" in current_url or \
-           "Just a moment" in title or "Attention Required" in title or \
-           "Security Check" in title:
-            print(f"[Web] Skip Cloudflare/Error page: {url} -> {current_url}")
-            return []
-
         # 提取链接：简单的启发式，查找所有 a 标签
         # 优先使用 selector 限制范围
         selector = source.get('selector', 'body')
         max_links = source.get('max_links', 10)
+        max_pages = source.get('max_pages', 1)
+        next_selector = source.get('next_selector')
+        strict_filtering = source.get('strict_filtering', True)
         
-        links = await page.evaluate("""(params) => {
-            const selector = params.selector;
-            const maxLinks = params.maxLinks;
-            const results = [];
-            const container = document.querySelector(selector) || document.body;
-            const anchors = container.querySelectorAll('a');
-            anchors.forEach(a => {
-                const text = a.innerText.trim();
-                const href = a.href;
-                // 简单过滤：长度大于10，且不是 javascript: 或 #
-                if (text.length > 10 && href.startsWith('http')) {
-                    // 去重
-                    if (!results.find(r => r.link === href)) {
-                        results.push({title: text, link: href});
+        current_page = 1
+        
+        while current_page <= max_pages:
+            print(f"[Web] 正在处理第 {current_page}/{max_pages} 页...")
+            
+            # 增加滚动以触发懒加载
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(2)
+            
+            # 提取当前页链接
+            links = await page.evaluate("""(params) => {
+                const selector = params.selector;
+                const maxLinks = params.maxLinks;
+                const results = [];
+                const container = document.querySelector(selector) || document.body;
+                const anchors = container.querySelectorAll('a');
+                anchors.forEach(a => {
+                    const text = a.innerText.trim();
+                    const href = a.href;
+                    // 简单过滤：长度大于10，且不是 javascript: 或 #
+                    if (text.length > 10 && href.startsWith('http')) {
+                        // 去重
+                        if (!results.find(r => r.link === href)) {
+                            results.push({title: text, link: href});
+                        }
                     }
-                }
-            });
-            return results.slice(0, maxLinks);
-        }""", {"selector": selector, "maxLinks": max_links})
-        
-        for l in links:
-            # Filter out cloudflare links
-            if "cloudflare.com" in l['link'] or "5xx-error" in l['link']:
-                continue
+                });
+                return results; // 这里不切片，为了支持翻页累加
+            }""", {"selector": selector, "maxLinks": max_links})
             
-            # 应用源配置的黑名单
-            blacklist = source.get('blacklist', [])
-            if blacklist:
-                link_lower = l['link'].lower()
-                if any(pattern.lower() in link_lower for pattern in blacklist):
-                    print(f"[Web] 黑名单过滤: {l['title']} -> {l['link']}")
+            for l in links:
+                # Filter out cloudflare links
+                if "cloudflare.com" in l['link'] or "5xx-error" in l['link']:
                     continue
+                
+                # 应用源配置的黑名单
+                blacklist = source.get('blacklist', [])
+                if blacklist:
+                    link_lower = l['link'].lower()
+                    if any(pattern.lower() in link_lower for pattern in blacklist):
+                        print(f"[Web] 黑名单过滤: {l['title']} -> {l['link']}")
+                        continue
+                
+                # 过滤非新闻类页面（委员会、About、Team等）
+                if not is_news_page(l['link'], l['title'], strict=strict_filtering):
+                    print(f"[Web] 过滤非新闻页面: {l['title']} -> {l['link']}")
+                    continue
+                
+                # 全局去重
+                if not any(i['link'] == l['link'] for i in items):
+                    items.append({
+                        'title': l['title'],
+                        'link': l['link'],
+                        'pub_date': '',
+                        'summary_raw': '',
+                        'source_type': 'web',
+                        'source_name': source.get('name', '')
+                    })
+                    if len(items) >= max_links:
+                        break
             
-            # 过滤非新闻类页面（委员会、About、Team等）
-            if not is_news_page(l['link'], l['title']):
-                print(f"[Web] 过滤非新闻页面: {l['title']} -> {l['link']}")
-                continue
+            if len(items) >= max_links:
+                break
 
-            items.append({
-                'title': l['title'],
-                'link': l['link'],
-                'pub_date': '',
-                'summary_raw': '',
-                'source_type': 'web',
-                'source_name': source.get('name', '')
-            })
+            current_page += 1
+            if current_page > max_pages:
+                break
+                
+            # 尝试翻页
+            has_next = False
+            if next_selector:
+                # 使用配置的选择器
+                try:
+                    next_btn = await page.query_selector(next_selector)
+                    if next_btn:
+                        print(f"[Web] 找到下一页按钮 ({next_selector})，点击...")
+                        await next_btn.click()
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        has_next = True
+                except Exception as e:
+                    print(f"[Web] 翻页失败: {e}")
+            else:
+                # 尝试通用选择器
+                generic_selectors = [
+                    'a.next', 'a.next-page', '.pagination .next a', 
+                    'a[rel="next"]', 'span.next a', 
+                    'text="Next"', 'text="Next Page"', 'text="下一页"'
+                ]
+                for sel in generic_selectors:
+                    try:
+                        next_btn = await page.query_selector(sel)
+                        if next_btn:
+                            print(f"[Web] 找到下一页按钮 ({sel})，点击...")
+                            await next_btn.click()
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            has_next = True
+                            break
+                    except:
+                        continue
+            
+            if not has_next:
+                print(f"[Web] 未找到下一页，停止翻页。")
+                break
+                
     except Exception as e:
         print(f"[Web] Error {url}: {e}")
     finally:
@@ -284,7 +360,8 @@ async def fetch_web_article(context, item):
             [
                 {"wait_until": "domcontentloaded", "timeout_ms": 30000},
                 {"wait_until": "networkidle", "timeout_ms": 30000},
-                {"wait_until": "load", "timeout_ms": 30000}
+                {"wait_until": "load", "timeout_ms": 30000},
+                {"wait_until": "domcontentloaded", "timeout_ms": 45000}
             ]
         )
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -471,17 +548,23 @@ def contains_dredging_keywords(text):
         "湖泊治理", "库区清淤", "河口治理", "海域整治", "河道保洁",
         "水利疏浚", "港池疏浚", "淤积清理", "底泥", "泥沙",
         "河道疏浚", "湖泊清淤", "清淤疏浚", "水系治理",
-        "dredge", "dredging", "channel", "harbor", "harbour", "port", "berth"
+        "dredge", "dredging", "channel", "harbor", "harbour", "port", "berth", "marina", "marine"
     ]
     return any(k in lower for k in keywords)
 
-def is_news_page(url, title):
+def is_news_page(url, title, strict=True):
     """
     判断是否为新闻类页面，排除委员会、About、Team等非新闻页面
+    strict: 是否启用严格过滤（默认True）
     """
     if not url:
         return False
     
+    # 如果不严格过滤，只排除明显的垃圾链接
+    if not strict:
+        if '#' in url: return False
+        return True
+
     url_lower = url.lower()
     title_lower = title.lower() if title else ""
     

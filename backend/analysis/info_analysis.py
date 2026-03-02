@@ -7,43 +7,8 @@ import config
 from static.constants import (
     DEFAULT_CATEGORY,
     ALLOWED_CATEGORIES,
-    KEYWORD_CATEGORY_MAP,
-    normalize_category,
-    normalize_event_text,
-    build_event_signature,
-    extract_regulation_core,
-    consolidate_regulation_events
+    normalize_category
 )
-
-
-def normalize_events(events, fallback_category):
-    if events is None:
-        return []
-    if isinstance(events, str):
-        try:
-            events = json.loads(events)
-        except Exception:
-            return []
-    if not isinstance(events, list):
-        return []
-    normalized = []
-    for evt in events:
-        if isinstance(evt, str):
-            try:
-                evt = json.loads(evt)
-            except Exception:
-                continue
-        if not isinstance(evt, dict):
-            continue
-        category = normalize_category(evt.get("category"))
-        if not category:
-            evt_type = evt.get("event_type") or evt.get("type") or evt.get("eventType")
-            category = normalize_category(evt_type)
-        if not category:
-            category = fallback_category or DEFAULT_CATEGORY
-        evt["category"] = category
-        normalized.append(evt)
-    return consolidate_regulation_events(normalized)
 
 def is_relevant_news(item, text_content, final_result):
     source_name = str(item.get("source_name") or "")
@@ -120,19 +85,6 @@ async def analyze_with_vl(client, item, b64_img):
    - summary_cn: 中文摘要（简练精准，包含关键数据）。
    - publish_time: 文章发布的具体日期/时间 (YYYY-MM-DD 或 YYYY-MM-DD HH:MM)，若文中未明确提及则留空。
    - image_desc: 图片描述。
-   - events: 提取关键事件列表。
-     - 针对 "连中多标" (e.g. 中交二航局在上海连中3标) 的情况，必须将每个中标项目拆分为独立的 event 对象。
-     - 针对政策法规/标准/指南/解读类内容，通常只生成 1 个事件；仅在明确出现多项不同法规/政策并列时才拆分为多条。
-     - 每个 event 包含: 
-       - project_name (项目名称)
-       - location (详细地点/城市)
-       - amount (金额)
-       - currency (货币单位)
-       - contractor (承建商)
-       - client (业主)
-       - time (中标/开工时间)
-       - content (具体的建设内容描述)
-   - events[].category: 每个事件的分类，必须是上述类别之一。
 
 返回 JSON:
 {{
@@ -141,20 +93,7 @@ async def analyze_with_vl(client, item, b64_img):
   "title_cn": "...",
   "summary_cn": "...",
   "publish_time": "YYYY-MM-DD",
-  "image_desc": "...",
-  "events": [
-    {{
-      "project_name": "...",
-      "location": "...",
-      "amount": "...",
-      "currency": "...",
-      "contractor": "...",
-      "client": "...",
-      "time": "...",
-      "content": "...",
-      "category": "..."
-    }}
-  ]
+  "image_desc": "..."
 }}
 """
     try:
@@ -214,26 +153,13 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
    - 不允许输出其他类别，必须从上述六类中选择最接近的一类。
 
 2. 【有效性】(is_junk) - 排除无关或无效内容（如董事会名单、简单的链接列表）。
-3. 【翻译与提取】(title_cn, summary_cn, full_text_cn, publish_time, events)。
+3. 【翻译与提取】(title_cn, summary_cn, full_text_cn, publish_time)。
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
      - 涉及国外重点公司名称时，保持英文原名，不要翻译成中文。
      - 禁止使用 "董事会"、"可持续发展"、"我们的技术"、"市场更新" 等泛泛而谈的短语作为标题。
      - 正确示例："中交二航局在上海中标三个市政项目"、"Van Oord在荷兰完成海滩修复工程"。
    - publish_time: 提取文章的发布日期（格式 YYYY-MM-DD）。如果文中明确提到时间（如"2024年9月2日"），请提取该时间。
-   - 重点提取 events 列表。
    - full_text_cn: 中文全文翻译，仅包含正文内容，不要包含导航、菜单、页脚、隐私政策、Cookie提示、社交链接或站内栏目标题；尽量保持原文段落结构。
-   - 针对 "连中多标" (e.g. 中交二航局在上海连中3标) 的情况，必须将每个中标项目拆分为独立的 event 对象。
-   - 针对政策法规/标准/指南/解读类内容，通常只生成 1 个事件；仅在明确出现多项不同法规/政策并列时才拆分为多条。
-   - 每个 event 字段:
-     - project_name (项目名称)
-     - location (详细地点/城市)
-     - amount (金额)
-     - currency (货币单位)
-     - contractor (承建商)
-     - client (业主)
-     - time (中标/开工时间)
-     - content (具体的建设内容描述)
-     - category (必须是上述分类之一)
 
 返回 JSON:
 {{
@@ -242,20 +168,7 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
   "title_cn": "...",
   "summary_cn": "...",
   "full_text_cn": "...",
-  "publish_time": "YYYY-MM-DD",
-  "events": [
-    {{
-      "project_name": "...",
-      "location": "...",
-      "amount": "...",
-      "currency": "...",
-      "contractor": "...",
-      "client": "...",
-      "time": "...",
-      "content": "...",
-      "category": "..."
-    }}
-  ]
+  "publish_time": "YYYY-MM-DD"
 }}
 """
     try:
@@ -331,8 +244,7 @@ def _normalize_llm_result(result, item):
             "title_cn": item.get("title"),
             "summary_cn": "",
             "full_text_cn": "",
-            "publish_time": str(item.get("pub_date") or ""),
-            "events": [e for e in result if isinstance(e, dict)]
+            "publish_time": str(item.get("pub_date") or "")
         }
     return result
 
@@ -342,21 +254,6 @@ def _resolve_screenshot_path(screenshot_path, screenshot_filename):
     if screenshot_filename:
         return f"assets/{screenshot_filename}"
     return ""
-
-def _dedupe_events(events):
-    if not events:
-        return []
-    seen_signatures = set()
-    deduped = []
-    for evt in events:
-        sig = build_event_signature(evt)
-        if not sig:
-            sig = f"empty|{evt.get('category', '')}"
-        if sig in seen_signatures:
-            continue
-        seen_signatures.add(sig)
-        deduped.append(evt)
-    return deduped
 
 def _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res):
     final_result = None
@@ -373,10 +270,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
                 final_result['summary_cn'] = vl_res.get('summary_cn')
             if not final_result.get('publish_time') and vl_res.get('publish_time'):
                 final_result['publish_time'] = vl_res.get('publish_time')
-            text_events = final_result.get('events', [])
-            vl_events = vl_res.get('events', [])
-            if (not text_events) and vl_events:
-                final_result['events'] = vl_events
             analysis_log.append("4.1. **VL辅助**: 完成补充信息")
     elif text_res and text_res.get('is_junk'):
         analysis_log.append("4. **Text分析**: 判定为垃圾信息 (将归入'其他')")
@@ -390,7 +283,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "content": text_content,
             "category": "Other",
             "valid": 0,
-            "events": [],
             "image_desc": vl_res.get('image_desc', '') if vl_res else "",
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
@@ -410,7 +302,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
                 "content": text_content,
                 "category": "Other",
                 "valid": 0,
-                "events": [],
                 "image_desc": vl_res.get('image_desc', ''),
                 "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
                 "analysis_log": analysis_log,
@@ -433,7 +324,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "content": text_content,
             "category": "Other",
             "valid": 0,
-            "events": [],
             "image_desc": "",
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
@@ -444,9 +334,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
     article_category = normalize_category(final_result.get("category"))
     if not article_category:
         article_category = DEFAULT_CATEGORY
-
-    events = normalize_events(final_result.get("events", []), article_category)
-    events = _dedupe_events(events)
 
     is_valid = 1
     if not is_relevant_news(item, text_content, final_result):
@@ -468,7 +355,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         "content": text_content,
         "category": article_category,
         "valid": is_valid,
-        "events": events,
         "image_desc": final_result.get("image_desc", ""),
         "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
         "analysis_log": analysis_log,

@@ -11,6 +11,7 @@ import json
 import os
 from typing import List, Dict, Any
 import xml.etree.ElementTree as ET
+import config
 
 # 设置日志
 logger = logging.getLogger(__name__)
@@ -42,7 +43,31 @@ class WeChatAcquisition:
         }
         
         # RSSHub 配置 (可以替换为私有实例以提高稳定性)
-        self.rsshub_base = "https://rsshub.app" 
+        self.rsshub_bases = config.RSSHUB_BASES or ["https://rsshub.app"]
+
+    def _request_rsshub(self, rss_url: str, headers: Dict[str, str], max_retries: int = 2):
+        """
+        请求 RSSHub 并返回响应对象
+        """
+        delay = 1.5
+        last_error = None
+        for _ in range(max_retries):
+            try:
+                response = requests.get(rss_url, headers=headers, timeout=20)
+                if response.status_code == 200:
+                    return response
+                if response.status_code in [429, 500, 502, 503, 504]:
+                    time.sleep(delay)
+                    delay = min(delay * 1.7, 6)
+                    continue
+                return None
+            except Exception as e:
+                last_error = e
+                time.sleep(delay)
+                delay = min(delay * 1.7, 6)
+        if last_error:
+            logger.error(f"RSSHub 请求异常: {last_error}")
+        return None
 
     def _save_session(self):
         """将当前 Cookie 和 Token 保存到本地"""
@@ -80,44 +105,42 @@ class WeChatAcquisition:
         """
         通过 RSSHub 获取文章 (免 Cookie 方案)
         """
-        rss_url = f"{self.rsshub_base}/wechat/ershicimi/{fakeid}"
-        logger.info(f"正在尝试通过 RSSHub 采集: {rss_url}")
-        
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
         }
         
         try:
-            response = requests.get(rss_url, headers=headers, timeout=20)
-            if response.status_code != 200:
-                logger.warning(f"RSSHub 请求失败 (状态码: {response.status_code})")
-                return []
+            for base in self.rsshub_bases:
+                rss_url = f"{base.rstrip('/')}/wechat/ershicimi/{fakeid}"
+                logger.info(f"正在尝试通过 RSSHub 采集: {rss_url}")
+                response = self._request_rsshub(rss_url, headers=headers, max_retries=2)
+                if not response:
+                    continue
+
+                root = ET.fromstring(response.content)
+                articles = []
+                items = root.findall(".//item")
+                for item in items[:count]:
+                    title_elem = item.find("title")
+                    link_elem = item.find("link")
+                    pub_date_elem = item.find("pubDate")
+                    
+                    title = title_elem.text if title_elem is not None else "无标题"
+                    link = link_elem.text if link_elem is not None else ""
+                    pub_date = pub_date_elem.text if pub_date_elem is not None else ""
+                    
+                    articles.append({
+                        "title": title,
+                        "link": link,
+                        "date": pub_date, 
+                        "source": "微信公众号 (RSS)",
+                        "digest": "", 
+                        "source_type": "rsshub"
+                    })
                 
-            # 解析 RSS (XML)
-            root = ET.fromstring(response.content)
-            articles = []
-            
-            # RSS 结构: channel -> item
-            items = root.findall(".//item")
-            for item in items[:count]:
-                title_elem = item.find("title")
-                link_elem = item.find("link")
-                pub_date_elem = item.find("pubDate")
-                
-                title = title_elem.text if title_elem is not None else "无标题"
-                link = link_elem.text if link_elem is not None else ""
-                pub_date = pub_date_elem.text if pub_date_elem is not None else ""
-                
-                articles.append({
-                    "title": title,
-                    "link": link,
-                    "date": pub_date, 
-                    "source": "微信公众号 (RSS)",
-                    "digest": "", 
-                    "source_type": "rsshub"
-                })
-            
-            return articles
+                if articles:
+                    return articles
+            return []
         except Exception as e:
             logger.error(f"RSSHub 采集异常: {e}")
             return []

@@ -1,0 +1,68 @@
+[
+    {
+        "name": "Dredging Today",
+        "url": "https://dredgingtoday.com/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "IADC Dredging",
+        "url": "https://www.iadc-dredging.com/news/",
+        "type": "web",
+        "selector": "article"
+    },
+    {
+        "name": "DredgeWire (People)",
+        "url": "https://dredgewire.com/category/company-people/",
+        "type": "web",
+        "selector": ".article-list",
+        "max_pages": 2,
+        "max_links": 30,
+        "strict_filtering": false
+    },
+    {
+        "name": "DredgeWire (Events)",
+        "url": "https://dredgewire.com/category/upcoming-events/",
+        "type": "web",
+        "selector": ".article-list",
+        "max_pages": 2,
+        "max_links": 30,
+        "strict_filtering": false
+    },
+    {
+        "name": "DredgeWire (Port)",
+        "url": "https://dredgewire.com/category/port-news/",
+        "type": "web",
+        "selector": ".article-list",
+        "max_pages": 2,
+        "max_links": 30,
+        "strict_filtering": false
+    },
+    {
+        "name": "DredgeWire (Project)",
+        "url": "https://dredgewire.com/category/project-updates/",
+        "type": "web",
+        "selector": ".article-list",
+        "max_pages": 2,
+        "max_links": 30,
+        "strict_filtering": false
+    },
+    {
+        "name": "DredgeWire (Sand)",
+        "url": "https://dredgewire.com/category/sand-gravel/",
+        "type": "web",
+        "selector": ".article-list",
+        "max_pages": 2,
+        "max_links": 30,
+        "strict_filtering": false
+    },
+    {
+        "name": "MarineLog Dredging",
+        "url": "https://www.marinelog.com/category/inland-rivers-coastal-shipping/dredging/feed/",
+        "type": "rss"
+    },
+    {
+        "name": "中国水运报",
+        "fakeid": "MjM5ODAzMjE1MA==",
+        "type": "wechat"
+    }
+]

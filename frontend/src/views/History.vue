@@ -104,6 +104,9 @@
                     <span v-else :class="['px-1 rounded-[2px] text-[9px] flex-shrink-0 min-w-[48px] text-center', getCategoryMeta(undefined).bg, getCategoryMeta(undefined).color]">
                       {{ getCategoryMeta(undefined).name }}
                     </span>
+                    <span class="px-1 rounded-[2px] text-[9px] text-gray-400 border border-white/10 bg-white/5">
+                      {{ getSourceTypeLabel(article.source_type) }}
+                    </span>
                     <span class="truncate font-medium flex-1">{{ article.title_cn || article.title }}</span>
                     <a 
                       v-if="article.url" 
@@ -336,18 +339,9 @@
                   <span class="text-[10px] text-gray-500 block">来源站点</span>
                   <span class="text-xs text-gray-300 truncate block">{{ selectedArticle.source_name }}</span>
                 </div>
-                <div class="space-y-1 col-span-2">
-                  <span class="text-[10px] text-gray-500 block mb-1">关键实体提取</span>
-                  <div v-if="selectedArticle.events && selectedArticle.events.length > 0" class="space-y-2">
-                    <div v-for="(evt, idx) in selectedArticle.events" :key="idx" class="text-[11px] bg-black/20 p-2 rounded border border-white/5 grid grid-cols-2 gap-1">
-                       <div v-if="evt.project_name" class="col-span-2 text-brand-400 font-medium mb-1">{{ evt.project_name }}</div>
-                       <div v-if="evt.location"><span class="text-gray-500">位置:</span> {{ evt.location }}</div>
-                       <div v-if="evt.contractor"><span class="text-gray-500">承包商:</span> {{ evt.contractor }}</div>
-                       <div v-if="evt.client"><span class="text-gray-500">客户:</span> {{ evt.client }}</div>
-                       <div v-if="evt.amount"><span class="text-gray-500">金额:</span> {{ evt.amount }} {{ evt.currency }}</div>
-                    </div>
-                  </div>
-                  <div v-else class="text-xs text-gray-600 italic">未提取到关键实体</div>
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-500 block">数据来源</span>
+                  <span class="text-xs text-gray-300">{{ getSourceTypeLabel(selectedArticle.source_type) }}</span>
                 </div>
               </div>
             </div>
@@ -522,6 +516,16 @@ function getCategoryMeta(cat: string | undefined) {
   return found ? categoriesMeta[found] : categoriesMeta.unknown
 }
 
+function getSourceTypeLabel(value?: string) {
+  const source = (value || '').toLowerCase()
+  if (source === 'rss') return 'RSS'
+  if (source === 'wechat') return '公众号'
+  if (source === 'rsshub') return '公众号'
+  if (source === 'official') return '公众号'
+  if (source === 'web') return 'Web'
+  return 'Web'
+}
+
 // --- 数据处理 ---
 const groupedArticles = computed(() => {
   const groups: Record<string, NewsItem[]> = {}
@@ -551,12 +555,11 @@ function toggleGroup(sourceName: string) {
 async function selectArticle(article: NewsItem) {
   if (selectedArticle.value?.id === article.id) return
   
-  // 详情字段可能不全，去后端取完整详情和关联事件
+  // 详情字段可能不全，去后端取完整详情
   try {
     const res = await fetch(`/api/article/${article.id}`)
     const data = await res.json()
-    // 这里的 data 包含 { article: {...}, events: [...] }
-    selectedArticle.value = { ...article, ...data.article, events: data.events }
+    selectedArticle.value = { ...article, ...data.article }
   } catch (e) {
     console.error('获取文章详情失败', e)
     selectedArticle.value = article

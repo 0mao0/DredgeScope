@@ -44,6 +44,22 @@ def write_scheduler_log(message):
     except Exception:
         pass
 
+def post_wecom_webhook(payload, label):
+    """发送企业微信 Webhook，并返回解析后的响应字典"""
+    if not config.WECOM_WEBHOOK_URL:
+        write_scheduler_log(f"推送统计: 窗口{label} Webhook未配置")
+        return {"errcode": -1, "errmsg": "Webhook未配置"}
+    try:
+        resp = requests.post(config.WECOM_WEBHOOK_URL, json=payload, timeout=20)
+        text = resp.text or ""
+        print(f"[Push] HTTP {resp.status_code}: {text}")
+        try:
+            return resp.json()
+        except Exception:
+            return {"errcode": -2, "errmsg": "响应非 JSON", "raw": text}
+    except Exception as e:
+        return {"errcode": -3, "errmsg": f"请求失败: {e}"}
+
 def get_push_window(now):
     """获取推送窗口的时间范围
     
@@ -194,19 +210,17 @@ def push_daily_report():
     if not articles:
         print("无新情报，发送空消息通知")
         write_scheduler_log(f"推送统计: 窗口{label} 原始记录{raw_event_count} 过滤后0 推送0")
-        if config.WECOM_WEBHOOK_URL:
-            try:
-                # 发送纯文本通知
-                payload = {
-                    "msgtype": "text",
-                    "text": {
-                        "content": f"【全球疏浚情报 {label}】\n截至目前，暂无最新情报更新。"
-                    }
-                }
-                requests.post(config.WECOM_WEBHOOK_URL, json=payload)
-                print("[Push] 已发送无情报通知")
-            except Exception as e:
-                print(f"[Push] 发送空消息失败: {e}")
+        payload = {
+            "msgtype": "text",
+            "text": {
+                "content": f"【全球疏浚情报 {label}】\n截至目前，暂无最新情报更新。"
+            }
+        }
+        resp_json = post_wecom_webhook(payload, label)
+        if resp_json.get("errcode") == 0:
+            print("[Push] 已发送无情报通知")
+        else:
+            print(f"[Push] 无情报通知发送失败: {resp_json}")
         return
 
     cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.png"
@@ -281,33 +295,23 @@ def push_daily_report():
     }
 
     # 3. 发送
-    if config.WECOM_WEBHOOK_URL:
-        print(f"Pushing to: {config.WECOM_WEBHOOK_URL}")
-        try:
-            resp = requests.post(config.WECOM_WEBHOOK_URL, json=payload)
-            print(f"[Push] 响应: {resp.text}")
-            
-            # 如果 Template Card 失败 (例如 errcode != 0)，尝试降级为 Text 消息
-            resp_json = resp.json()
-            if resp_json.get("errcode") != 0:
-                print("Template Card 推送失败，尝试降级为 Text 消息...")
-                text_content = f"【全球疏浚情报 {date_str}】\n"
-                text_content += f"本次更新: {total_count} 条\n\n"
-                text_content += f"{category_line}\n"
-                text_content += f"\n详情请访问: {jump_url}"
-                
-                text_payload = {
-                    "msgtype": "text",
-                    "text": {
-                        "content": text_content
-                    }
-                }
-                requests.post(config.WECOM_WEBHOOK_URL, json=text_payload)
-                
-        except Exception as e:
-            print(f"[Push] 发送失败: {e}")
-    else:
-        print("[Push] 未配置 Webhook URL，跳过发送")
+    print(f"Pushing to: {config.WECOM_WEBHOOK_URL}")
+    resp_json = post_wecom_webhook(payload, date_str)
+    if resp_json.get("errcode") != 0:
+        print("Template Card 推送失败，尝试降级为 Text 消息...")
+        text_content = f"【全球疏浚情报 {date_str}】\n"
+        text_content += f"本次更新: {total_count} 条\n\n"
+        text_content += f"{category_line}\n"
+        text_content += f"\n详情请访问: {jump_url}"
+        text_payload = {
+            "msgtype": "text",
+            "text": {
+                "content": text_content
+            }
+        }
+        fallback_resp = post_wecom_webhook(text_payload, date_str)
+        if fallback_resp.get("errcode") != 0:
+            print(f"[Push] 降级文本推送失败: {fallback_resp}")
 
 if __name__ == "__main__":
     push_daily_report()

@@ -52,23 +52,8 @@ async def get_events(
     start: str = Query(None, description="Start datetime ISO"),
     end: str = Query(None, description="End datetime ISO")
 ):
-    """获取事件，支持按日期、最近24小时或自定义时间范围"""
+    """获取列表数据，支持按日期、最近24小时或自定义时间范围"""
     try:
-        def parse_event_datetime(value):
-            if not value:
-                return None, False
-            text = str(value).strip()
-            if not text:
-                return None, False
-            try:
-                if "T" in text:
-                    return datetime.fromisoformat(text), False
-                if " " in text and ":" in text:
-                    return datetime.fromisoformat(text.replace(" ", "T")), False
-                return datetime.strptime(text, "%Y-%m-%d"), True
-            except Exception:
-                return None, False
-
         if mode == 'recent':
             now = datetime.now()
             hour = now.hour
@@ -101,21 +86,16 @@ async def get_events(
         
         articles = database.get_articles_by_time_range_strict(start_time, end_time)
 
-        category_priority = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market"]
         for a in articles:
             if a.get('created_at'):
                 a['created_at'] = str(a['created_at']).split('.')[0]
             if a.get('pub_date'):
                 a['pub_date'] = str(a['pub_date']).split('.')[0]
-            cats = a.get("categories") or []
-            primary = None
-            for key in category_priority:
-                if key in cats:
-                    primary = key
-                    break
-            if not primary and cats:
-                primary = cats[0]
-            a["category"] = primary or "Market"
+            category_val = a.get("category")
+            if not category_val:
+                cats = a.get("categories") or []
+                category_val = cats[0] if cats else "Market"
+            a["category"] = category_val
 
         article_count = len(articles)
         return {
@@ -148,13 +128,12 @@ async def get_stats(days: int = 7):
     
     # 按天统计
     query = '''
-        SELECT date(e.created_at) as d, count(DISTINCT e.article_id) as c
-        FROM events e
-        JOIN articles a ON e.article_id = a.id
-        WHERE e.created_at >= ? 
+        SELECT date(a.created_at) as d, count(*) as c
+        FROM articles a
+        WHERE a.created_at >= ? 
           AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
           AND (a.valid = 1 OR a.valid IS NULL)
-        GROUP BY date(e.created_at)
+        GROUP BY date(a.created_at)
         ORDER BY d ASC
     '''
     c.execute(query, (start_date.isoformat(),))
@@ -195,13 +174,13 @@ async def get_statistics(
     start_time = f"{start}T00:00:00"
     end_time = f"{end}T23:59:59"
     
-    events = database.get_events_by_time_range(start_time, end_time)
+    articles = database.get_articles_by_time_range(start_time, end_time)
     
     # 1. Category Pie Chart
     # Use enriched category
     categories = []
-    for e in events:
-        cat = e.get('category')
+    for a in articles:
+        cat = a.get('category')
         if not cat or cat == 'None':
             cat = 'Unknown'
         categories.append(cat)
@@ -215,17 +194,15 @@ async def get_statistics(
     trend_data = defaultdict(lambda: defaultdict(int))
     all_dates = set()
     
-    for e in events:
-        # Use pub_date if available, else created_at
-        d_str = e.get('pub_date') or e.get('created_at')
+    for a in articles:
+        d_str = a.get('pub_date') or a.get('created_at')
         if not d_str: continue
         try:
             # Handle potential ISO format with T or space
             clean_date = str(d_str).replace('T', ' ').split('.')[0]
             d_obj = datetime.strptime(clean_date[:10], "%Y-%m-%d")
             date_key = d_obj.strftime("%Y-%m-%d")
-            
-            cat = e.get('category')
+            cat = a.get('category')
             if not cat or cat == 'None': cat = 'Unknown'
             
             trend_data[cat][date_key] += 1
@@ -254,11 +231,11 @@ async def get_statistics(
     
     # 3. Source Bar Chart
     sources = []
-    for e in events:
-        s = e.get('source_name')
+    for a in articles:
+        s = a.get('source_name')
         if not s or s == 'None':
             # Fallback to source_type if name missing
-            s = e.get('source_type', 'Unknown')
+            s = a.get('source_type', 'Unknown')
         sources.append(s)
         
     source_counts = Counter(sources)
@@ -409,7 +386,6 @@ async def get_articles(
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    join_sql = "LEFT JOIN events e ON e.article_id = a.id"
     where = [
         "(a.is_hidden = 0 OR a.is_hidden IS NULL)"
     ]
@@ -427,8 +403,7 @@ async def get_articles(
         pass
 
     if category:
-        join_sql = "JOIN events e ON e.article_id = a.id"
-        where.append("e.category = ?")
+        where.append("a.category = ?")
         params.append(category)
 
     if date:
@@ -453,9 +428,8 @@ async def get_articles(
 
     where_sql = " AND ".join(where) if where else "1=1"
     count_query = f"""
-        SELECT COUNT(DISTINCT a.id)
+        SELECT COUNT(a.id)
         FROM articles a
-        {join_sql}
         WHERE {where_sql}
     """
     c.execute(count_query, params)
@@ -466,12 +440,9 @@ async def get_articles(
         SELECT 
             a.id, a.title, a.title_cn, a.pub_date, a.source_type, a.source_name,
             a.summary_cn, a.full_text_cn, a.content, a.screenshot_path, a.url, a.created_at,
-            a.valid,
-            GROUP_CONCAT(DISTINCT e.category) as categories
+            a.valid, a.category
         FROM articles a
-        {join_sql}
         WHERE {where_sql}
-        GROUP BY a.id
         ORDER BY a.created_at DESC, a.pub_date DESC
         LIMIT ? OFFSET ?
     """
@@ -489,8 +460,8 @@ async def get_articles(
         if item.get('pub_date'):
              item['pub_date'] = str(item['pub_date']).split('.')[0]
              
-        cats = item.get("categories") or ""
-        item["categories"] = [c for c in cats.split(",") if c] if cats else []
+        category_val = item.get("category")
+        item["categories"] = [category_val] if category_val else []
         items.append(item)
 
     return {
@@ -506,7 +477,7 @@ async def get_article_detail(article_id: int):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
-        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at, valid
+        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at, valid, category
         FROM articles
         WHERE id = ?
     """, (article_id,))
@@ -514,15 +485,6 @@ async def get_article_detail(article_id: int):
     if not article_row:
         conn.close()
         return {"article": None, "events": []}
-
-    c.execute("""
-        SELECT e.*, a.title as article_title, a.title_cn, a.url as article_url, a.screenshot_path, a.summary_cn, a.full_text_cn, a.content, a.vl_desc, a.pub_date, a.source_type, a.source_name, e.details_json
-        FROM events e
-        JOIN articles a ON e.article_id = a.id
-        WHERE e.article_id = ?
-        ORDER BY e.created_at DESC
-    """, (article_id,))
-    rows = c.fetchall()
     conn.close()
 
     article_data = dict(article_row)
@@ -530,27 +492,8 @@ async def get_article_detail(article_id: int):
         article_data['created_at'] = str(article_data['created_at']).split('.')[0]
     if article_data.get('pub_date'):
         article_data['pub_date'] = str(article_data['pub_date']).split('.')[0]
-
-    events = []
-    categories = set()
-    seen_signatures = set()
-    for row in rows:
-        item = dict(row)
-        if item.get('details_json'):
-            item['details'] = json.loads(item['details_json'])
-        else:
-            item['details'] = {}
-        if item.get('category'):
-            categories.add(item['category'])
-        signature = database.build_event_signature(item)
-        if not signature:
-            signature = f"empty|{item.get('category', '')}"
-        if signature in seen_signatures:
-            continue
-        seen_signatures.add(signature)
-        events.append(item)
-
-    return {"article": dict(article_row), "events": events, "categories": list(categories)}
+    category_val = article_data.get("category")
+    return {"article": article_data, "events": [], "categories": [category_val] if category_val else []}
 
 @app.get("/api/sources")
 async def get_sources():

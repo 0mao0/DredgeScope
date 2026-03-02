@@ -50,15 +50,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Playwright 和 Chromium
-ARG PLAYWRIGHT_DOWNLOAD_HOST
-ARG PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST
-RUN pip install playwright && \
-    playwright install chromium || true
-
 # 复制 Python 依赖
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+
+# 安装 Playwright Chromium（保证与 requirements 中版本一致）
+ARG PLAYWRIGHT_DOWNLOAD_HOST
+ARG PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install chromium
 
 # 复制后端代码
 COPY backend /app/backend
