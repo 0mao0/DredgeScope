@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen">
     <!-- Navbar -->
-    <NavBar />
+    <NavBar class="mb-6" />
     
     <main class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
       <!-- Report Selector -->
@@ -316,7 +316,10 @@ const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
 
 // Report filtering state
-const reportType = ref<'morning' | 'evening'>(dayjs().hour() < 14 ? 'morning' : 'evening')
+const currentHour = dayjs().hour()
+// 早上8点到晚上6点(18点)显示晚报，其余时间显示早报
+const isEvening = currentHour >= 8 && currentHour < 18
+const reportType = ref<'morning' | 'evening'>(isEvening ? 'evening' : 'morning')
 const selectedDate = ref<Dayjs>(dayjs())
 const previewVisible = ref(false)
 const previewLoading = ref(false)

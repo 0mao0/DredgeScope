@@ -21,7 +21,7 @@ def run(use_test_source=False):
     else:
         print(f"使用默认源文件: {config.SOURCES_FILE}")
     
-    print("\n[1/2] 开始运行采集任务 (job_fetch)...")
+    print("\n[1/3] 开始运行采集任务 (job_fetch)...")
     try:
         scheduler.job_fetch()
     except Exception as e:
@@ -33,7 +33,15 @@ def run(use_test_source=False):
         if use_test_source:
             config.SOURCES_FILE = original_sources_file
 
-    print("\n[2/2] 开始运行推送任务 (job_push)...")
+    print("\n[2/3] 开始运行船舶追踪任务 (job_ship_tracker)...")
+    try:
+        scheduler.job_ship_tracker()
+    except Exception as e:
+        print(f"船舶追踪任务运行失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+    print("\n[3/3] 开始运行推送任务 (job_push)...")
     try:
         scheduler.job_push()
         print("推送任务运行完成。")

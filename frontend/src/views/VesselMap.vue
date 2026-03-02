@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
     <!-- Navbar -->
-    <NavBar />
+    <NavBar class="mb-6" />
 
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden relative min-h-0">
@@ -175,9 +175,6 @@
         </div>
 
         <div v-if="trackDisplayList.length" ref="trackListRef" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[240px] flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between mb-2 sticky top-0 z-10 bg-white/5 pb-2">
-            <span class="font-semibold text-gray-200">最近3天轨迹</span>
-          </div>
           <div class="flex-1 overflow-y-auto custom-scrollbar">
             <div class="flex flex-col gap-3">
               <div v-for="item in trackDisplayList" :key="item.mmsi" class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col max-h-[180px]">
@@ -186,6 +183,7 @@
                     <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: item.color }"></span>
                     <span class="font-semibold text-gray-200">{{ item.name }}</span>
                     <span class="text-gray-500 font-mono">MMSI {{ item.mmsi }}</span>
+                    <span class="text-[10px] text-blue-400 border border-blue-400/30 px-1 rounded bg-blue-400/10 ml-2">最近3天轨迹</span>
                   </div>
                 </div>
                 <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400">暂无轨迹点</div>
@@ -459,20 +457,25 @@ function formatSpeed(value: number | undefined): string {
 
 function mapStatusToIconKey(status: string | undefined): string {
   if (!status) return 'offline'
-  const s = status.toLowerCase()
+  const s = status.toLowerCase().trim()
   
+  // Exact matches
   if (s === 'dredging') return 'dredging'
   if (s === 'underway using engine' || s === 'underway') return 'underway'
   if (s === 'moored' || s === 'at anchor') return 'moored'
   if (s === 'stopped') return 'moored'
   if (s === 'offline' || s === 'unknown') return 'offline'
   
-  if (s.includes('施工') || s.includes('作业') || s.includes('疏浚')) return 'dredging'
-  if (s.includes('操纵能力受限')) return 'dredging'
-  if (s.includes('机动船在航')) return 'underway'
+  // Keyword matching (Chinese & English)
+  if (s.includes('施工') || s.includes('作业') || s.includes('疏浚') || s.includes('dredging')) return 'dredging'
+  if (s.includes('操纵能力受限') || s.includes('restricted maneuverability')) return 'dredging'
+  
+  if (s.includes('机动船在航') || s.includes('underway') || s.includes('moving')) return 'underway'
   if (s.includes('调遣')) return 'underway'
-  if (s.includes('锚泊') || s.includes('系泊') || s.includes('停泊') || s.includes('停靠') || s.includes('抛锚')) return 'moored'
-  if (s.includes('离线')) return 'offline'
+  
+  if (s.includes('锚泊') || s.includes('系泊') || s.includes('停泊') || s.includes('停靠') || s.includes('抛锚') || s.includes('moored') || s.includes('anchor')) return 'moored'
+  
+  if (s.includes('离线') || s.includes('offline')) return 'offline'
   
   return 'offline'
 }
@@ -502,9 +505,6 @@ async function handleVesselClick(vessel: Vessel) {
     } else {
       message.info('该船舶暂无位置信息')
     }
-  }
-  if (marker) {
-    marker.openPopup()
   }
 }
 
@@ -1050,33 +1050,75 @@ function getTrackFitPadding() {
  * @param subText 次行文本
  * @returns Leaflet DivIcon
  */
-function createCompanyTagIcon(text: string, company: string, subText?: string) {
+function createCompanyTagIcon(
+  company: string, 
+  details: {
+    name: string,
+    isDetailed: boolean,
+    status?: string,
+    speed?: string,
+    location?: string,
+    time?: string
+  }
+) {
   const color = getTagColor(company)
-  const maxLen = Math.max(text.length, subText?.length || 0)
-  const textWidth = maxLen * 8 + 16
-  const height = subText ? 30 : 20
-  const secondLine = subText ? `<div style="font-size: 10px; font-weight: 500; opacity: 0.9;">${subText}</div>` : ''
   
+  if (!details.isDetailed) {
+    const text = getCompanyAbbreviation(company)
+    const textWidth = text.length * 8 + 16
+    return L.divIcon({
+      className: 'company-tag-icon',
+      html: `<div style="
+        background: ${color.bg};
+        color: ${color.text};
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 20px;
+      ">${text}</div>`,
+      iconSize: [textWidth, 20],
+      iconAnchor: [-5, 10]
+    })
+  }
+
+  // Detailed view
+  const companyAbbr = getCompanyAbbreviation(company)
+  const title = `${companyAbbr || '未知'} | ${details.name}`
+  const content = `
+    <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px;">${title}</div>
+    <div style="display: flex; gap: 8px; margin-bottom: 2px;">
+      <span>状态: ${details.status}</span>
+      <span>航速: ${details.speed}</span>
+    </div>
+    <div style="margin-bottom: 2px;">位置: ${details.location}</div>
+    <div style="opacity: 0.8;">更新: ${details.time}</div>
+  `
+
   return L.divIcon({
-    className: 'company-tag-icon',
+    className: 'company-tag-icon-detailed',
     html: `<div style="
       background: ${color.bg};
       color: ${color.text};
-      padding: 2px 8px;
-      border-radius: 4px;
+      padding: 6px 10px;
+      border-radius: 6px;
       font-size: 10px;
-      font-weight: 600;
-      white-space: nowrap;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      line-height: 1.4;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.3);
-      backdrop-filter: blur(4px);
-       display: flex;
-       flex-direction: column;
-       align-items: center;
-       line-height: 1.2;
-    "><div>${text}</div>${secondLine}</div>`,
-    iconSize: [textWidth, height],
-    iconAnchor: [-5, 10]
+      backdrop-filter: blur(8px);
+      min-width: max-content;
+      white-space: nowrap;
+    ">${content}</div>`,
+    iconSize: [0, 0], // Let CSS handle size
+    iconAnchor: [-10, 20]
   })
 }
 
@@ -1122,6 +1164,23 @@ async function fetchVessels() {
     
     renderMarkers()
     
+    // Auto-fit bounds to all tracked vessels with padding
+    if (map && vessels.value.length > 0) {
+      const bounds = L.latLngBounds([])
+      let hasPoints = false
+      vessels.value.forEach(v => {
+        if (v.lat != null && v.lng != null && isTrackedVessel(v)) {
+          bounds.extend([v.lat, v.lng])
+          hasPoints = true
+        }
+      })
+      
+      if (hasPoints) {
+        // Pad by 20% (0.2)
+        map.fitBounds(bounds.pad(0.2))
+      }
+    }
+    
     // Do NOT expand all groups initially (User requirement: Default collapsed)
     // activeKeys.value = Object.keys(groupedVessels.value)
   } catch (error) {
@@ -1146,24 +1205,15 @@ function renderMarkers() {
     
     const iconKey = getVesselStatusKey(v)
     const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(vesselLayerGroup!)
-    bindPopup(marker, v, iconKey)
+    marker.on('click', () => handleVesselClick(v))
+
     if (v.mmsi) {
       vesselMarkerMap.set(v.mmsi, marker)
     }
     
     // Tag Logic
     const companyName = v.company || '其他'
-    const tagText = isCloseZoom ? `${companyName}|${v.name}` : getCompanyAbbreviation(companyName)
-    if (tagText) {
-      const speedText = isCloseZoom ? formatSpeed(v.speed) : undefined
-      const tagIcon = createCompanyTagIcon(tagText, companyName, speedText)
-      const tagMarker = L.marker([v.lat, v.lng], { icon: tagIcon }).addTo(tagLayerGroup!)
-      bindPopup(tagMarker, v, iconKey)
-    }
-  })
-}
-
-function bindPopup(layer: L.Layer, v: Vessel, iconKey: string) {
+    
     let timeStr = '未知'
     if (v.updated_at) {
       try {
@@ -1172,62 +1222,31 @@ function bindPopup(layer: L.Layer, v: Vessel, iconKey: string) {
       } catch (e) {}
     }
     
-    let locHtml = ''
+    let locationStr = '未知'
     if (v.continent || v.country) {
       const continent = translateContinent(v.continent)
       const country = translateCountry(v.country)
-      locHtml += `<div class="flex justify-between"><span class="text-gray-500">区域:</span> <span>${continent || '-'} / ${country || '-'}</span></div>`
-    }
-    
-    if (!locHtml) {
-      locHtml += `<div class="flex justify-between"><span class="text-gray-500">位置:</span> <span class="text-gray-600 italic">数据更新中...</span></div>`
+      locationStr = `${continent || '-'} / ${country || '-'}`
     }
     
     const statusCN = translateStatusByKey(getVesselStatusKey(v))
-    const statusClass = iconKey === 'dredging' ? 'text-blue-400 font-bold' : 
-                      iconKey === 'underway' ? 'text-green-400' : iconKey === 'moored' ? 'text-red-400' : 'text-gray-400'
+    const speedStr = v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'
     
-    const popupContent = document.createElement('div')
-    popupContent.style.minWidth = '200px'
-    popupContent.innerHTML = `
-      <div class="font-bold text-white mb-2">${v.name}</div>
-      <div class="flex justify-between mb-1">
-        <span class="text-gray-500">状态:</span>
-        <span class="${statusClass}">${statusCN}</span>
-      </div>
-      <div class="flex justify-between mb-1">
-        <span class="text-gray-500">航速:</span>
-        <span class="text-gray-300 font-mono">${v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'}</span>
-      </div>
-      ${v.company ? `<div class="flex justify-between mb-1"><span class="text-gray-500">船队:</span><span class="text-gray-300">${v.company}</span></div>` : ''}
-      ${locHtml}
-      <div class="flex justify-between mt-2 pt-2 border-t border-white/10">
-        <span class="text-gray-500">更新时间:</span>
-        <span class="text-gray-400 text-xs">${timeStr}</span>
-      </div>
-      <div class="mt-3 flex justify-center">
-        <button id="track-btn-${v.mmsi}" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
-          显示3天轨迹
-        </button>
-      </div>
-    `
-    
-    // 状态点可点击
-    layer.bindPopup(popupContent, {
-      className: 'dark-popup'
+    const tagIcon = createCompanyTagIcon(companyName, {
+      name: v.name,
+      isDetailed: isCloseZoom,
+      status: statusCN,
+      speed: speedStr,
+      location: locationStr,
+      time: timeStr
     })
     
-    // 监听 popup 打开事件来绑定按钮点击
-    layer.on('popupopen', () => {
-      const btn = document.getElementById(`track-btn-${v.mmsi}`)
-      if (btn) {
-        btn.onclick = () => showTrack(v.mmsi)
-      }
-    })
+    const tagMarker = L.marker([v.lat, v.lng], { icon: tagIcon }).addTo(tagLayerGroup!)
+    tagMarker.on('click', () => handleVesselClick(v))
+  })
 }
+
+
 
 /**
  * 根据窗口宽度调整侧边栏显示
@@ -1245,9 +1264,10 @@ onMounted(async () => {
   if (!mapContainer.value) return
   
   map = L.map(mapContainer.value, {
-    center: [25, 110],
-    zoom: 3,
-    maxZoom: 18,
+    center: [30, 122],
+    zoom: 8,
+    minZoom: 2,
+    maxZoom: 22,
     zoomControl: false,
     attributionControl: false
   })
@@ -1257,31 +1277,37 @@ onMounted(async () => {
   const labelUrl = `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
   const satUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
   const satLabelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+  
+  // 0-7级: 天地图矢量底图
   L.tileLayer(baseUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 18,
-    minZoom: 2,
+    maxZoom: 7,
+    minZoom: 0,
     keepBuffer: 3,
     className: 'tianditu-vector-layer'
   }).addTo(map)
   L.tileLayer(labelUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 18,
-    minZoom: 2,
+    maxZoom: 7,
+    minZoom: 0,
     keepBuffer: 3,
     className: 'tianditu-vector-layer'
   }).addTo(map)
+
+  // 8-18+级: 天地图卫星底图 (超过18级自动拉伸)
   L.tileLayer(satUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 18,
-    minZoom: 6,
+    maxNativeZoom: 18,
+    maxZoom: 22,
+    minZoom: 8,
     keepBuffer: 3,
     className: 'tianditu-satellite-layer'
   }).addTo(map)
   L.tileLayer(satLabelUrl, {
     subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 18,
-    minZoom: 6,
+    maxNativeZoom: 18,
+    maxZoom: 22,
+    minZoom: 8,
     keepBuffer: 3,
     className: 'tianditu-satellite-layer'
   }).addTo(map)
@@ -1306,6 +1332,10 @@ onMounted(async () => {
 
   await nextTick()
   map.invalidateSize()
+  // 再次延迟刷新以确保布局稳定
+  setTimeout(() => {
+    map?.invalidateSize()
+  }, 300)
   
   try {
     const res = await fetch('/static/continents.geojson')

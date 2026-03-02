@@ -30,3 +30,6 @@ ships.csv
 
 # Local config
 local_config.py
+
+#tests
+tests/

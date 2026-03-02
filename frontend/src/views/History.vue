@@ -1,10 +1,10 @@
 <template>
   <div class="min-h-screen flex flex-col h-screen overflow-hidden bg-[#0f172a]">
     <!-- Navbar -->
-    <NavBar class="flex-shrink-0" />
+    <NavBar class="flex-shrink-0 mb-6" />
 
     <!-- Top Filter Area -->
-    <header class="px-4 py-2 flex items-center justify-between bg-white/5 border-b border-white/10 flex-shrink-0 h-12">
+    <header class="px-2 sm:px-4 lg:px-8 py-2 flex items-center justify-between bg-white/5 border-b border-white/10 flex-shrink-0 h-12">
       <div class="flex items-center gap-4 h-full">
         <div class="text-[10px] text-gray-500 bg-black/20 px-2 py-0.5 rounded border border-white/5 h-7 flex items-center">
           共 {{ total }} 条记录
@@ -49,7 +49,7 @@
       </div>
     </header>
 
-    <main class="flex-1 flex overflow-hidden p-4 gap-4">
+    <main class="flex-1 flex overflow-hidden px-2 sm:px-4 lg:px-8 py-4 gap-4">
       <!-- Zone A: Tree (20%) -->
       <aside class="w-1/5 glass-card rounded-xl flex flex-col overflow-hidden border border-white/10">
         <div class="p-3 border-b border-white/5 bg-white/5 flex items-center justify-between">

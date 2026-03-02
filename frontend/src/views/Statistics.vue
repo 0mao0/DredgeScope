@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen">
     <!-- Navbar -->
-    <NavBar />
+    <NavBar class="mb-6" />
     
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
       <!-- Filter Bar -->
