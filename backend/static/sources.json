@@ -139,7 +139,7 @@
     },
     {
         "name": "USACE Navigation Gateway",
-        "url": "https://operations.erdc.dren.mil/navigation.cfm",
+        "url": "https://www.usace.army.mil/Media/News/",
         "type": "web",
         "selector": "body",
         "max_links": 20
@@ -157,5 +157,25 @@
         "type": "web",
         "selector": "body",
         "max_links": 20
+    },
+    {
+        "name": "中交疏浚",
+        "type": "wechat",
+        "fakeid": "MzI1NzYwNTQ5Ng=="
+    },
+    {
+        "name": "中交天航局",
+        "type": "wechat",
+        "fakeid": "MzA5NTU2NTYyNQ=="
+    },
+    {
+        "name": "中交广航局",
+        "type": "wechat",
+        "fakeid": "MjM5MjM5NTAyMA=="
+    },
+    {
+        "name": "中交上航局",
+        "type": "wechat",
+        "fakeid": "MzA3NjA5OTU5Mg=="
     }
 ]

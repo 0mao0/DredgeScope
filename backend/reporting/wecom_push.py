@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import urllib.parse
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 current_dir = os.path.dirname(os.path.abspath(__file__))
 backend_dir = os.path.dirname(current_dir)
@@ -46,6 +47,17 @@ def write_scheduler_log(message):
 
 def post_wecom_webhook(payload, label):
     """发送企业微信 Webhook，并返回解析后的响应字典"""
+    if not config.WECOM_WEBHOOK_URL:
+        # 尝试重新加载 .env 配置文件
+        print(f"[Config] Webhook URL 未找到，尝试重新加载 .env: {config.env_path}")
+        load_dotenv(config.env_path, override=True)
+        config.WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
+        
+        if config.WECOM_WEBHOOK_URL:
+             print(f"[Config] 重新加载成功，Webhook URL 已更新")
+        else:
+             print(f"[Config] 重新加载失败，Webhook URL 仍为空")
+
     if not config.WECOM_WEBHOOK_URL:
         write_scheduler_log(f"推送统计: 窗口{label} Webhook未配置")
         return {"errcode": -1, "errmsg": "Webhook未配置"}

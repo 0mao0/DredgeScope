@@ -9,6 +9,43 @@
 - 大屏仪表盘与历史新闻筛选
 - 船舶跟踪与分布展示
 
+## 新闻数据源分析
+
+当前系统监控 **28** 个全球疏浚行业核心数据源，覆盖国际主流媒体、行业协会、主要承包商及中国官方渠道。
+
+### 1. 数据源分布
+
+| 类型 | 数量 | 占比 | 采集策略 | 特点 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Web (网页)** | 18 | 64% | Playwright 动态渲染 + 智能选择器 | 覆盖面广，支持反爬虫对抗，含黑名单过滤 |
+| **RSS (订阅)** | 6 | 21% | Feedparser 标准解析 | 实时性高，结构化好，但部分源内容简略 |
+| **WeChat (公众号)** | 4 | 14% | 官方 Session 接口 (优先) / RSSHub (回退) | 深度中文内容，需处理 Session 过期与反爬 |
+| **总计** | **28** | 100% | 混合采集模式 | 全方位覆盖 |
+
+### 2. 重点覆盖领域
+
+#### 🌍 国际行业媒体 (RSS/Web)
+- **Dredging Today / DredgeWire**: 行业头部即时新闻
+- **MarineLog / Waterways Journal**: 侧重内河与航运工程
+- **Pile Buck Magazine**: 桩基与海洋工程技术
+
+#### 🏢 国际承包商 (Web)
+- **四大疏浚巨头**: Jan De Nul, Van Oord, Boskalis, DEME
+- **美国**: Great Lakes Dredge & Dock (GLDD)
+
+#### 🏛️ 行业协会与官方机构 (Web)
+- **IADC / CEDA**: 国际疏浚协会与中部疏浚协会
+- **USACE (美国陆军工程兵团)**: 官方项目与招标信息
+- **WEDA / NWC**: 美洲相关疏浚组织
+
+#### 🇨🇳 中国核心渠道 (Web/WeChat)
+- **中交集团 (CCCC)**: 疏浚、天航局、上航局、广航局（官网 + 公众号双备份）
+- **中国疏浚协会 (CHIDA)**: 行业官方动态
+
+### 3. 采集与过滤策略
+- **去重机制**: 任务内去重 + 数据库历史比对，确保不重复抓取。
+- **无效拦截**: 自动过滤 "Login", "About Us", "Contact" 等非新闻页面，但保留记录（标记为 `valid=0`）以避免重复扫描。
+- **时效控制**: 优先入库 5 天内的新闻；过期新闻自动标记归档。
 
 ## 核心逻辑（新闻处理流程）
 
@@ -124,7 +161,7 @@ dredgescope
 ├─ docker-compose.yml           # 容器编排
 ├─ run_backend.bat              # 后端启动脚本
 ├─ run_frontend.bat             # 前端启动脚本
-└─ run_scheduler.bat            # 调度器启动脚本
+├─ run_scheduler.bat            # 调度器启动脚本
 ```
 
 ## 运行要点
@@ -184,3 +221,63 @@ flowchart TB
         DB --> PUSH[push_daily_report]
         PUSH --> WECOM[Webhook 模板卡/降级文本]
     end
+
+## 新闻数据源分析
+
+截至目前，系统共配置了 **27** 个数据源，覆盖全球主要的疏浚行业信息渠道。
+
+### 1. 总体分布
+
+| 类型 | 数量 | 占比 | 说明 |
+| :--- | :--- | :--- | :--- |
+| **Web (网页爬虫)** | 17 | 63% | 包括国际疏浚组织、各国疏浚企业官网、政府机构新闻页。通过 Playwright 动态抓取。 |
+| **RSS (订阅)** | 6 | 22% | 专业的行业新闻聚合网站，更新频率较高。 |
+| **WeChat (公众号)** | 4 | 15% | 中国四大疏浚局官方公众号。支持 Session 抓取（优先）和 RSSHub 回退。 |
+| **总计** | **27** | 100% | |
+
+### 2. 详细列表
+
+#### 国际行业媒体 (8 个)
+1. **Dredging Today** (RSS) - 全球疏浚行业新闻
+2. **DredgeWire** (RSS) - 疏浚与海洋建设资讯
+3. **MarineLog Dredging** (RSS) - 海事日志疏浚版块
+4. **Waterways Journal** (RSS) - 内河航运与疏浚
+5. **Pile Buck Magazine** (RSS) - 深基坑与桩基工程
+6. **IADC Dredging** (Web) - 国际疏浚公司协会
+7. **CEDA Industry News** (Web) - 中东部疏浚协会
+8. **Dredging Contractors of America** (Web) - 美国疏浚承包商协会
+
+#### 国际大型疏浚公司 (5 个)
+9. **Jan De Nul** (Web) - 比利时扬德努集团
+10. **Van Oord** (Web) - 荷兰凡诺德公司
+11. **Boskalis** (Web) - 荷兰波斯卡利斯
+12. **DEME Group** (Web) - 比利时DEME集团
+13. **Great Lakes Dredge & Dock** (RSS) - 美国大湖疏浚
+
+#### 中国核心疏浚企业 (5 个)
+14. **中国疏浚协会** (Web) - 行业协会官网
+15. **中交疏浚 (CCCC-CDC)** (Web + WeChat)
+16. **中交天航局 (CCCC-TDC)** (Web + WeChat)
+17. **中交广航局 (CCCC-GDC)** (Web + WeChat)
+18. **中交上航局 (CCCC-SDC)** (Web + WeChat)
+
+#### 美国政府与相关机构 (6 个)
+19. **USACE Navigation Gateway** (Web) - 美国陆军工程兵团导航门户
+20. **USACE Navigation Experience** (Web) - 美国陆军工程兵团数据平台
+21. **BOEM Environment** (Web) - 美国海洋能源管理局
+22. **Atlantic Intracoastal Waterway Association** (Web) - 大西洋沿岸水道协会
+23. **American Maritime Partnership** (Web) - 美国海事伙伴关系
+24. **National Waterways Conference** (Web) - 国家水道会议
+
+### 3. 采集策略
+- **RSS**: 优先使用，实时性高，无需解析页面结构。
+- **Web**: 针对无RSS的网站，使用 `Playwright` 模拟浏览器访问，支持动态加载内容。
+  - **智能去重**: 采集前对比数据库，仅抓取新文章。
+  - **黑名单过滤**: 自动过滤关于/联系/委员会等非新闻页面。
+- **WeChat**: 
+  - **双重策略**: 优先使用官方接口（需Session），失效时自动降级至 RSSHub 镜像。
+  - **全面覆盖**: 包含四大中交系疏浚局的核心发布渠道。
+
+## 开发指南
+
+```

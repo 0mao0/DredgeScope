@@ -6,6 +6,7 @@ import analysis.info_analysis as info_analysis
 import reporting.report_generation as report_generation
 import config
 import os
+import time
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -196,6 +197,7 @@ def write_markdown_audit(rows):
         pass
 
 async def main():
+    start_time = time.time()
     print(f"=== 疏浚情报极简系统启动 ===")
     print(f"文本模型: {config.TEXT_MODEL}")
     print(f"视觉模型: {config.VL_MODEL}")
@@ -204,20 +206,14 @@ async def main():
     sources_count = load_source_count()
 
     # 1. 获取信息
+    t1_start = time.time()
     print(">>> 阶段1: 获取信息...")
     raw_items = await info_acquisition.get_all_items()
     
     # 获取微信公众号文章 (fakeid 列表)
-    wechat_biz_list = [
-        {"name": "中交疏浚", "fakeid": "MzI1NzYwNTQ5Ng=="},
-        {"name": "中交天航局", "fakeid": "MzA5NTU2NTYyNQ=="},
-        {"name": "中交广航局", "fakeid": "MjM5MjM5NTAyMA=="},
-        {"name": "中交上航局", "fakeid": "MzA3NjA5OTU5Mg=="},
-        {"name": "长江航道局", "fakeid": None},
-        {"name": "长江南京航道局", "fakeid": None}
-    ]
-
-    # 尝试从 SOURCES_FILE 加载额外的微信公众号配置
+    wechat_biz_list = []
+    
+    # 从 SOURCES_FILE 加载微信公众号配置
     try:
         with open(config.SOURCES_FILE, "r", encoding="utf-8") as f:
             file_sources = json.load(f)
@@ -230,31 +226,19 @@ async def main():
                             "name": src.get("name"),
                             "fakeid": src.get("fakeid")
                         })
-                        print(f"已加载额外微信源: {src.get('name')}")
+                        print(f"已加载微信源: {src.get('name')}")
     except Exception as e:
-        print(f"加载额外微信源失败: {e}")
+        print(f"加载微信源失败: {e}")
     
     # 微信采集 (自动从 backend/data/wechat_session.json 加载持久化的凭证)
     # 如果 Session 失效，会自动回退到 RSSHub 方案
     wechat_items = wechat_acquisition.wechat_scraper.batch_get_articles(wechat_biz_list, count_per_biz=10)
     if wechat_items:
-        try:
-            async with async_playwright() as p:
-                browser = await info_acquisition.launch_chromium(p)
-                context = await browser.new_context(
-                    viewport={"width": 1280, "height": 800},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    locale="zh-CN",
-                    ignore_https_errors=True
-                )
-                wechat_items = await info_acquisition.enrich_web_items(context, wechat_items)
-                await browser.close()
-        except Exception as e:
-            print(f"[WeChat] 页面抓取失败: {e}")
         print(f"成功获取 {len(wechat_items)} 条微信公众号新闻")
         raw_items.extend(wechat_items)
 
     print(f"共获取到 {len(raw_items)} 条潜在新闻")
+    t1_end = time.time()
     
     # 去重 & 入库拦截
     items = []
@@ -323,10 +307,15 @@ async def main():
             })
             continue
 
-        # 2. 发布时间拦截（5天）
-        pub_dt = parse_pub_datetime(item.get("pub_date"))
-        if not pub_dt:
-            outdated_count += 1
+        # 2. 处理采集阶段过滤的条目（入库但标记为无效）
+        if item.get("filtered_reason"):
+            item["valid"] = 0
+            item["is_hidden"] = 1
+            item["remark"] = f"采集阶段过滤: {item.get('filtered_reason')}"
+            
+            seen_links.add(item['link'])
+            items.append(item)
+            
             audit_rows.append({
                 "site": item.get("source_name", ""),
                 "title": item.get("title", ""),
@@ -336,11 +325,38 @@ async def main():
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
-                "remark": "发布时间缺失"
+                "remark": item["remark"]
             })
             continue
-        if datetime.now() - pub_dt > timedelta(days=5):
+
+        # 3. 发布时间拦截（5天）
+        pub_dt = parse_pub_datetime(item.get("pub_date"))
+        
+        # 对于Web/Official源，如果缺少时间，允许通过（等待后续enrich补充）
+        # 对于RSS/WeChat，通常已有时间，若缺则直接丢弃
+        allow_missing_date = item.get("source_type") in ["web", "official", "rsshub"]
+        
+        if not pub_dt:
+            if not allow_missing_date:
+                outdated_count += 1
+                audit_rows.append({
+                    "site": item.get("source_name", ""),
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "pub_date": item.get("pub_date"),
+                    "source_type": item.get("source_type"),
+                    "keep": False,
+                    "text_ok": False,
+                    "vl_ok": False,
+                    "remark": "发布时间缺失"
+                })
+                continue
+            # else: pass through
+        elif datetime.now() - pub_dt > timedelta(days=5):
             outdated_count += 1
+            item["valid"] = 0  # 标记为无效/过期
+            item["remark"] = "发布时间早于5天(已入库)"
+            
             audit_rows.append({
                 "site": item.get("source_name", ""),
                 "title": item.get("title", ""),
@@ -350,14 +366,20 @@ async def main():
                 "keep": False,
                 "text_ok": False,
                 "vl_ok": False,
-                "remark": "发布时间早于5天"
+                "remark": "发布时间早于5天(仅入库占位)"
             })
+            # 即使过期，也加入 items，以便入库
+            # 注意：后续逻辑需要识别 valid=0 并跳过 analysis
+            seen_links.add(item['link'])
+            pub_date_map[item['link']] = item.get("pub_date")
+            items.append(item)
             continue
 
         seen_links.add(item['link'])
         pub_date_map[item['link']] = item.get("pub_date")
         
         # 3. 标记为待分析
+        item["valid"] = 1
         items.append(item)
         audit_rows.append({
             "site": item.get("source_name", ""),
@@ -373,26 +395,115 @@ async def main():
         pending_map[item['link']] = len(audit_rows) - 1
     
     print(f"过滤掉 {skipped_count} 条垃圾/无效信息")
-    print(f"经去重后，剩余 {len(items)} 条新文章需处理")
+    print(f"经去重后，剩余 {len(items)} 条文章需处理（含过期入库）")
     write_scheduler_log(
-        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 过滤无效{skipped_count} 去重过滤{duplicate_count} 超期过滤{outdated_count} 入库候选{len(items)}"
+        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 过滤无效{skipped_count} 去重过滤{duplicate_count} 超期入库{outdated_count} 入库候选{len(items)}"
     )
 
-    if not items:
-        print("无新文章，任务结束。")
+    # 仅对有效且内容不全的条目进行补充采集
+    t2_start = time.time()
+    items_to_enrich = [i for i in items if i.get("valid") != 0 and (not i.get("screenshot_path") or not i.get("content"))]
+    if items_to_enrich:
+        print(f"正在对 {len(items_to_enrich)} 条条目进行补充采集...")
         try:
-            write_markdown_audit(audit_rows)
-        except Exception:
-            pass
-        write_scheduler_log("采集完成: 无新文章入库")
-        return
+            async with async_playwright() as p:
+                browser = await info_acquisition.launch_chromium(p)
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 800},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    locale="zh-CN",
+                    ignore_https_errors=True
+                )
+                await info_acquisition.enrich_web_items(context, items_to_enrich)
+                await browser.close()
+        except Exception as e:
+            print(f"补充采集失败: {e}")
+    t2_end = time.time()
+
+    # 再次过滤：经过补充采集后，再次检查时间和完整性
+    final_items = []
+    for item in items:
+        # 如果已标记为过期(valid=0)，直接保留（用于占位）
+        if item.get("valid") == 0:
+            final_items.append(item)
+            continue
+
+        # 如果是之前缺时间的，现在应该有了
+        pub_dt = parse_pub_datetime(item.get("pub_date"))
+        if not pub_dt:
+            # 仍然没时间 -> 使用当前时间作为发布时间，确保入库
+            pub_dt = datetime.now()
+            item["pub_date"] = pub_dt.strftime("%Y-%m-%d %H:%M:%S")
+            item["remark"] = (item.get("remark") or "") + " (无发布时间，自动补充)"
+        
+        if datetime.now() - pub_dt > timedelta(days=5):
+            # 补充采集后发现超期 -> 标记为过期并入库
+            item["valid"] = 0
+            item["remark"] = "补充采集后判定过期"
+            final_items.append(item)
+            continue
+            
+        final_items.append(item)
+    items = final_items
+    print(f"最终入库: {len(items)} 条")
+
+    # if not items:
+    #     print("无新文章，任务结束。")
+    #     try:
+    #         write_markdown_audit(audit_rows)
+    #     except Exception:
+    #         pass
+    #     write_scheduler_log("采集完成: 无新文章入库")
+    #     return
 
     database.save_raw_articles(items)
 
     # 2. 分析信息 (文本 + 视觉)
+    t3_start = time.time()
     print(">>> 阶段2: 智能分析...")
-    analysis_items = database.get_articles_by_urls([item['link'] for item in items])
-    results = await info_analysis.process_items_from_db(analysis_items)
+    # 仅获取有效文章进行分析
+    valid_items = [item for item in items if item.get("valid") != 0]
+    
+    if valid_items:
+        analysis_items = database.get_articles_by_urls([item['link'] for item in valid_items])
+        results = await info_analysis.process_items_from_db(analysis_items)
+    else:
+        print("无有效文章需分析（全为过期入库）。")
+        results = []
+        # 即使全过期，也已经save_raw_articles了，所以流程继续，以便生成报告
+        
+    t3_end = time.time()
+    
+    # --- 统计分析结果 ---
+    llm_success = 0
+    llm_failed = 0
+    vlm_success = 0
+    vlm_failed = 0
+    junk_count = 0
+    kept_count = 0
+    
+    if results:
+        for r in results:
+            if isinstance(r, dict):
+                # LLM/Text 分析情况
+                if r.get("full_text_cn") or r.get("summary_cn"):
+                    llm_success += 1
+                else:
+                    llm_failed += 1
+                
+                # VLM 分析情况 (如果有截图)
+                if r.get("screenshot_path"):
+                    if r.get("image_desc"):
+                        vlm_success += 1
+                    else:
+                        vlm_failed += 1
+                
+                # 有效性
+                if r.get("is_junk"):
+                    junk_count += 1
+                else:
+                    kept_count += 1
+
     cutoff_dt = datetime.now() - timedelta(days=5)
     kept_results = []
     for r in results or []:
@@ -431,6 +542,51 @@ async def main():
         pass
     write_scheduler_log(f"分析完成: 文章{len(kept_results)}")
     
+    end_time = time.time()
+    
+    # --- 生成最终分析报告 ---
+    total_time = end_time - start_time
+    time_info = t1_end - t1_start
+    time_enrich = t2_end - t2_start
+    time_analysis = t3_end - t3_start
+    
+    pct_info = (time_info / total_time * 100) if total_time > 0 else 0
+    pct_enrich = (time_enrich / total_time * 100) if total_time > 0 else 0
+    pct_analysis = (time_analysis / total_time * 100) if total_time > 0 else 0
+
+    log_content = []
+    log_content.append("\n" + "="*50)
+    log_content.append("               任务分析报告")
+    log_content.append("="*50)
+    log_content.append("(1) 总体统计分析")
+    log_content.append(f"{'指标':<10}{'数量':<8}{'说明'}")
+    log_content.append(f"{'发现文章':<10}{len(raw_items):<8}扫描到的所有潜在链接")
+    log_content.append(f"{'入库文章':<10}{len(items):<8}包含“过期但入库占位”的文章")
+    log_content.append(f"{'有效分析':<10}{len(valid_items):<8}经过筛选、发布在5天内且内容完整的文章")
+    log_content.append(f"{'最终保留':<10}{kept_count:<8}经过 AI 分析后判定为“相关”的文章")
+    log_content.append(f"{'判定无关':<10}{junk_count:<8}被 AI 判定为垃圾/无关的文章")
+    
+    total_llm = llm_success + llm_failed
+    llm_rate = (llm_success / total_llm * 100) if total_llm > 0 else 0
+    
+    total_vlm = vlm_success + vlm_failed
+    vlm_rate = (vlm_success / total_vlm * 100) if total_vlm > 0 else 0
+    
+    log_content.append(f"{'LLM (文本)':<10}成功 {llm_success:<5}成功生成摘要/翻译 (成功率 {llm_rate:.0f}%)")
+    log_content.append(f"{'VLM (视觉)':<10}成功 {vlm_success:<5}成功生成图片描述 (成功率 {vlm_rate:.0f}%)")
+    
+    log_content.append("\n(2) 耗时统计")
+    log_content.append(f"总耗时 : {total_time:.2f} 秒 (约 {total_time/60:.1f} 分钟)")
+    log_content.append(f"{'环节':<10}{'耗时':<12}{'占比':<8}{'备注'}")
+    log_content.append(f"{'信息获取':<10}{time_info:.2f} 秒    {pct_info:.0f}%     扫描 RSS 和网页列表页")
+    log_content.append(f"{'补充采集':<10}{time_enrich:.2f} 秒    {pct_enrich:.0f}%     最耗时。使用 Playwright 逐个打开网页抓取正文和截图")
+    log_content.append(f"{'智能分析':<10}{time_analysis:.2f} 秒    {pct_analysis:.0f}%      调用大模型进行分析")
+    log_content.append("="*50 + "\n")
+    
+    final_log = "\n".join(log_content)
+    print(final_log)
+    write_scheduler_log(final_log)
 
 if __name__ == "__main__":
+    import time  # Ensure time is available if not imported globally
     asyncio.run(main())

@@ -106,6 +106,10 @@ async def goto_with_retry(page, url, attempts):
     for attempt in attempts:
         for _ in range(2):
             try:
+                # 显式添加 user_agent，有些网站会屏蔽无头浏览器
+                await page.set_extra_http_headers({
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                })
                 await page.goto(url, wait_until=attempt["wait_until"], timeout=attempt["timeout_ms"])
                 return True
             except Exception as e:
@@ -139,7 +143,7 @@ async def fetch_web_index(context, source):
         # 提取链接：简单的启发式，查找所有 a 标签
         # 优先使用 selector 限制范围
         selector = source.get('selector', 'body')
-        max_links = source.get('max_links', 10)
+        max_links = source.get('max_links', 5)
         max_pages = source.get('max_pages', 1)
         next_selector = source.get('next_selector')
         strict_filtering = source.get('strict_filtering', True)
@@ -163,8 +167,8 @@ async def fetch_web_index(context, source):
                 anchors.forEach(a => {
                     const text = a.innerText.trim();
                     const href = a.href;
-                    // 简单过滤：长度大于10，且不是 javascript: 或 #
-                    if (text.length > 10 && href.startsWith('http')) {
+                    // 简单过滤：长度大于15，且不是 javascript: 或 #
+                    if (text.length > 15 && href.startsWith('http')) {
                         // 去重
                         if (!results.find(r => r.link === href)) {
                             results.push({title: text, link: href});
@@ -181,27 +185,31 @@ async def fetch_web_index(context, source):
                 
                 # 应用源配置的黑名单
                 blacklist = source.get('blacklist', [])
+                filtered_reason = None
                 if blacklist:
                     link_lower = l['link'].lower()
                     if any(pattern.lower() in link_lower for pattern in blacklist):
                         print(f"[Web] 黑名单过滤: {l['title']} -> {l['link']}")
-                        continue
+                        filtered_reason = "黑名单过滤"
                 
                 # 过滤非新闻类页面（委员会、About、Team等）
-                if not is_news_page(l['link'], l['title'], strict=strict_filtering):
+                if not filtered_reason and not is_news_page(l['link'], l['title'], strict=strict_filtering):
                     print(f"[Web] 过滤非新闻页面: {l['title']} -> {l['link']}")
-                    continue
+                    filtered_reason = "非新闻页面"
                 
                 # 全局去重
                 if not any(i['link'] == l['link'] for i in items):
-                    items.append({
+                    item_data = {
                         'title': l['title'],
                         'link': l['link'],
                         'pub_date': '',
                         'summary_raw': '',
                         'source_type': 'web',
                         'source_name': source.get('name', '')
-                    })
+                    }
+                    if filtered_reason:
+                        item_data['filtered_reason'] = filtered_reason
+                    items.append(item_data)
                     if len(items) >= max_links:
                         break
             
@@ -524,7 +532,7 @@ async def enrich_web_items(context, items):
         async with sem:
             source_type = (item.get("source_type") or "").lower()
             link = (item.get("link") or "").lower()
-            if source_type in ["web", "wechat", "official", "rsshub"] or "mp.weixin.qq.com" in link:
+            if source_type in ["web", "wechat", "official", "rsshub", "rss"] or "mp.weixin.qq.com" in link:
                 await fetch_web_article(context, item)
             results.append(item)
 
@@ -605,7 +613,10 @@ def is_news_page(url, title, strict=True):
         "/history", "/milestone", "/milestones", "/achievement",
         "/board", "/directors", "/management", "/executive",
         "/mission", "/vision", "/values", "/who-we-are",
-        "/community", "/forum", "/blog", "/opinion", "/perspective"
+        "/community", "/forum", "/blog", "/opinion", "/perspective",
+        "/products", "/services", "/projects", "/clients",
+        "/investors", "/sustainability", "/safety", "/quality",
+        "/capabilities", "/sectors", "/markets", "/locations"
     ]
     
     # 检查URL是否包含非新闻模式
@@ -628,6 +639,10 @@ def is_news_page(url, title, strict=True):
         "partner", "partners", "membership", "member",
         "conference", "workshop", "event", "symposium",
         "award", "grant", "scholarship", "funding",
+        "sustainability", "safety", "quality", "hse",
+        "products", "services", "capabilities", "sectors",
+        "investor", "shareholder", "financial",
+        "sitemap", "cookie", "accessibility", "subscribe"
     ]
     
     # 检查标题是否包含非新闻模式
@@ -678,9 +693,9 @@ async def get_all_items():
                 if s.get('type') == 'web':
                     source_items = await fetch_web_index(context, s)
                     web_items.extend(source_items)
-            if web_items:
-                web_items = await enrich_web_items(context, web_items)
-                all_items.extend(web_items)
+            # if web_items:
+            #     web_items = await enrich_web_items(context, web_items)
+            all_items.extend(web_items)
             
             await browser.close()
 

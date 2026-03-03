@@ -2,46 +2,46 @@
   <div class="h-full overflow-y-auto custom-scrollbar">
     <main class="w-full px-4 sm:px-6 lg:px-8 space-y-6 pb-6">
       <!-- Report Selector -->
-      <div class="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-3">
-            <a-date-picker 
-              v-model:value="selectedDate" 
-              :allow-clear="false"
-              class="bg-dark-card border-white/10 w-40"
-            />
+      <div class="flex flex-col md:flex-row items-stretch gap-4">
+        <div class="flex-shrink-0 flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 w-full md:w-auto">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-3">
+              <a-date-picker 
+                v-model:value="selectedDate" 
+                :allow-clear="false"
+                class="bg-dark-card border-white/10 w-40"
+              />
+            </div>
+            <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
+              <i class="fa-solid fa-clock text-[9px]"></i>
+              {{ reportTimeRange }}
+            </div>
           </div>
-          <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
-            <i class="fa-solid fa-clock text-[9px]"></i>
-             {{ reportTimeRange }}
+          
+          <div class="flex bg-black/20 p-1 rounded-xl border border-white/5 ml-4">
+            <button 
+              @click="handleReportTypeChange('morning')"
+              :class="[
+                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                reportType === 'morning' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+              ]"
+            >
+              <i class="fa-solid fa-sun text-xs"></i> 早报
+            </button>
+            <button 
+              @click="handleReportTypeChange('evening')"
+              :class="[
+                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                reportType === 'evening' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+              ]"
+            >
+              <i class="fa-solid fa-moon text-xs"></i> 晚报
+            </button>
           </div>
         </div>
-        
-        <div class="flex bg-black/20 p-1 rounded-xl border border-white/5">
-          <button 
-            @click="handleReportTypeChange('morning')"
-            :class="[
-              'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-              reportType === 'morning' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
-            ]"
-          >
-            <i class="fa-solid fa-sun text-xs"></i> 早报
-          </button>
-          <button 
-            @click="handleReportTypeChange('evening')"
-            :class="[
-              'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-              reportType === 'evening' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
-            ]"
-          >
-            <i class="fa-solid fa-moon text-xs"></i> 晚报
-          </button>
-        </div>
-      </div>
 
-      <!-- Stats Overview -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="glass-card rounded-2xl p-5 flex items-center justify-between group">
+        <!-- Stats Overview -->
+        <div class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group">
           <div>
             <p class="text-sm font-medium text-gray-400">本次新闻</p>
             <div class="flex items-end gap-2 mt-1">
@@ -53,7 +53,8 @@
             <i class="fa-solid fa-bolt text-blue-400 text-xl"></i>
           </div>
         </div>
-        <router-link to="/vessel-map" target="_blank" class="glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors">
+        
+        <router-link to="/vessel-map" target="_blank" class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors">
           <div>
             <p class="text-sm font-medium text-gray-400">跟踪船舶</p>
             <div class="flex items-end gap-2 mt-1">
@@ -430,7 +431,7 @@ function getGroupedArticles(category: string) {
  * 获取分类下用于展示的文章列表
  */
 function getGroupedArticlesPreview(category: string) {
-  return getGroupedArticles(category).slice(0, 10)
+  return getGroupedArticles(category)
 }
 
 function formatTitle(item: NewsItem, category: string) {

@@ -58,33 +58,30 @@ async def analyze_with_vl(client, item, b64_img):
     print(f"[VL] 正在进行视觉分析: {item['title']}")
     
     vl_prompt = f"""
-你是一名疏浚行业情报分析专家。请根据网页截图内容，进行深度的语义分析。
-标题: {item['title']}
+请基于这张网页截图和以下基本信息，提取并分析疏浚行业新闻：
+标题：{item['title']}
+URL：{item.get('url', '')}
 
 任务说明：
-1. 若内容与疏浚、港航、航道维护、疏浚设备或海洋工程无关，is_junk 必须为 true。
-1. 【深度语义分类】请基于新闻的核心语义和主要事件类型，将其归入以下六类别之一。
-   请使用**排除法**进行分类决策：
-   - Bid (中标/合同): 仅包含合同签署、项目中标、招标公告发布、资金/预算获批。关键词：Secures, Wins, Contract, Tender, Awarded, Funding, Budget。
-   - Equipment (装备动态): 仅包含船舶/设备的建造、交付、下水、购买、维修或技术升级。关键词：Vessel, Dredger, Delivery, Launch, Keel Laying。
-   - Project (项目进展): 仅包含工程项目的**物理进展**（如开工、施工中、完工、验收、疏浚作业详情）。关键词：Begins, Completed, Dredging works, Progress。
-   - R&D (科技研发): 仅包含技术研发、创新项目、研究成果发布。
-   - Regulation (政策法规): 仅包含**官方发布**的政府政策、环保法规、行业标准、限制令、关税、指南/规范/许可审批。
-     * 注意：针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
-   - Market (市场情报/新闻): 
-     1. 公司动态：并购、财务报告、人事变动、战略合作。
-     2. 市场分析：行业规划、战略、路线图。
-     3. **兜底类别**：所有不属于上述5类的事件（如罢工、抗议、事故、地缘政治影响、无法明确分类的行业新闻），均归入 Market（新闻）。
-
-2. 【信息提取】
+1. 【有效性】(is_junk) - 如果截图显示的是“404”、“禁止访问”、“Cookie设置”、“订阅提示”、“登录页面”或与疏浚行业完全无关的内容（如纯广告、纯人事变动列表），is_junk 设为 true。
+2. 【语义分类】(Category) - 请根据截图描述的核心事件性质进行分类：
+   - Bid: 合同签署、中标、招标或资金获批。
+   - Equipment: 船舶/设备的建造、交付、交易或维护。
+   - Project: 项目的物理施工进展（开工/完工/施工中）。
+   - R&D: 科技研发。
+   - Regulation: 官方发布的政策法规、标准、指南、许可审批。
+   - Market: 公司动态（财务/人事/战略）、市场分析、行业规划，或其他无法归入上述类别的行业新闻。
+3. 【信息提取】
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
-     - 涉及国外重点公司名称时，保持英文原名，不要翻译成中文。
-     - 禁止使用 "董事会"、"可持续发展"、"我们的技术"、"市场更新" 等泛泛而谈的短语作为标题。
-     - 正确示例："中交二航局在上海中标三个市政项目"、"Van Oord在荷兰完成海滩修复工程"。
-     - 错误示例："最新中标"、"项目动态"。
    - summary_cn: 中文摘要（简练精准，包含关键数据）。
-   - publish_time: 文章发布的具体日期/时间 (YYYY-MM-DD 或 YYYY-MM-DD HH:MM)，若文中未明确提及则留空。
-   - image_desc: 图片描述。
+   - publish_time: 【极重要】请仔细逐行扫描截图文字（特别是标题下方、文章开头、页眉页脚、来源旁），寻找发布的具体日期/时间。
+     - 格式必须统一为 YYYY-MM-DD。
+     - 识别 "2025-01-21", "2025.01.21", "Jan 21, 2025", "2025年1月21日", "21/01/2025" 等所有格式。
+     - 若仅有月份（如"2025年1月"），默认为该月1号（2025-01-01）。
+     - 若为相对时间（如"2 days ago", "昨天"），请基于当前日期（{item.get('date', '')}）推算。
+     - 若找不到确切日期，但内容提及"本周"、"近日"且有明确年份上下文，可估算为当月1号。
+     - 只有在完全无法找到任何时间信息时才留空。
+   - image_desc: 简要描述截图中展示的主要画面内容。
 
 返回 JSON:
 {{
@@ -234,6 +231,38 @@ def clean_article_text(text_content):
         cleaned.append(line)
     return "\n".join(cleaned)
 
+def is_obvious_junk(title):
+    """判断标题是否为明显的垃圾信息"""
+    if not title:
+        return True
+    
+    title_lower = title.lower()
+    
+    # 垃圾关键词
+    junk_patterns = [
+        "skip to", "back to", "return to", "go to",
+        "home", "homepage", "frontpage", "main menu",
+        "previous", "next", "read more", "learn more",
+        "cookie", "accept", "agree", "privacy policy",
+        "terms of", "contact us", "about us",
+        "sitemap", "accessibility", "subscribe",
+        "board of directors", "management team", "executive team",
+        "investor relations", "financial reports",
+        "career", "job", "vacancy", "vacancies",
+        "mailchimp", "email service", "correcting the record",
+        "unsubscribe", "view in browser", "update your preferences"
+    ]
+    
+    for pattern in junk_patterns:
+        if pattern in title_lower:
+            return True
+            
+    # 极短且无意义的标题
+    if len(title.strip()) < 5:
+        return True
+        
+    return False
+
 def _normalize_llm_result(result, item):
     if isinstance(result, list):
         if len(result) == 1 and isinstance(result[0], dict):
@@ -257,6 +286,28 @@ def _resolve_screenshot_path(screenshot_path, screenshot_filename):
 
 def _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res):
     final_result = None
+    
+    # 强制检查：如果标题是明显垃圾，直接判定为无效
+    if is_obvious_junk(item.get('title')):
+        analysis_log.append("4. **前置检查**: 标题命中垃圾关键词")
+        return {
+            "title": item.get('title', ''),
+            "title_cn": item.get('title', ''),
+            "url": url,
+            "pub_date": str(item.get('pub_date', '')),
+            "summary_cn": "垃圾信息/非新闻页面",
+            "full_text_cn": "",
+            "content": text_content,
+            "category": "Other",
+            "valid": 0,
+            "is_retained": 0,
+            "image_desc": "",
+            "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
+            "analysis_log": analysis_log,
+            "source_type": item.get("source_type", "unknown"),
+            "source_name": item.get("source_name", "")
+        }
+
     if text_res and not text_res.get('is_junk'):
         final_result = text_res
         final_result['content'] = text_content
@@ -283,6 +334,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "content": text_content,
             "category": "Other",
             "valid": 0,
+            "is_retained": 0,
             "image_desc": vl_res.get('image_desc', '') if vl_res else "",
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
@@ -302,6 +354,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
                 "content": text_content,
                 "category": "Other",
                 "valid": 0,
+                "is_retained": 0,
                 "image_desc": vl_res.get('image_desc', ''),
                 "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
                 "analysis_log": analysis_log,
@@ -324,6 +377,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "content": text_content,
             "category": "Other",
             "valid": 0,
+            "is_retained": 0,
             "image_desc": "",
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
@@ -340,6 +394,11 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         analysis_log.append("4.2. **相关性判断**: 非疏浚主题，标记为无效并归入'其他'")
         article_category = "Other"
         is_valid = 0
+    
+    # 只有 valid=1 且不是 Other 类别的，才标记为保留 (is_retained)
+    # 或者 valid=1 但 category=Other (例如没分类出来但是是疏浚相关的?) 
+    # 这里严格一点：必须是有效且有明确分类的，或者 LLM 认为是非 junk 的
+    is_retained = 1 if is_valid == 1 and article_category != "Other" else 0
 
     pub_date = final_result.get("publish_time")
     if not pub_date or len(str(pub_date)) < 5:
@@ -355,6 +414,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         "content": text_content,
         "category": article_category,
         "valid": is_valid,
+        "is_retained": is_retained,
         "image_desc": final_result.get("image_desc", ""),
         "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
         "analysis_log": analysis_log,

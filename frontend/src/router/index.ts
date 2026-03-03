@@ -25,6 +25,12 @@ const routes: RouteRecordRaw[] = [
     name: 'VesselMap',
     component: () => import('@/views/VesselMap.vue'),
     meta: { title: '全球船舶跟踪' }
+  },
+  {
+    path: '/acquisition-process',
+    name: 'AcquisitionProcess',
+    component: () => import('@/views/AcquisitionProcess.vue'),
+    meta: { title: '入库过程' }
   }
 ]
 

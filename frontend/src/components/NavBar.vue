@@ -63,6 +63,18 @@
             <i class="fa-solid fa-ship text-sm"></i>
             <span class="hidden sm:inline ml-1.5">船舶跟踪</span>
           </router-link>
+          <router-link 
+            to="/acquisition-process" 
+            :class="[
+              'hidden sm:flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
+              isActive('/acquisition-process') 
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+            ]"
+          >
+            <i class="fa-solid fa-list-check text-sm"></i>
+            <span class="hidden sm:inline ml-1.5">入库过程</span>
+          </router-link>
         </div>
       </div>
     </div>

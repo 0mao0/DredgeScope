@@ -47,72 +47,24 @@ import traceback
 
 @app.get("/api/events")
 async def get_events(
-    date: str = Query(None, description="Date in YYYY-MM-DD"),
-    mode: str = Query(None, description="Mode: 'recent' for last 24h"),
-    start: str = Query(None, description="Start datetime ISO"),
-    end: str = Query(None, description="End datetime ISO")
+    start: str = Query(None, description="Start time ISO format"),
+    end: str = Query(None, description="End time ISO format"),
+    is_retained: int = Query(1, description="Retained filter (1 for retained, 0 for discarded, None for all)")
 ):
-    """获取列表数据，支持按日期、最近24小时或自定义时间范围"""
+    """获取指定时间范围内的文章 (默认只返回 is_retained=1 的)"""
     try:
-        if mode == 'recent':
-            now = datetime.now()
-            hour = now.hour
-            label_prefix = f"{now.month}月{now.day}日"
-            if hour <= 8:
-                start_dt = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
-                end_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}早报"
-            else:
-                # User feedback: 晚报 (日报) should be today 08:00 - 18:00
-                start_dt = now.replace(hour=8, minute=0, second=0, microsecond=0)
-                end_dt = now.replace(hour=18, minute=0, second=0, microsecond=0)
-                date_label = f"{label_prefix}晚报"
-            start_time = start_dt.isoformat()
-            end_time = end_dt.isoformat()
-        elif start and end:
-            start_time = start
-            end_time = end
-            date_label = f"{start[:10]} ~ {end[:10]}"
-        else:
-            if not date:
-                date = datetime.now().strftime("%Y-%m-%d")
-                start_time = f"{date}T00:00:00"
-                end_time = f"{date}T23:59:59"
-                date_label = date
-            else:
-                start_time = f"{date}T00:00:00"
-                end_time = f"{date}T23:59:59"
-                date_label = date
-        
-        articles = database.get_articles_by_time_range_strict(start_time, end_time)
-
-        for a in articles:
-            if a.get('created_at'):
-                a['created_at'] = str(a['created_at']).split('.')[0]
-            if a.get('pub_date'):
-                a['pub_date'] = str(a['pub_date']).split('.')[0]
-            category_val = a.get("category")
-            if not category_val:
-                cats = a.get("categories") or []
-                category_val = cats[0] if cats else "Market"
-            a["category"] = category_val
-
-        article_count = len(articles)
-        return {
-            "date": date_label,
-            "count": article_count,
-            "article_count": article_count,
-            "event_count": 0,
-            "events": articles
-        }
+        # Use provided times or default to last 24 hours
+        if not start or not end:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=1)
+            start = start_dt.isoformat()
+            end = end_dt.isoformat()
+            
+        articles = database.get_articles_by_time_range_strict(start, end, is_retained=is_retained)
+        return {"events": articles}
     except Exception as e:
-        print(f"Error getting events: {e}")
-        traceback.print_exc()
-        return {
-            "date": date if date else datetime.now().strftime("%Y-%m-%d"),
-            "count": 0,
-            "events": []
-        }
+        print(f"Error in get_events: {e}")
+        return {"events": [], "error": str(e)}
 
 @app.get("/api/stats")
 async def get_stats(days: int = 7):
@@ -379,6 +331,7 @@ async def get_articles(
     source_type: str = Query(None, description="Source type"),
     source_name: str = Query(None, description="Source name"),
     valid: int = Query(None, description="Validity filter (1 for valid, 0 for invalid)"),
+    is_retained: int = Query(None, description="Retained filter (1 for retained, 0 for discarded)"),
     page: int = Query(1, description="Page number"),
     page_size: int = Query(50, description="Page size")
 ):
@@ -401,6 +354,10 @@ async def get_articles(
         # But usually we want to exclude junk by default unless explicitly asked.
         # Let's stick to the filter logic.
         pass
+
+    if is_retained is not None:
+        where.append("a.is_retained = ?")
+        params.append(is_retained)
 
     if category:
         where.append("a.category = ?")
@@ -520,10 +477,28 @@ async def get_scheduler_runs():
         try:
             ts_str = f.split(".")[0]
             dt = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            
+            # Read stats from file content
+            file_path = os.path.join(scheduler_dir, f)
+            searched_count = 0
+            inserted_count = 0
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    lines = file.readlines()
+                    # Skip header (2 lines) and iterate
+                    for line in lines[2:]:
+                        if not line.strip(): continue
+                        searched_count += 1
+                        parts = line.split("|")
+                        # Column 5 is "是否保留" (index 5 because of leading empty string from split)
+                        if len(parts) > 5 and "是" in parts[5]:
+                            inserted_count += 1
+            
             runs.append({
                 "id": f,
                 "timestamp": dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "short_ts": dt.strftime("%m-%d %H:%M")
+                "short_ts": dt.strftime("%m-%d %H:%M"),
+                "summary": f"(搜{searched_count}条，入{inserted_count}条)"
             })
         except:
             continue

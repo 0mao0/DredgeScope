@@ -126,6 +126,17 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 is_hidden 列失败: {e}")
 
+    # 检查并添加缺失的 is_retained 列 (针对已有数据库)
+    try:
+        c.execute("SELECT is_retained FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 articles 表缺失 is_retained 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE articles ADD COLUMN is_retained INTEGER DEFAULT 0")
+            print("[DB] 已成功添加 is_retained 列")
+        except Exception as e:
+            print(f"[DB] 添加 is_retained 列失败: {e}")
+
     try:
         c.execute("SELECT source_name FROM articles LIMIT 1")
     except sqlite3.OperationalError:
@@ -392,7 +403,8 @@ def save_article(article_data):
                     vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
                     category = COALESCE(NULLIF(?, ''), category),
                     valid = COALESCE(?, valid),
-                    is_hidden = COALESCE(?, is_hidden)
+                    is_hidden = COALESCE(?, is_hidden),
+                    is_retained = COALESCE(?, is_retained)
                 WHERE id = ?
                 ''',
                 (
@@ -410,12 +422,14 @@ def save_article(article_data):
                     primary_category or '',
                     article_data.get('valid', None),
                     article_data.get('is_hidden', None),
+                    article_data.get('is_retained', None),
                     article_id
                 )
             )
         else:
             is_hidden = 0
             valid = article_data.get('valid', 1)
+            is_retained = article_data.get('is_retained', 0)
             STALE_THRESHOLD_DAYS = 30
             try:
                 c_date = datetime.now()
@@ -438,8 +452,8 @@ def save_article(article_data):
             except:
                 pass
             c.execute('''INSERT INTO articles 
-                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, is_retained, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     article_data['url'],
                     article_data['title'],
@@ -456,6 +470,7 @@ def save_article(article_data):
                     primary_category,
                     is_hidden,
                     valid,
+                    is_retained,
                     datetime.now().isoformat()
                 )
             )
@@ -508,9 +523,42 @@ def save_raw_articles(items):
             pub_date = item.get("pub_date") or item.get("date") or ""
             content = item.get("content") or item.get("summary_raw") or item.get("digest") or ""
             screenshot_path = item.get("screenshot_path") or ""
+            
+            valid = item.get("valid", 1)
+            is_hidden = item.get("is_hidden", 0)
+            
+            # Check for stale content
+            STALE_THRESHOLD_DAYS = 30
+            try:
+                if pub_date:
+                    p_date_clean = str(pub_date).strip()
+                    p_date = None
+                    if 'T' in p_date_clean:
+                         try:
+                             p_date = datetime.fromisoformat(p_date_clean)
+                         except:
+                             pass
+                    elif ' ' in p_date_clean and ':' in p_date_clean:
+                         try:
+                             p_date = datetime.fromisoformat(p_date_clean.replace(' ', 'T'))
+                         except:
+                             pass
+                    else:
+                         try:
+                             p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
+                         except:
+                             pass
+                    
+                    if p_date and (datetime.now().date() - p_date.date()).days > STALE_THRESHOLD_DAYS:
+                        is_hidden = 1
+                        valid = 0
+            except Exception as e:
+                # print(f"Date parse error: {e}")
+                pass
+
             c.execute('''INSERT INTO articles 
-                (url, title, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, created_at, valid)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (url, title, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, created_at, valid, is_hidden)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     url,
                     item.get("title", ""),
@@ -522,7 +570,8 @@ def save_raw_articles(items):
                     content,
                     screenshot_path,
                     datetime.now().isoformat(),
-                    1
+                    valid,
+                    is_hidden
                 )
             )
             inserted += 1
@@ -568,23 +617,36 @@ def get_articles_by_time_range(start_time, end_time):
     conn.close()
     return [dict(row) for row in rows]
 
-def get_articles_by_time_range_strict(start_time, end_time):
-    """仅按时间窗口获取有效且未隐藏的文章"""
+def get_articles_by_time_range_strict(start_time, end_time, is_retained=None):
+    """仅按时间窗口获取有效且未隐藏的文章 (优先使用入库时间 created_at，确保日报包含最新抓取的内容)"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
+    
+    # 逻辑修改：
+    # 原逻辑优先使用 pub_date，导致补抓的旧闻被归档到过去，容易被用户漏看。
+    # 现改为纯粹基于 created_at (入库时间)，确保“新发现”的新闻（即使是旧闻）也能出现在当前的日报中。
+    
     query = '''
         SELECT 
             a.id, a.title, a.title_cn, a.url, a.pub_date, a.summary_cn, a.full_text_cn, a.content, 
             a.screenshot_path, a.vl_desc, a.created_at, a.source_type, a.source_name, a.valid,
-            a.category
+            a.category, a.is_retained
         FROM articles a
-        WHERE (a.created_at BETWEEN ? AND ?)
+        WHERE 
+          a.created_at >= ? AND a.created_at <= ?
           AND (a.is_hidden = 0 OR a.is_hidden IS NULL)
           AND (a.valid = 1 OR a.valid IS NULL)
-        ORDER BY a.created_at DESC
     '''
-    c.execute(query, (start_time, end_time))
+    params = [start_time, end_time]
+
+    if is_retained is not None:
+        query += ' AND a.is_retained = ?'
+        params.append(is_retained)
+
+    query += ' ORDER BY a.created_at DESC'
+
+    c.execute(query, tuple(params))
     rows = c.fetchall()
     conn.close()
     results = []
