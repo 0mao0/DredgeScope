@@ -37,13 +37,25 @@ async def launch_chromium(p):
         raise last_error
     raise RuntimeError("Playwright 浏览器启动失败，未找到可用 Chromium 可执行文件")
 
+import requests
+
 async def fetch_rss(url, hours=24, source_name=None):
     """抓取 RSS 源"""
     print(f"[RSS] 正在抓取: {url}")
     try:
         loop = asyncio.get_running_loop()
-        # Adding User-Agent to avoid 403
-        d = await loop.run_in_executor(None, lambda: feedparser.parse(url, agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"))
+        
+        # 使用 requests 预取内容，以设置超时
+        def fetch_with_requests():
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+            response = requests.get(url, headers=headers, timeout=20)
+            response.raise_for_status()
+            return response.content
+
+        content = await loop.run_in_executor(None, fetch_with_requests)
+        
+        # 解析预取的内容
+        d = feedparser.parse(content)
         
         items = []
         cutoff = datetime.now() - timedelta(hours=hours)
@@ -102,23 +114,27 @@ def _next_retry_delay(delay: float) -> float:
 async def goto_with_retry(page, url, attempts):
     """按多策略尝试打开页面，成功则返回 True，失败抛出最后异常"""
     last_error = None
-    delay = 1.5
-    for attempt in attempts:
-        for _ in range(2):
-            try:
-                # 显式添加 user_agent，有些网站会屏蔽无头浏览器
-                await page.set_extra_http_headers({
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                })
-                await page.goto(url, wait_until=attempt["wait_until"], timeout=attempt["timeout_ms"])
-                return True
-            except Exception as e:
-                last_error = e
-                if _is_retryable_playwright_error(e):
+    delay = 2.0
+    for idx, attempt in enumerate(attempts):
+        try:
+            # 显式添加 user_agent，有些网站会屏蔽无头浏览器
+            await page.set_extra_http_headers({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            })
+            strategy = attempt["wait_until"]
+            timeout = attempt["timeout_ms"]
+            # print(f"[Web] 尝试访问 ({idx+1}/{len(attempts)}): {strategy}, timeout={timeout}ms")
+            await page.goto(url, wait_until=strategy, timeout=timeout)
+            return True
+        except Exception as e:
+            last_error = e
+            if _is_retryable_playwright_error(e):
+                if idx < len(attempts) - 1:
+                    print(f"[Web] 访问失败 ({str(e)[:50]}...)，正在重试下个策略...")
                     await asyncio.sleep(delay)
                     delay = _next_retry_delay(delay)
                     continue
-                break
+            break
     if last_error:
         raise last_error
     return False
@@ -131,13 +147,14 @@ async def fetch_web_index(context, source):
     page = None
     try:
         page = await context.new_page()
+        # 优化策略：首选 domcontentloaded (较快)，备选 load (更完整)，最后 networkidle (最慢但最全)
+        # 将超时时间增加到 20s 以应对慢速网站
         await goto_with_retry(
             page,
             url,
             [
-                {"wait_until": "domcontentloaded", "timeout_ms": 10000},
-                {"wait_until": "load", "timeout_ms": 10000},
-                {"wait_until": "domcontentloaded", "timeout_ms": 10000}
+                {"wait_until": "domcontentloaded", "timeout_ms": 20000},
+                {"wait_until": "load", "timeout_ms": 20000}
             ]
         )
         # 提取链接：简单的启发式，查找所有 a 标签
@@ -229,7 +246,7 @@ async def fetch_web_index(context, source):
                     if next_btn:
                         print(f"[Web] 找到下一页按钮 ({next_selector})，点击...")
                         await next_btn.click()
-                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        await page.wait_for_load_state("networkidle", timeout=20000)
                         has_next = True
                 except Exception as e:
                     print(f"[Web] 翻页失败: {e}")
@@ -246,7 +263,7 @@ async def fetch_web_index(context, source):
                         if next_btn:
                             print(f"[Web] 找到下一页按钮 ({sel})，点击...")
                             await next_btn.click()
-                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            await page.wait_for_load_state("networkidle", timeout=20000)
                             has_next = True
                             break
                     except:

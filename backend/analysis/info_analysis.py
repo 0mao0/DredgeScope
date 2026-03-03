@@ -285,7 +285,7 @@ def _resolve_screenshot_path(screenshot_path, screenshot_filename):
     return ""
 
 def _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res):
-    final_result = None
+    final_result = {}
     
     # 强制检查：如果标题是明显垃圾，直接判定为无效
     if is_obvious_junk(item.get('title')):
@@ -308,83 +308,58 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "source_name": item.get("source_name", "")
         }
 
-    if text_res and not text_res.get('is_junk'):
-        final_result = text_res
-        final_result['content'] = text_content
-        analysis_log.append(f"4. **Text分析**: 成功 ({final_result.get('category')})")
-        if vl_res and not vl_res.get('is_junk'):
-            if not final_result.get('image_desc') and vl_res.get('image_desc'):
-                final_result['image_desc'] = vl_res.get('image_desc', '')
-            if not final_result.get('title_cn') and vl_res.get('title_cn'):
-                final_result['title_cn'] = vl_res.get('title_cn')
-            if not final_result.get('summary_cn') and vl_res.get('summary_cn'):
-                final_result['summary_cn'] = vl_res.get('summary_cn')
-            if not final_result.get('publish_time') and vl_res.get('publish_time'):
-                final_result['publish_time'] = vl_res.get('publish_time')
-            analysis_log.append("4.1. **VL辅助**: 完成补充信息")
-    elif text_res and text_res.get('is_junk'):
-        analysis_log.append("4. **Text分析**: 判定为垃圾信息 (将归入'其他')")
-        return {
-            "title": item.get('title', ''),
-            "title_cn": text_res.get("title_cn", item.get('title', '')),
-            "url": url,
-            "pub_date": str(item.get('pub_date', '')),
-            "summary_cn": text_res.get("summary_cn", "垃圾信息/非新闻页面"),
-            "full_text_cn": text_res.get("full_text_cn", ""),
-            "content": text_content,
-            "category": "Other",
-            "valid": 0,
-            "is_retained": 0,
-            "image_desc": vl_res.get('image_desc', '') if vl_res else "",
-            "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
-            "analysis_log": analysis_log,
-            "source_type": item.get("source_type", "unknown"),
-            "source_name": item.get("source_name", "")
-        }
-    elif vl_res:
-        if vl_res.get('is_junk'):
-            analysis_log.append("4. **VL分析**: 判定为垃圾信息 (将归入'其他')")
-            return {
-                "title": item.get('title', ''),
-                "title_cn": vl_res.get("title_cn", item.get('title', '')),
-                "url": url,
-                "pub_date": str(item.get('pub_date', '')),
-                "summary_cn": "垃圾信息/非新闻页面",
-                "full_text_cn": "",
-                "content": text_content,
-                "category": "Other",
-                "valid": 0,
-                "is_retained": 0,
-                "image_desc": vl_res.get('image_desc', ''),
-                "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
-                "analysis_log": analysis_log,
-                "source_type": item.get("source_type", "unknown"),
-                "source_name": item.get("source_name", "")
-            }
+    # 优先级策略：VLM (视觉) 优先处理分类和标题，Text (文本) 负责全文翻译和详细摘要
+    if vl_res and not vl_res.get('is_junk'):
+        # 1. 以 VLM 结果为基础
+        final_result = vl_res.copy()
+        analysis_log.append(f"4. **VL分析 (优先)**: 成功 ({final_result.get('category')})")
+        
+        if text_res and not text_res.get('is_junk'):
+            # 2. 用 Text 结果补充长文本
+            if text_res.get('summary_cn') and len(text_res.get('summary_cn')) > len(final_result.get('summary_cn', '')):
+                final_result['summary_cn'] = text_res.get('summary_cn')
+            if text_res.get('full_text_cn'):
+                final_result['full_text_cn'] = text_res.get('full_text_cn')
+            
+            # 如果 VLM 没提标题或太短，用 Text 补充
+            if not final_result.get('title_cn') or len(final_result.get('title_cn')) < 5:
+                final_result['title_cn'] = text_res.get('title_cn')
+                
+            analysis_log.append("4.1. **Text辅助**: 完成摘要与全文补充")
         else:
-            final_result = vl_res
-            final_result['content'] = text_content
-            analysis_log.append(f"4. **VL分析**: 兜底成功 ({final_result.get('category')})")
+            final_result['full_text_cn'] = ""
+            analysis_log.append("4.1. **Text辅助**: 无有效文本内容")
+
+    elif text_res and not text_res.get('is_junk'):
+        # 兜底：只有 Text 成功
+        final_result = text_res.copy()
+        analysis_log.append(f"4. **Text分析 (兜底)**: 成功 ({final_result.get('category')})")
+        final_result['image_desc'] = ""
+
     else:
-        analysis_log.append("4. **分析失败**: 无有效文本且截图分析失败")
+        # 全部失败或判定为 Junk
+        reason = "判定为垃圾信息" if (vl_res and vl_res.get('is_junk')) or (text_res and text_res.get('is_junk')) else "分析失败"
+        analysis_log.append(f"4. **分析结论**: {reason}")
+        
         return {
             "title": item.get('title', ''),
-            "title_cn": item.get('title', ''),
+            "title_cn": (vl_res or text_res or {}).get("title_cn", item.get('title', '')),
             "url": url,
             "pub_date": str(item.get('pub_date', '')),
-            "summary_cn": "分析失败",
+            "summary_cn": (vl_res or text_res or {}).get("summary_cn", reason),
             "full_text_cn": "",
             "content": text_content,
             "category": "Other",
             "valid": 0,
             "is_retained": 0,
-            "image_desc": "",
+            "image_desc": (vl_res or {}).get('image_desc', ''),
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
             "source_name": item.get("source_name", "")
         }
 
+    # 最终字段整理
     article_category = normalize_category(final_result.get("category"))
     if not article_category:
         article_category = DEFAULT_CATEGORY
@@ -395,9 +370,6 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         article_category = "Other"
         is_valid = 0
     
-    # 只有 valid=1 且不是 Other 类别的，才标记为保留 (is_retained)
-    # 或者 valid=1 但 category=Other (例如没分类出来但是是疏浚相关的?) 
-    # 这里严格一点：必须是有效且有明确分类的，或者 LLM 认为是非 junk 的
     is_retained = 1 if is_valid == 1 and article_category != "Other" else 0
 
     pub_date = final_result.get("publish_time")
@@ -454,19 +426,28 @@ async def analyze_item_from_db(client, item):
         text_res = _normalize_llm_result(text_res, item)
 
     if screenshot_bytes:
-        vl_client = AsyncOpenAI(api_key=config.VL_LLM_API_KEY, base_url=config.VL_LLM_API_BASE)
-        b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
-        vl_res = await analyze_with_vl(vl_client, item, b64_img)
-        if isinstance(vl_res, Exception):
-            print(f"[VL] Error: {vl_res}")
-            vl_res = None
-        vl_res = _normalize_llm_result(vl_res, item)
+        if not config.VL_LLM_API_KEY:
+            analysis_log.append("4. **VL分析**: 失败 (API Key 未配置)")
+            print("[VL] Error: VL_LLM_API_KEY is not set in config.")
+        else:
+            vl_client = AsyncOpenAI(api_key=config.VL_LLM_API_KEY, base_url=config.VL_LLM_API_BASE)
+            b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
+            vl_res = await analyze_with_vl(vl_client, item, b64_img)
+            if isinstance(vl_res, Exception):
+                print(f"[VL] Error: {vl_res}")
+                vl_res = None
+            vl_res = _normalize_llm_result(vl_res, item)
 
     return _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res)
 
 async def process_items_from_db(items):
     if not items:
         return []
+    
+    if not config.TEXT_LLM_API_KEY:
+        print("[Text] Error: TEXT_LLM_API_KEY is not set in config.")
+        return []
+        
     client = AsyncOpenAI(api_key=config.TEXT_LLM_API_KEY, base_url=config.TEXT_LLM_API_BASE)
     results = []
     sem = asyncio.Semaphore(3)
