@@ -131,10 +131,9 @@ async def fetch_web_index(context, source):
             page,
             url,
             [
-                {"wait_until": "domcontentloaded", "timeout_ms": 30000},
-                {"wait_until": "networkidle", "timeout_ms": 30000},
-                {"wait_until": "load", "timeout_ms": 30000},
-                {"wait_until": "domcontentloaded", "timeout_ms": 45000}
+                {"wait_until": "domcontentloaded", "timeout_ms": 10000},
+                {"wait_until": "load", "timeout_ms": 10000},
+                {"wait_until": "domcontentloaded", "timeout_ms": 10000}
             ]
         )
         # 提取链接：简单的启发式，查找所有 a 标签
@@ -358,10 +357,8 @@ async def fetch_web_article(context, item):
             page,
             url,
             [
-                {"wait_until": "domcontentloaded", "timeout_ms": 30000},
-                {"wait_until": "networkidle", "timeout_ms": 30000},
-                {"wait_until": "load", "timeout_ms": 30000},
-                {"wait_until": "domcontentloaded", "timeout_ms": 45000}
+                {"wait_until": "domcontentloaded", "timeout_ms": 15000},
+                {"wait_until": "load", "timeout_ms": 20000}
             ]
         )
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
