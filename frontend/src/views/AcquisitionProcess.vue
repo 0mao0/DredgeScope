@@ -416,7 +416,7 @@ const zoneBView = ref<'text' | 'screenshot'>('text')
 const expandedGroups = ref<Set<string>>(new Set())
 
 // 调度任务相关状态
-const schedulerRuns = ref<{id: string, timestamp: string, short_ts: string}[]>([])
+const schedulerRuns = ref<{id: string, timestamp: string, short_ts: string, summary: string}[]>([])
 const isSchedulerModalVisible = ref(false)
 const selectedRunContent = ref('')
 const selectedRunId = ref('')
