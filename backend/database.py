@@ -187,6 +187,16 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 content 列失败: {e}")
 
+    try:
+        c.execute("SELECT remark FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 articles 表缺失 remark 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE articles ADD COLUMN remark TEXT")
+            print("[DB] 已成功添加 remark 列")
+        except Exception as e:
+            print(f"[DB] 添加 remark 列失败: {e}")
+
     c.execute("DROP TABLE IF EXISTS events")
     c.execute("DROP TABLE IF EXISTS event_groups")
     
@@ -398,62 +408,68 @@ def save_article(article_data):
                     summary_cn = COALESCE(NULLIF(?, ''), summary_cn),
                     full_text_cn = COALESCE(NULLIF(?, ''), full_text_cn),
                     content = COALESCE(NULLIF(?, ''), content),
-                    screenshot_path = COALESCE(NULLIF(?, ''), screenshot_path),
-                    is_significant = COALESCE(?, is_significant),
-                    vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
-                    category = COALESCE(NULLIF(?, ''), category),
-                    valid = COALESCE(?, valid),
-                    is_hidden = COALESCE(?, is_hidden),
-                    is_retained = COALESCE(?, is_retained)
-                WHERE id = ?
-                ''',
-                (
-                    article_data.get('title', ''),
-                    article_data.get('title_cn', ''),
-                    article_data.get('pub_date', ''),
-                    article_data.get('source_type', ''),
-                    article_data.get('source_name', ''),
-                    article_data.get('summary_cn', ''),
-                    article_data.get('full_text_cn', ''),
-                    article_data.get('content', ''),
-                    article_data.get('screenshot_path', ''),
-                    article_data.get('significant', None),
-                    article_data.get('image_desc', ''),
-                    primary_category or '',
-                    article_data.get('valid', None),
-                    article_data.get('is_hidden', None),
-                    article_data.get('is_retained', None),
-                    article_id
-                )
+                screenshot_path = COALESCE(NULLIF(?, ''), screenshot_path),
+                is_significant = COALESCE(?, is_significant),
+                vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
+                category = COALESCE(NULLIF(?, ''), category),
+                valid = COALESCE(?, valid),
+                is_hidden = COALESCE(?, is_hidden),
+                is_retained = COALESCE(?, is_retained),
+                remark = COALESCE(NULLIF(?, ''), remark)
+            WHERE id = ?
+            ''',
+            (
+                article_data.get('title', ''),
+                article_data.get('title_cn', ''),
+                article_data.get('pub_date', ''),
+                article_data.get('source_type', ''),
+                article_data.get('source_name', ''),
+                article_data.get('summary_cn', ''),
+                article_data.get('full_text_cn', ''),
+                article_data.get('content', ''),
+                article_data.get('screenshot_path', ''),
+                article_data.get('significant', None),
+                article_data.get('image_desc', ''),
+                primary_category or '',
+                article_data.get('valid', None),
+                article_data.get('is_hidden', None),
+                article_data.get('is_retained', None),
+                article_data.get('remark', ''),
+                article_id
             )
+        )
+            conn.commit()
+            return True
         else:
             is_hidden = 0
             valid = article_data.get('valid', 1)
             is_retained = article_data.get('is_retained', 0)
+            remark = article_data.get('remark', '')
             STALE_THRESHOLD_DAYS = 30
             try:
                 c_date = datetime.now()
                 p_date_str = article_data.get('pub_date')
                 if p_date_str:
-                     p_date_clean = str(p_date_str).strip()
-                     p_date = None
-                     if 'T' in p_date_clean:
-                         p_date = datetime.fromisoformat(p_date_clean)
-                     elif ' ' in p_date_clean and ':' in p_date_clean:
-                         p_date = datetime.fromisoformat(p_date_clean.replace(' ', 'T'))
-                     else:
-                         try:
-                             p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
-                         except:
-                             pass
-                     if p_date and (c_date.date() - p_date.date()).days > STALE_THRESHOLD_DAYS:
-                         is_hidden = 1
-                         valid = 0
+                    p_date_clean = str(p_date_str).strip()
+                    p_date = None
+                    if 'T' in p_date_clean:
+                        p_date = datetime.fromisoformat(p_date_clean)
+                    elif ' ' in p_date_clean and ':' in p_date_clean:
+                        p_date = datetime.fromisoformat(p_date_clean.replace(' ', 'T'))
+                    else:
+                        try:
+                            p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
+                        except:
+                            pass
+                    if p_date and (c_date.date() - p_date.date()).days > STALE_THRESHOLD_DAYS:
+                        is_hidden = 1
+                        valid = 0
+                        remark = "过期"
             except:
                 pass
             c.execute('''INSERT INTO articles 
-                (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, is_retained, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (url, title, title_cn, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, is_significant, vl_desc, category, is_hidden, valid, is_retained, remark, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     article_data['url'],
                     article_data['title'],
@@ -471,11 +487,12 @@ def save_article(article_data):
                     is_hidden,
                     valid,
                     is_retained,
+                    remark,
                     datetime.now().isoformat()
                 )
             )
-        conn.commit()
-        return True
+            conn.commit()
+            return True
     except Exception as e:
         print(f"[DB] 保存失败: {e}")
         conn.rollback()
@@ -508,80 +525,160 @@ def is_article_exists(url):
     conn.close()
     return row is not None
 
-def save_raw_articles(items):
+def is_article_processed(url):
+    """检查文章是否已存在且已分析完成"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    inserted = 0
-    try:
-        for item in items or []:
-            url = item.get("link") or item.get("url")
-            if not url:
-                continue
-            c.execute("SELECT id FROM articles WHERE url = ?", (url,))
-            if c.fetchone():
-                continue
-            pub_date = item.get("pub_date") or item.get("date") or ""
-            content = item.get("content") or item.get("summary_raw") or item.get("digest") or ""
-            screenshot_path = item.get("screenshot_path") or ""
-            
-            valid = item.get("valid", 1)
-            is_hidden = item.get("is_hidden", 0)
-            
-            # Check for stale content
-            STALE_THRESHOLD_DAYS = 30
-            try:
-                if pub_date:
-                    p_date_clean = str(pub_date).strip()
-                    p_date = None
-                    if 'T' in p_date_clean:
-                         try:
-                             p_date = datetime.fromisoformat(p_date_clean)
-                         except:
-                             pass
-                    elif ' ' in p_date_clean and ':' in p_date_clean:
-                         try:
-                             p_date = datetime.fromisoformat(p_date_clean.replace(' ', 'T'))
-                         except:
-                             pass
-                    else:
-                         try:
-                             p_date = datetime.strptime(p_date_clean, "%Y-%m-%d")
-                         except:
-                             pass
-                    
-                    if p_date and (datetime.now().date() - p_date.date()).days > STALE_THRESHOLD_DAYS:
-                        is_hidden = 1
-                        valid = 0
-            except Exception as e:
-                # print(f"Date parse error: {e}")
-                pass
+    # 判断标准：URL存在，且 (摘要不为空 OR 被标记为保留 OR 被标记为无效)
+    # 这样可以避免重复分析已完成或已废弃的文章
+    c.execute("SELECT id, summary_cn, is_retained, valid FROM articles WHERE url = ?", (url,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return False
+    
+    summary_cn, is_retained, valid = row[1], row[2], row[3]
+    
+    # 如果已标记为无效(valid=0)，视为已处理
+    if valid == 0:
+        return True
+    
+    # 如果已保留(is_retained=1)，视为已处理
+    if is_retained == 1:
+        return True
+        
+    # 如果有摘要(summary_cn非空)，视为已处理
+    if summary_cn and len(summary_cn) > 5:
+        return True
+        
+    return False
 
-            c.execute('''INSERT INTO articles 
-                (url, title, pub_date, source_type, source_name, summary_cn, full_text_cn, content, screenshot_path, created_at, valid, is_hidden)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (
-                    url,
-                    item.get("title", ""),
-                    str(pub_date),
-                    item.get("source_type", "unknown"),
-                    item.get("source_name", ""),
-                    "",
-                    "",
-                    content,
-                    screenshot_path,
-                    datetime.now().isoformat(),
-                    valid,
-                    is_hidden
+def save_raw_articles(items):
+    """保存原始文章数据，跳过已存在的。返回 (处理总数, 新增文章ID列表)"""
+    if not items:
+        return 0, []
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    count = 0
+    new_ids = []
+    for item in items:
+        try:
+            # 检查是否存在
+            c.execute("SELECT id FROM articles WHERE url = ?", (item['link'],))
+            row = c.fetchone()
+            if row:
+                pass 
+            else:
+                # 插入新记录
+                valid = item.get("valid", 1)
+                is_hidden = item.get("is_hidden", 0)
+                remark = item.get("remark", "")
+                
+                c.execute('''INSERT INTO articles 
+                    (url, title, pub_date, source_type, source_name, valid, is_hidden, remark, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (
+                        item['link'],
+                        item.get('title', ''),
+                        item.get('pub_date', ''),
+                        item.get('source_type', 'unknown'),
+                        item.get('source_name', ''),
+                        valid,
+                        is_hidden,
+                        remark,
+                        datetime.now().isoformat()
+                    )
                 )
-            )
-            inserted += 1
-        conn.commit()
-    except Exception as e:
-        print(f"[DB] 保存原始文章失败: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
-    return inserted
+                new_ids.append(c.lastrowid)
+            count += 1
+        except Exception as e:
+            print(f"[DB] 插入文章失败 {item.get('link')}: {e}")
+            
+    conn.commit()
+    conn.close()
+    return count, new_ids
+
+def get_items_for_enrichment(created_after=None, ids=None):
+    """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图) 且 5天内"""
+    from datetime import timedelta
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    # 计算5天前的日期
+    cutoff = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+    
+    query = '''
+        SELECT * FROM articles 
+        WHERE valid = 1 
+        AND (pub_date >= ? OR pub_date IS NULL OR pub_date = '')
+        AND (content IS NULL OR content = '' OR screenshot_path IS NULL OR screenshot_path = '')
+    '''
+    params = [cutoff]
+    
+    if created_after:
+        query += " AND created_at >= ?"
+        params.append(created_after)
+        
+    if ids:
+        placeholders = ",".join(["?"] * len(ids))
+        query += f" AND id IN ({placeholders})"
+        params.extend(ids)
+        
+    query += " ORDER BY created_at DESC"
+    
+    c.execute(query, tuple(params))
+    rows = c.fetchall()
+    items = [dict(row) for row in rows]
+    # 映射 key 以匹配 info_acquisition 的 expectations
+    for item in items:
+        item['link'] = item['url']
+    conn.close()
+    return items
+
+def get_items_for_analysis(created_after=None, ids=None):
+    """获取需要分析的条目: valid=1 且 有内容 且 尚未分析(summary_cn为空)"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    query = '''
+        SELECT * FROM articles 
+        WHERE valid = 1 
+        AND (content IS NOT NULL AND content != '')
+        AND (summary_cn IS NULL OR summary_cn = '')
+    '''
+    params = []
+    
+    if created_after:
+        query += " AND created_at >= ?"
+        params.append(created_after)
+        
+    if ids:
+        placeholders = ",".join(["?"] * len(ids))
+        query += f" AND id IN ({placeholders})"
+        params.extend(ids)
+        
+    query += " ORDER BY created_at DESC"
+    
+    c.execute(query, tuple(params))
+    rows = c.fetchall()
+    items = [dict(row) for row in rows]
+    for item in items:
+        item['link'] = item['url']
+    conn.close()
+    return items
+
+def get_recent_retained_articles(hours=24):
+    """获取最近保留的文章 (用于生成报告)"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    c.execute("SELECT * FROM articles WHERE is_retained=1 AND created_at >= ? ORDER BY pub_date DESC", (cutoff,))
+    rows = c.fetchall()
+    items = [dict(row) for row in rows]
+    conn.close()
+    return items
 
 def get_articles_by_urls(urls):
     if not urls:
@@ -658,7 +755,7 @@ def get_articles_by_time_range_strict(start_time, end_time, is_retained=None):
     return results
 
 # 初始化
-init_db()
+# init_db()
 
 def get_all_ships():
     """获取所有船舶信息"""

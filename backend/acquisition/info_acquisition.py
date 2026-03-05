@@ -502,13 +502,50 @@ async def fetch_web_article(context, item):
                         if (timeText && timeText.innerText) {
                             return timeText.innerText;
                         }
+
+                        // 尝试从可见文本中提取中文日期
+                        const bodyText = document.body.innerText;
+                        // 匹配 "发布时间：2023-01-01" 或 "2023年1月1日" 或 "2023/01/01" 等格式
+                        const patterns = [
+                            /(?:发布时间|时间|日期|Date|Time)[:：\s]*(\d{4}[-年\.\/]\d{1,2}[-月\.\/]\d{1,2})/i,
+                            /(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{1,2})/
+                        ];
+                        for (const p of patterns) {
+                            const m = bodyText.match(p);
+                            if (m) return m[1];
+                        }
                         return '';
                     }""")
                 except Exception:
                     raw_date = ""
-                normalized = _normalize_publish_date(raw_date)
-                if normalized:
-                    item["pub_date"] = normalized
+                
+                if raw_date:
+                    # 清洗提取到的日期
+                    import re
+                    match = re.search(r'(\d{4})[-年\.\/](\d{1,2})[-月\.\/](\d{1,2})', str(raw_date))
+                    if match:
+                        item['pub_date'] = f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+                    else:
+                        normalized = _normalize_publish_date(raw_date)
+                        if normalized:
+                            item["pub_date"] = normalized
+
+            # 二次保障：如果还没提取到时间，尝试从 text_content 开头部分正则提取
+            if not item.get("pub_date") and text_content:
+                try:
+                    head_text = text_content[:1000]
+                    import re
+                    # 匹配常见的 "发布时间：2025-12-02" 格式 (支持 / 和 .)
+                    m = re.search(r'(?:发布时间|时间|日期|Date)[:：\s]*(\d{4})[-年\.\/](\d{1,2})[-月\.\/](\d{1,2})', head_text)
+                    if m:
+                        item['pub_date'] = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                    else:
+                        # 仅匹配日期格式 (YYYY-MM-DD) 且前后有空白或标点
+                        m2 = re.search(r'(?:^|[\s\(\[])(\d{4}-\d{1,2}-\d{1,2})(?:$|[\s\)\]])', head_text)
+                        if m2:
+                            item['pub_date'] = m2.group(1)
+                except Exception:
+                    pass
 
             try:
                 locator = page.locator('article').first

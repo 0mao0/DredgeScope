@@ -2,6 +2,10 @@ import asyncio
 import json
 import base64
 import os
+import sys
+# Add backend directory to sys.path to allow importing database
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import database
 from openai import AsyncOpenAI
 import config
 from static.constants import (
@@ -75,12 +79,13 @@ URL：{item.get('url', '')}
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
    - summary_cn: 中文摘要（简练精准，包含关键数据）。
    - publish_time: 【极重要】请仔细逐行扫描截图文字（特别是标题下方、文章开头、页眉页脚、来源旁），寻找发布的具体日期/时间。
+     - 重点寻找关键词："发布时间："、"发布于："、"Date:"、"Time:"、"日期："。
      - 格式必须统一为 YYYY-MM-DD。
      - 识别 "2025-01-21", "2025.01.21", "Jan 21, 2025", "2025年1月21日", "21/01/2025" 等所有格式。
      - 若仅有月份（如"2025年1月"），默认为该月1号（2025-01-01）。
      - 若为相对时间（如"2 days ago", "昨天"），请基于当前日期（{item.get('date', '')}）推算。
      - 若找不到确切日期，但内容提及"本周"、"近日"且有明确年份上下文，可估算为当月1号。
-     - 只有在完全无法找到任何时间信息时才留空。
+     - 只有在完全无法找到任何时间信息时才留空。请务必尽力寻找，通常在标题下方或页面底部。
    - image_desc: 简要描述截图中展示的主要画面内容。
 
 返回 JSON:
@@ -116,7 +121,21 @@ URL：{item.get('url', '')}
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
             
-        return json.loads(content)
+        res_json = json.loads(content)
+        
+        # 增强：清洗 publish_time
+        pt = res_json.get("publish_time")
+        if pt:
+            # 去除可能的中文或额外字符，只保留 YYYY-MM-DD
+            # 简单的正则提取，支持 - . /
+            import re
+            # 支持 YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YYYY年MM月DD日
+            # 增加对空格的宽容度
+            match = re.search(r'(\d{4})\s*[-年\.\/]\s*(\d{1,2})\s*[-月\.\/]\s*(\d{1,2})', str(pt))
+            if match:
+                res_json["publish_time"] = f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+            
+        return res_json
     except Exception as e:
         print(f"[VL] 分析失败: {e}")
         return None
@@ -302,10 +321,12 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "valid": 0,
             "is_retained": 0,
             "image_desc": "",
+            "remark": "标题命中垃圾关键词",
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
-            "source_name": item.get("source_name", "")
+            "source_name": item.get("source_name", ""),
+            "id": item.get("id")
         }
 
     # 优先级策略：VLM (视觉) 优先处理分类和标题，Text (文本) 负责全文翻译和详细摘要
@@ -324,6 +345,10 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             # 如果 VLM 没提标题或太短，用 Text 补充
             if not final_result.get('title_cn') or len(final_result.get('title_cn')) < 5:
                 final_result['title_cn'] = text_res.get('title_cn')
+            
+            # 如果 VLM 没提取到时间，尝试用 Text 的时间
+            if not final_result.get('publish_time') and text_res.get('publish_time'):
+                final_result['publish_time'] = text_res.get('publish_time')
                 
             analysis_log.append("4.1. **Text辅助**: 完成摘要与全文补充")
         else:
@@ -352,11 +377,14 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "category": "Other",
             "valid": 0,
             "is_retained": 0,
+            "is_junk": True,
+            "remark": reason,
             "image_desc": (vl_res or {}).get('image_desc', ''),
             "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
-            "source_name": item.get("source_name", "")
+            "source_name": item.get("source_name", ""),
+            "id": item.get("id")
         }
 
     # 最终字段整理
@@ -372,8 +400,16 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
     
     is_retained = 1 if is_valid == 1 and article_category != "Other" else 0
 
+    remark = "保留" if is_retained == 1 else "AI判定无关"
+    if is_valid == 0:
+        remark = "无效数据"
+
     pub_date = final_result.get("publish_time")
-    if not pub_date or len(str(pub_date)) < 5:
+    # 如果 VL/Text 提取到了有效时间（格式正确），则使用它
+    # 否则回退到原始 item 的 pub_date
+    if pub_date and len(str(pub_date)) >= 10:
+        pass # keep extracted date
+    else:
         pub_date = str(item.get('pub_date', ''))
 
     return {
@@ -387,11 +423,13 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         "category": article_category,
         "valid": is_valid,
         "is_retained": is_retained,
+        "remark": remark,
         "image_desc": final_result.get("image_desc", ""),
         "screenshot_path": _resolve_screenshot_path(screenshot_path, screenshot_filename),
         "analysis_log": analysis_log,
         "source_type": item.get("source_type", "unknown"),
-        "source_name": item.get("source_name", "")
+        "source_name": item.get("source_name", ""),
+        "id": item.get("id")
     }
 
 
@@ -456,6 +494,8 @@ async def process_items_from_db(items):
         async with sem:
             res = await analyze_item_from_db(client, item)
             if res:
+                # 分析完成后立即保存回数据库
+                database.save_article(res)
                 results.append(res)
 
     tasks = [runner(item) for item in items]

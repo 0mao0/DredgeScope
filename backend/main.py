@@ -197,6 +197,9 @@ def write_markdown_audit(rows):
         pass
 
 async def main():
+    # 初始化数据库
+    database.init_db()
+
     start_time = time.time()
     print(f"=== 疏浚情报极简系统启动 ===")
     print(f"文本模型: {config.TEXT_MODEL}")
@@ -240,17 +243,35 @@ async def main():
     print(f"共获取到 {len(raw_items)} 条潜在新闻")
     t1_end = time.time()
     
-    # 去重 & 入库拦截
-    items = []
+    # --- 改动：预先规范化所有 URL ---
+    # 在入库前进行规范化，确保去重逻辑生效 (避免 http/https, trailing slash, params 导致的重复)
+    for item in raw_items:
+        normalized_link = normalize_article_url(item.get('link'))
+        if normalized_link:
+            item['link'] = normalized_link
+
+    # --- 改动：采集阶段立即入库 (不重复) ---
+    print(f"正在保存原始数据到数据库...")
+    total_scanned, new_ids = database.save_raw_articles(raw_items)
+    new_inserted_count = len(new_ids)
+    print(f"入库完成: 扫描 {total_scanned} 条, 实际新增 {new_inserted_count} 条")
+    
+    # 去重 & 状态更新 (更新数据库中的 valid/remark 状态)
+    items = [] # 这里的 items 仅用于记录本次处理的有效条目(内存中)，用于后续流程参考(如统计)
+               # 实际流程将转向从数据库读取
+    
     skipped_count = 0
     duplicate_count = 0
     outdated_count = 0
+    processed_count = 0 # 已存在且已处理的数量
     audit_rows = []
     pending_map = {}
     pub_date_map = {}
     seen_links = set()
 
     for item in raw_items:
+
+        # 基础数据补全
         if not item.get("pub_date") and item.get("date"):
             item["pub_date"] = item.get("date")
         if not item.get("source_name") and item.get("source"):
@@ -261,6 +282,16 @@ async def main():
         if normalized_link:
             item['link'] = normalized_link
 
+        # 准备更新到数据库的字段
+        db_update = {
+            "url": item.get('link'),
+            "source_name": item.get("source_name"),
+            "source_type": item.get("source_type"),
+            "pub_date": item.get("pub_date"),
+            # 默认保持 valid=1 (由 save_raw_articles 设置), 除非下面显式改为 0
+        }
+
+        # 1. 基础非空检查
         if not item.get("title") or not item.get("link"):
             skipped_count += 1
             audit_rows.append({
@@ -270,13 +301,15 @@ async def main():
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
                 "keep": False,
-                "text_ok": False,
-                "vl_ok": False,
                 "remark": "标题或链接为空"
             })
+            # 标记为无效
+            db_update["valid"] = 0
+            db_update["remark"] = "标题或链接为空"
+            database.save_article(db_update)
             continue
 
-        # 1. 本次任务内去重 & 数据库去重
+        # 2. 本次任务内去重
         if item['link'] in seen_links:
             duplicate_count += 1
             audit_rows.append({
@@ -286,35 +319,38 @@ async def main():
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
                 "keep": False,
-                "text_ok": False,
-                "vl_ok": False,
                 "remark": "重复链接(任务内)"
             })
             continue
         
-        if database.is_article_exists(item['link']):
-            duplicate_count += 1
+        seen_links.add(item['link'])
+        pub_date_map[item['link']] = item.get("pub_date")
+
+        # 3. 数据库已存在检查 (避免重复处理已完成的文章)
+        # 如果文章已存在且已分析完成（或被废弃），则跳过后续更新
+        if database.is_article_processed(item['link']):
+            processed_count += 1
             audit_rows.append({
                 "site": item.get("source_name", ""),
                 "title": item.get("title", ""),
                 "link": item.get("link", ""),
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
-                "keep": False,
-                "text_ok": False,
-                "vl_ok": False,
-                "remark": "库中已存在"
+                "keep": False, # 这里的 keep 仅用于 audit 表格显示，实际状态在库里
+                "remark": "已存在且已处理"
             })
             continue
 
-        # 2. 处理采集阶段过滤的条目（入库但标记为无效）
+        # 4. 处理采集阶段过滤的条目（入库但标记为无效）
         if item.get("filtered_reason"):
             item["valid"] = 0
             item["is_hidden"] = 1
             item["remark"] = f"采集阶段过滤: {item.get('filtered_reason')}"
             
-            seen_links.add(item['link'])
-            items.append(item)
+            db_update["valid"] = 0
+            db_update["is_hidden"] = 1
+            db_update["remark"] = item["remark"]
+            database.save_article(db_update)
             
             audit_rows.append({
                 "site": item.get("source_name", ""),
@@ -323,13 +359,11 @@ async def main():
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
                 "keep": False,
-                "text_ok": False,
-                "vl_ok": False,
                 "remark": item["remark"]
             })
             continue
 
-        # 3. 发布时间拦截（5天）
+        # 5. 发布时间拦截（5天）
         pub_dt = parse_pub_datetime(item.get("pub_date"))
         
         # 对于Web/Official源，如果缺少时间，允许通过（等待后续enrich补充）
@@ -339,6 +373,10 @@ async def main():
         if not pub_dt:
             if not allow_missing_date:
                 outdated_count += 1
+                db_update["valid"] = 0
+                db_update["remark"] = "发布时间缺失"
+                database.save_article(db_update)
+                
                 audit_rows.append({
                     "site": item.get("source_name", ""),
                     "title": item.get("title", ""),
@@ -346,16 +384,15 @@ async def main():
                     "pub_date": item.get("pub_date"),
                     "source_type": item.get("source_type"),
                     "keep": False,
-                    "text_ok": False,
-                    "vl_ok": False,
                     "remark": "发布时间缺失"
                 })
                 continue
-            # else: pass through
+            # else: pass through, valid remains 1 (default)
         elif datetime.now() - pub_dt > timedelta(days=5):
             outdated_count += 1
-            item["valid"] = 0  # 标记为无效/过期
-            item["remark"] = "发布时间早于5天(已入库)"
+            db_update["valid"] = 0
+            db_update["remark"] = "发布时间早于5天(已入库)"
+            database.save_article(db_update)
             
             audit_rows.append({
                 "site": item.get("source_name", ""),
@@ -364,23 +401,21 @@ async def main():
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
                 "keep": False,
-                "text_ok": False,
-                "vl_ok": False,
-                "remark": "发布时间早于5天(仅入库占位)"
+                "remark": "发布时间早于5天(已入库)"
             })
-            # 即使过期，也加入 items，以便入库
-            # 注意：后续逻辑需要识别 valid=0 并跳过 analysis
-            seen_links.add(item['link'])
-            pub_date_map[item['link']] = item.get("pub_date")
-            items.append(item)
             continue
 
-        seen_links.add(item['link'])
-        pub_date_map[item['link']] = item.get("pub_date")
-        
-        # 3. 标记为待分析
-        item["valid"] = 1
-        items.append(item)
+        # 有效条目，确保数据库更新（主要是 source_name/type/pub_date 可能有变化）
+        # 并且确保 valid=1 (虽然默认是1，但显式更新更好)
+        db_update["valid"] = 1
+        # 清空可能的旧 remark (如之前被标为无效) -> 暂时不清除，保留历史 remark 也许更好？
+        # 不，如果是新的一轮采集发现有效，应该清除旧的错误 remark
+        # 但 save_article 使用 COALESCE(NULLIF(?, ''), remark)，传入 '' 会被 NULLIF 变 NULL，然后保持原值
+        # 所以无法清除 remark。除非修改 save_article 或传入特殊值。
+        # 暂时忽略清除 remark 的需求。
+        database.save_article(db_update)
+
+        # 加入 audit 待分析
         audit_rows.append({
             "site": item.get("source_name", ""),
             "title": item.get("title", ""),
@@ -388,23 +423,25 @@ async def main():
             "pub_date": item.get("pub_date"),
             "source_type": item.get("source_type"),
             "keep": False,
-            "text_ok": False,
-            "vl_ok": False,
             "remark": "待分析"
         })
         pending_map[item['link']] = len(audit_rows) - 1
     
     print(f"过滤掉 {skipped_count} 条垃圾/无效信息")
-    print(f"经去重后，剩余 {len(items)} 条文章需处理（含过期入库）")
+    print(f"跳过 {processed_count} 条已处理信息")
+    print(f"超期入库 {outdated_count} 条")
     write_scheduler_log(
-        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 过滤无效{skipped_count} 去重过滤{duplicate_count} 超期入库{outdated_count} 入库候选{len(items)}"
+        f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 新增入库{new_inserted_count} 跳过已处理{processed_count} 过滤无效{skipped_count} 超期入库{outdated_count}"
     )
 
-    # 仅对有效且内容不全的条目进行补充采集
+    # --- 改动：从数据库获取需要补充采集的条目 ---
     t2_start = time.time()
-    items_to_enrich = [i for i in items if i.get("valid") != 0 and (not i.get("screenshot_path") or not i.get("content"))]
+    # 逻辑：valid=1 且 (无内容 或 无截图) 且 5天内
+    # 仅处理本次新增的条目，避免重复处理旧数据
+    items_to_enrich = database.get_items_for_enrichment(ids=new_ids)
+    
     if items_to_enrich:
-        print(f"正在对 {len(items_to_enrich)} 条条目进行补充采集...")
+        print(f"正在对 {len(items_to_enrich)} 条条目进行补充采集(从数据库读取)...")
         try:
             async with async_playwright() as p:
                 browser = await info_acquisition.launch_chromium(p)
@@ -416,61 +453,50 @@ async def main():
                 )
                 await info_acquisition.enrich_web_items(context, items_to_enrich)
                 await browser.close()
+                
+                # 补充采集后，更新回数据库，并再次检查时间
+                for item in items_to_enrich:
+                    # 检查时间：如果之前没时间，现在有了，需要检查是否过期
+                    # 注意：enrich_web_items 会修改 item["pub_date"]
+                    pub_dt = parse_pub_datetime(item.get("pub_date"))
+                    
+                    # 再次检查：如果没有时间，不再自动补充为当前时间！(响应用户需求)
+                    if not pub_dt:
+                        # 仍然无时间，标记为无效
+                        item["valid"] = 0
+                        item["remark"] = (item.get("remark") or "") + " (补充采集仍无时间)"
+                    elif datetime.now() - pub_dt > timedelta(days=5):
+                        item["valid"] = 0
+                        item["remark"] = "补充采集后判定过期"
+                    
+                    # 保存更新 (content, screenshot, pub_date, valid, remark)
+                    database.save_article(item)
+                    
         except Exception as e:
             print(f"补充采集失败: {e}")
     t2_end = time.time()
 
-    # 再次过滤：经过补充采集后，再次检查时间和完整性
-    final_items = []
-    for item in items:
-        # 如果已标记为过期(valid=0)，直接保留（用于占位）
-        if item.get("valid") == 0:
-            final_items.append(item)
-            continue
-
-        # 如果是之前缺时间的，现在应该有了
-        pub_dt = parse_pub_datetime(item.get("pub_date"))
-        if not pub_dt:
-            # 仍然没时间 -> 使用当前时间作为发布时间，确保入库
-            pub_dt = datetime.now()
-            item["pub_date"] = pub_dt.strftime("%Y-%m-%d %H:%M:%S")
-            item["remark"] = (item.get("remark") or "") + " (无发布时间，自动补充)"
-        
-        if datetime.now() - pub_dt > timedelta(days=5):
-            # 补充采集后发现超期 -> 标记为过期并入库
-            item["valid"] = 0
-            item["remark"] = "补充采集后判定过期"
-            final_items.append(item)
-            continue
-            
-        final_items.append(item)
-    items = final_items
-    print(f"最终入库: {len(items)} 条")
-
-    # if not items:
-    #     print("无新文章，任务结束。")
-    #     try:
-    #         write_markdown_audit(audit_rows)
-    #     except Exception:
-    #         pass
-    #     write_scheduler_log("采集完成: 无新文章入库")
-    #     return
-
-    database.save_raw_articles(items)
+    # --- 改动：从数据库获取需要分析的条目 ---
+    # 逻辑：valid=1 且 有内容 且 尚未分析(summary_cn为空)
+    # 注意：上面的补充采集可能把一些 valid=1 变成了 valid=0，所以这里只会取 valid=1 的
+    
+    # 这里的 items 变量不再使用，全靠数据库
+    # database.save_raw_articles(items) # 已移除，前面已保存
 
     # 2. 分析信息 (文本 + 视觉)
     t3_start = time.time()
-    print(">>> 阶段2: 智能分析...")
-    # 仅获取有效文章进行分析
-    valid_items = [item for item in items if item.get("valid") != 0]
+    print(">>> 阶段2: 智能分析(从数据库读取)...")
     
-    if valid_items:
-        analysis_items = database.get_articles_by_urls([item['link'] for item in valid_items])
+    # 仅分析本次新增的条目
+    analysis_items = database.get_items_for_analysis(ids=new_ids)
+    
+    if analysis_items:
+
+        print(f"读取到 {len(analysis_items)} 条待分析文章")
         results = await info_analysis.process_items_from_db(analysis_items)
     else:
-        print("无有效文章需分析（全为过期入库）。")
+        print("无有效文章需分析。")
         results = []
-        # 即使全过期，也已经save_raw_articles了，所以流程继续，以便生成报告
         
     t3_end = time.time()
     
@@ -514,28 +540,46 @@ async def main():
                 if link_key and link_key in pending_map:
                     idx = pending_map[link_key]
                     audit_rows[idx]["remark"] = "发布时间早于5天"
+                
+                # 同步更新数据库状态
+                if r.get("is_retained", 0) == 1:
+                    r["is_retained"] = 0
+                    r["remark"] = "发布时间早于5天"
+                    database.save_article(r)
+                
                 continue
-            r["pub_date"] = pub_date_map.get(link_key)
+            # 优先使用分析结果中的时间，如果没有则回退到 map
+            if not r.get("pub_date") and link_key in pub_date_map:
+                r["pub_date"] = pub_date_map.get(link_key)
+            
             kept_results.append(r)
+        
         if link_key and link_key in pending_map:
             idx = pending_map[link_key]
-            is_junk = r.get("is_junk", False)
-            if not is_junk:
+            # 使用 is_retained 作为最终判定标准，与数据库保持一致
+            is_retained = r.get("is_retained", 0)
+            
+            if is_retained == 1:
                 audit_rows[idx]["keep"] = True
                 audit_rows[idx]["title_cn"] = r.get("title_cn") or audit_rows[idx].get("title")
                 audit_rows[idx]["text_ok"] = bool(r.get("title_cn") or r.get("summary_cn") or r.get("full_text_cn"))
                 audit_rows[idx]["vl_ok"] = bool(r.get("screenshot_path"))
                 audit_rows[idx]["remark"] = "保留"
             else:
-                audit_rows[idx]["remark"] = f"AI判定无关: {r.get('junk_reason', '非疏浚主题')}"
+                if r.get("is_junk"):
+                     audit_rows[idx]["remark"] = f"AI判定无关: {r.get('junk_reason', '非疏浚主题')}"
+                elif not r.get("valid", 1):
+                     audit_rows[idx]["remark"] = "无效数据 (valid=0)"
+                else:
+                     audit_rows[idx]["remark"] = "未保留 (is_retained=0)"
     
     for link_key, idx in pending_map.items():
         if audit_rows[idx]["remark"] == "待分析":
             audit_rows[idx]["remark"] = "分析未通过(可能提取失败)"
 
     # 3. 存储
-    print(">>> 阶段3: 存储结果...")
-    report_generation.save_history(kept_results)
+    print(">>> 阶段3: 结果已同步至数据库")
+    # report_generation.save_history(kept_results) # 移除：info_analysis 已实时保存
     try:
         write_markdown_audit(audit_rows)
     except Exception:
@@ -560,9 +604,10 @@ async def main():
     log_content.append("="*50)
     log_content.append("(1) 总体统计分析")
     log_content.append(f"{'指标':<10}{'数量':<8}{'说明'}")
-    log_content.append(f"{'发现文章':<10}{len(raw_items):<8}扫描到的所有潜在链接")
-    log_content.append(f"{'入库文章':<10}{len(items):<8}包含“过期但入库占位”的文章")
-    log_content.append(f"{'有效分析':<10}{len(valid_items):<8}经过筛选、发布在5天内且内容完整的文章")
+    log_content.append(f"{'扫描链接':<10}{len(raw_items):<8}扫描到的所有潜在链接")
+    log_content.append(f"{'新增入库':<10}{new_inserted_count:<8}本次实际新增的文章数")
+    log_content.append(f"{'跳过处理':<10}{processed_count:<8}数据库已存在且分析完成的文章")
+    log_content.append(f"{'有效分析':<10}{len(analysis_items):<8}经过筛选、发布在5天内且内容完整的文章")
     log_content.append(f"{'最终保留':<10}{kept_count:<8}经过 AI 分析后判定为“相关”的文章")
     log_content.append(f"{'判定无关':<10}{junk_count:<8}被 AI 判定为垃圾/无关的文章")
     

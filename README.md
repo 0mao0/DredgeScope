@@ -104,15 +104,16 @@ flowchart TB
 dredgescope
 ├─ backend
 │  ├─ acquisition      # 采集模块 (RSS, Web, WeChat, Ship)
-│  ├─ analysis         # 分析模块 (LLM, VL)
+│  ├─ analysis         # 分析模块 (LLM, VL, Ship Status)
 │  ├─ reporting        # 报告与推送 (Dashboard API, Report, WeCom)
-│  ├─ static           # 静态配置 (Sources, GeoJSON)
+│  ├─ static           # 静态配置 (Sources, GeoJSON, Constants)
+│  ├─ scripts          # 实用脚本 (Init Ships, WeChat Session)
 │  ├─ data             # 数据存储 (DB, Logs)
 │  ├─ config.py        # 全局配置
 │  ├─ main.py          # 采集任务入口
 │  └─ scheduler.py     # 调度器
 ├─ frontend            # Vue 3 + TypeScript 前端
-│  ├─ src/views        # 页面 (Dashboard, Map, etc.)
+│  ├─ src/views        # 页面 (Dashboard, Map, Acquisition, etc.)
 │  └─ vite.config.ts   # 构建配置
 ├─ docker-compose.yml  # 容器编排
 └─ requirements.txt    # 后端依赖
@@ -122,7 +123,7 @@ dredgescope
 
 ### 环境要求
 - **Python**: 3.11+
-- **Node.js**: 18.12+ (pnpm 7+)
+- **Node.js**: 20.13.0+ (pnpm 7+)
 - **Chrome/Chromium**: 用于 Playwright
 
 ### 快速开始

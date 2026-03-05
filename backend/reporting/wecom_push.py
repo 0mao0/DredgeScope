@@ -216,7 +216,7 @@ def push_daily_report():
     start_time = start_dt.isoformat()
     end_time = end_dt.isoformat()
     
-    articles = database.get_articles_by_time_range_strict(start_time, end_time)
+    articles = database.get_articles_by_time_range_strict(start_time, end_time, is_retained=1)
     raw_event_count = len(articles)
 
     if not articles:
