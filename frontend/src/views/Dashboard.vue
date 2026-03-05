@@ -315,8 +315,8 @@ let refreshTimer: number | null = null
 
 // Report filtering state
 const currentHour = dayjs().hour()
-// 早上8点到晚上6点(18点)显示晚报，其余时间显示早报
-const isEvening = currentHour >= 8 && currentHour < 18
+// 0点到12点显示早报，12点到24点显示晚报
+const isEvening = currentHour >= 12
 const reportType = ref<'morning' | 'evening'>(isEvening ? 'evening' : 'morning')
 const selectedDate = ref<Dayjs>(dayjs())
 const previewVisible = ref(false)
@@ -330,10 +330,12 @@ const previewTitle = computed(() => (reportType.value === 'morning' ? '早报筛
  */
 function getReportRange(type: 'morning' | 'evening', date: Dayjs) {
   if (type === 'morning') {
+    // 早报：前一天18:00 到 当天08:00
     const start = date.subtract(1, 'day').hour(18).minute(0).second(0)
     const end = date.hour(8).minute(0).second(0)
     return { start, end }
   }
+  // 晚报：当天08:00 到 当天18:00
   const start = date.hour(8).minute(0).second(0)
   const end = date.hour(18).minute(0).second(0)
   return { start, end }

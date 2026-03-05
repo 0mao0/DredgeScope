@@ -450,6 +450,8 @@ async def fetch_web_article(context, item):
                         '.entry-content',
                         '.article-content',
                         '.article-body',
+                        '#article-body',
+                        '.body-content',
                         '.main-content',
                         'main',
                         '#content',
@@ -548,15 +550,35 @@ async def fetch_web_article(context, item):
                     pass
 
             try:
-                locator = page.locator('article').first
-                box = None
-                if await locator.count() > 0:
-                    box = await locator.bounding_box()
-                if box:
-                    screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
-                else:
+                screenshot_bytes = None
+                selectors = [
+                    'article',
+                    '.post-content',
+                    '.entry-content',
+                    '.article-content',
+                    '.article-body',
+                    '#article-body',
+                    '.body-content',
+                    '.main-content',
+                    'main',
+                    '#content',
+                    '.content'
+                ]
+                for sel in selectors:
+                    loc = page.locator(sel).first
+                    if await loc.count() > 0:
+                        try:
+                            box = await loc.bounding_box()
+                            if box and box['height'] > 200:
+                                screenshot_bytes = await page.screenshot(type='jpeg', quality=70, clip=box)
+                                break
+                        except:
+                            continue
+                
+                if not screenshot_bytes:
                     await page.set_viewport_size({"width": 1280, "height": 1500})
                     screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
+                
                 filename = _safe_filename(item.get("title"), url)
                 local_path = os.path.join(config.ASSETS_DIR, filename)
                 with open(local_path, 'wb') as f:
