@@ -288,7 +288,7 @@ const selectedVesselId = ref<string | null>(null)
 const activeKeys = ref<string[]>([]) // Default collapsed
 const mapSource = ref<'tianditu' | 'arcgis'>('arcgis')
 const showMapSourceMenu = ref(false)
-let currentBaseLayers: L.Layer[] = []
+let currentBaseLayers: L.TileLayer[] = []
 
 // Fleet colors mapping
 const fleetColors: Record<string, string> = {
