@@ -176,16 +176,17 @@ def write_markdown_audit(rows):
         "official": "公众号"
     }
     for idx, r in enumerate(rows, 1):
-        name = (r.get("title_cn") or r.get("title") or "").replace("|", " ")
-        link = r.get("link") or ""
-        site = r.get("site") or ""
+        name = (r.get("title_cn") or r.get("title") or "").replace("|", " ").replace("\n", " ").replace("\r", "")
+        link = (r.get("link") or "").replace("|", "%7C").replace("\n", "").replace("\r", "")
+        site = (r.get("site") or "").replace("|", " ").replace("\n", " ").replace("\r", "")
         date_str = format_date(r.get("pub_date"))
         keep_str = "是" if r.get("keep") else "否"
         txt_ok = bool_to_cn(r.get("text_ok"))
         vl_ok = bool_to_cn(r.get("vl_ok"))
         source_raw = (r.get("source_type") or "").lower()
         source_label = source_map.get(source_raw, "Web")
-        remark = r.get("remark") or ""
+        # 修复: 彻底清理备注字段中的换行符和管道符，防止Markdown表格错乱
+        remark = (r.get("remark") or "").replace("|", " ").replace("\n", " ").replace("\r", " ")
         line = f"| {idx} | {site} | {name} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {source_label} | {remark} | {link} |"
         lines.append(line)
     content = "\n".join(header + lines) + "\n"

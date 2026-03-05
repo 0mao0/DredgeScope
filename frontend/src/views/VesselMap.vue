@@ -88,6 +88,41 @@
         <div class="relative flex-1 min-h-[360px]">
           <div ref="mapContainer" class="w-full h-full z-0"></div>
 
+          <!-- Map Source Selector (Icon Based) -->
+          <div class="absolute bottom-8 left-4 z-[1000] flex flex-col-reverse gap-2">
+            <!-- Main Toggle Button -->
+            <button 
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white shadow-lg border border-white/10"
+              title="切换地图源"
+              @click="showMapSourceMenu = !showMapSourceMenu"
+            >
+              <i class="fa-solid fa-layer-group"></i>
+            </button>
+
+            <!-- Popup Menu -->
+            <div 
+              v-if="showMapSourceMenu"
+              class="glass-card rounded-lg p-1 flex flex-col gap-1 shadow-lg border border-white/10 w-32 mb-1"
+            >
+              <button 
+                class="px-3 py-2 text-left text-xs sm:text-sm rounded hover:bg-white/10 transition-colors flex items-center gap-2"
+                :class="{ 'bg-blue-500/20 text-blue-300': mapSource === 'tianditu' }"
+                @click="selectMapSource('tianditu')"
+              >
+                <i class="fa-solid fa-map w-4 text-center"></i>
+                <span>天地图</span>
+              </button>
+              <button 
+                class="px-3 py-2 text-left text-xs sm:text-sm rounded hover:bg-white/10 transition-colors flex items-center gap-2"
+                :class="{ 'bg-blue-500/20 text-blue-300': mapSource === 'arcgis' }"
+                @click="selectMapSource('arcgis')"
+              >
+                <i class="fa-solid fa-earth-americas w-4 text-center"></i>
+                <span>ArcGIS</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Status Legend -->
           <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
           <div class="flex flex-wrap gap-x-4 gap-y-1">
@@ -251,6 +286,9 @@ const sidebarOpen = ref(true)
 const loading = ref(false)
 const selectedVesselId = ref<string | null>(null)
 const activeKeys = ref<string[]>([]) // Default collapsed
+const mapSource = ref<'tianditu' | 'arcgis'>('arcgis')
+const showMapSourceMenu = ref(false)
+let currentBaseLayers: L.Layer[] = []
 
 // Fleet colors mapping
 const fleetColors: Record<string, string> = {
@@ -1264,6 +1302,82 @@ function updateSidebarForViewport() {
   scheduleMapResize()
 }
 
+function selectMapSource(source: 'tianditu' | 'arcgis') {
+  mapSource.value = source
+  changeMapSource(source)
+  showMapSourceMenu.value = false
+}
+
+function changeMapSource(source: 'tianditu' | 'arcgis') {
+  if (!map) return
+
+  // Remove current layers
+  currentBaseLayers.forEach(layer => map!.removeLayer(layer))
+  currentBaseLayers = []
+
+  if (source === 'tianditu') {
+    const tiandituKey = '3f9084289bc4ee4f8b5ab359f46bc856'
+    const baseUrl = `https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+    const labelUrl = `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+    const satUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+    const satLabelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
+    
+    // 0-7级: 天地图矢量底图
+    const vec = L.tileLayer(baseUrl, {
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+      maxZoom: 7,
+      minZoom: 0,
+      keepBuffer: 3,
+      className: 'tianditu-vector-layer'
+    })
+    const cva = L.tileLayer(labelUrl, {
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+      maxZoom: 7,
+      minZoom: 0,
+      keepBuffer: 3,
+      className: 'tianditu-vector-layer'
+    })
+
+    // 8-18+级: 天地图卫星底图 (超过18级自动拉伸)
+    const img = L.tileLayer(satUrl, {
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+      maxNativeZoom: 18,
+      maxZoom: 22,
+      minZoom: 8,
+      keepBuffer: 3,
+      className: 'tianditu-satellite-layer'
+    })
+    const cia = L.tileLayer(satLabelUrl, {
+      subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+      maxNativeZoom: 18,
+      maxZoom: 22,
+      minZoom: 8,
+      keepBuffer: 3,
+      className: 'tianditu-satellite-layer'
+    })
+    
+    currentBaseLayers = [vec, cva, img, cia]
+  } else {
+    // ArcGIS World Imagery + Hybrid Reference
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri',
+      maxZoom: 19,
+      className: 'arcgis-satellite-layer'
+    })
+    const labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      className: 'arcgis-label-layer'
+    })
+    currentBaseLayers = [sat, labels]
+  }
+
+  // Add layers to map, making sure they are at the back
+  currentBaseLayers.forEach(layer => {
+    layer.addTo(map!)
+    layer.bringToBack()
+  })
+}
+
 onMounted(async () => {
   if (!mapContainer.value) return
   
@@ -1275,46 +1389,6 @@ onMounted(async () => {
     zoomControl: false,
     attributionControl: false
   })
-  
-  const tiandituKey = '3f9084289bc4ee4f8b5ab359f46bc856'
-  const baseUrl = `https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-  const labelUrl = `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-  const satUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-  const satLabelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-  
-  // 0-7级: 天地图矢量底图
-  L.tileLayer(baseUrl, {
-    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 7,
-    minZoom: 0,
-    keepBuffer: 3,
-    className: 'tianditu-vector-layer'
-  }).addTo(map)
-  L.tileLayer(labelUrl, {
-    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxZoom: 7,
-    minZoom: 0,
-    keepBuffer: 3,
-    className: 'tianditu-vector-layer'
-  }).addTo(map)
-
-  // 8-18+级: 天地图卫星底图 (超过18级自动拉伸)
-  L.tileLayer(satUrl, {
-    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxNativeZoom: 18,
-    maxZoom: 22,
-    minZoom: 8,
-    keepBuffer: 3,
-    className: 'tianditu-satellite-layer'
-  }).addTo(map)
-  L.tileLayer(satLabelUrl, {
-    subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
-    maxNativeZoom: 18,
-    maxZoom: 22,
-    minZoom: 8,
-    keepBuffer: 3,
-    className: 'tianditu-satellite-layer'
-  }).addTo(map)
   
   vesselLayerGroup = L.layerGroup().addTo(map)
   tagLayerGroup = L.layerGroup().addTo(map)
@@ -1336,22 +1410,34 @@ onMounted(async () => {
 
   await nextTick()
   map.invalidateSize()
+  
+  // Initialize map source
+  changeMapSource('arcgis')
+
   // 再次延迟刷新以确保布局稳定
   setTimeout(() => {
     map?.invalidateSize()
   }, 300)
   
   try {
+    console.log('Fetching continents.geojson...')
     const res = await fetch('/static/continents.geojson')
-    const data = await res.json()
-    L.geoJSON(data, {
-      style: {
-        color: '#475569',
-        weight: 1.5,
-        opacity: 0.8,
-        fillOpacity: 0
-      }
-    }).addTo(map)
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+    const text = await res.text()
+    try {
+        const data = JSON.parse(text)
+        L.geoJSON(data, {
+          style: {
+            color: '#475569',
+            weight: 1.5,
+            opacity: 0.8,
+            fillOpacity: 0
+          }
+        }).addTo(map)
+        console.log('Continents loaded successfully')
+    } catch (e) {
+        console.error('Failed to parse continents JSON:', e, text.substring(0, 100))
+    }
   } catch (err) {
     console.error('Failed to load continents:', err)
   }

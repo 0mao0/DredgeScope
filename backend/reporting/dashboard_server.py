@@ -19,7 +19,9 @@ app = FastAPI()
 app.mount("/assets", StaticFiles(directory=config.ASSETS_DIR), name="assets")
 
 # Mount static (for map data etc)
-STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+# Use config.ROOT_DIR to ensure correct path
+STATIC_DIR = os.path.join(config.ROOT_DIR, 'backend', 'static')
+print(f"[Dashboard] Mounting /static to {STATIC_DIR}")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

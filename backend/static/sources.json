@@ -145,13 +145,6 @@
         "max_links": 20
     },
     {
-        "name": "USACE Navigation Experience",
-        "url": "https://experience.arcgis.com/experience/008394d6b24944f0af4499a1511e7b85/",
-        "type": "web",
-        "selector": "body",
-        "max_links": 20
-    },
-    {
         "name": "National Waterways Conference",
         "url": "https://waterways.org/",
         "type": "web",
