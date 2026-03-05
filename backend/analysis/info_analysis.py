@@ -68,13 +68,14 @@ URL：{item.get('url', '')}
 
 任务说明：
 1. 【有效性】(is_junk) - 如果截图显示的是“404”、“禁止访问”、“Cookie设置”、“订阅提示”、“登录页面”或与疏浚行业完全无关的内容（如纯广告、纯人事变动列表），is_junk 设为 true。
-2. 【语义分类】(Category) - 请根据截图描述的核心事件性质进行分类：
-   - Bid: 合同签署、中标、招标或资金获批。
-   - Equipment: 船舶/设备的建造、交付、交易或维护。
-   - Project: 项目的物理施工进展（开工/完工/施工中）。
-   - R&D: 科技研发。
-   - Regulation: 官方发布的政策法规、标准、指南、许可审批。
-   - Market: 公司动态（财务/人事/战略）、市场分析、行业规划，或其他无法归入上述类别的行业新闻。
+2. 【语义分类】(Category) - 请根据截图描述的核心事件性质进行分类（优先级从上到下）：
+   - **Project (项目)**: 涉及具体的疏浚/填海/海洋工程项目的物理进展（开工/完工/施工中）。
+   - **Equipment (设备)**: 涉及船舶或疏浚设备的建造、交付、交易或维护。
+   - **Bid (中标/合同)**: 仅涉及合同签署、中标通知、招标发布或资金获批。
+   - **Regulation (法规/政策)**: 涉及政府/官方机构发布的政策、法律裁决、许可证发放/吊销、环保标准。
+   - **R&D (技术/研发)**: 涉及新技术、新工艺、新材料的研究、测试或理论探讨。
+   - **Market (市场/其他)**: 公司动态、宏观市场分析、或无法归入上述类别的行业新闻。
+
 3. 【信息提取】
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
    - summary_cn: 中文摘要（简练精准，包含关键数据）。
@@ -155,21 +156,37 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
 
 任务说明：
 1. 若内容与疏浚、港航、航道维护、疏浚设备或海洋工程无关，is_junk 必须为 true。
-1. 【语义分类】(Category) - 请根据文章描述的核心事件性质进行分类：
-   请使用**排除法**进行分类决策：
-   - Bid: 仅包含合同签署、中标、招标或资金获批。包括 "secures contract", "wins tender", "funding approved"。
-   - Equipment: 仅包含船舶/设备的建造、交付、交易或维护。
-   - Project: 仅包含项目的**物理施工进展**（开工/完工/施工中）。包括 "begins", "completed", "underway"。
-   - R&D: 仅包含科技研发。
-   - Regulation: 仅包含**官方发布**的政策法规、标准、指南、许可审批或政策解读。
-     * 针对政策的**抗议**、**罢工**、**争议**或**呼吁**，不属于 Regulation，应归入 Market。
-   - Market (新闻兜底): 
-     1. 核心是关于公司财务、人事、并购或市场分析，以及行业规划/战略。
-     2. **兜底类别**：如果事件涉及罢工、抗议、地缘政治影响、意外事故等非标准事件，或者无法归入其他5类，请归入此项。
+2. 【语义分类】(Category) - 请根据文章描述的核心事件性质进行分类：
+   请使用**排除法**进行分类决策（优先级从上到下）：
+   
+   - **Project (项目)**: 涉及具体的疏浚/填海/海洋工程项目的物理进展。
+     - 关键词: "completed", "begins", "underway", "progress", "works", "reclamation", "restoration", "maintenance dredging".
+     - 示例: "X公司完成了Y港口的疏浚", "Z运河拓宽工程开工", "某海滩修复项目正在进行".
+     
+   - **Equipment (设备)**: 涉及船舶或疏浚设备的建造、交付、下水、龙骨铺设、买卖或技术升级。
+     - 关键词: "vessel", "dredger", "ship", "delivery", "launched", "keel laying", "order", "acquisition".
+     - 示例: "新挖泥船X号交付", "Y船厂获得新船订单", "Z公司购买了二手挖泥船".
+     
+   - **Bid (中标/合同)**: 仅涉及合同签署、中标通知、招标发布或资金获批，尚未进入施工阶段。
+     - 关键词: "contract", "tender", "award", "funding", "grant", "secures deal".
+     
+   - **Regulation (法规/政策)**: 涉及政府/官方机构发布的政策、法律裁决、许可证发放/吊销、环保标准。
+     - 关键词: "license", "permit", "court", "law", "policy", "EPA", "corps of engineers", "approval", "ban".
+     - 示例: "法院撤销X项目许可", "新疏浚环保法规发布".
+     
+   - **R&D (技术/研发)**: 涉及新技术、新工艺、新材料的研究、测试或理论探讨。
+     - 关键词: "technology", "research", "study", "method", "solution", "innovation", "paper", "soil", "testing".
+     - 示例: "针对X土壤的打桩技术研究", "新型泥泵效率提升".
+
+   - **Market (市场/其他)**: 
+     1. 公司层面的动态：财报、人事变动、战略合作、并购。
+     2. 宏观市场分析、行业会议、协会活动。
+     3. **兜底类别**：如果不符合上述任何一类，归入此项。
+
    - 不允许输出其他类别，必须从上述六类中选择最接近的一类。
 
-2. 【有效性】(is_junk) - 排除无关或无效内容（如董事会名单、简单的链接列表）。
-3. 【翻译与提取】(title_cn, summary_cn, full_text_cn, publish_time)。
+3. 【有效性】(is_junk) - 排除无关或无效内容（如董事会名单、简单的链接列表、单纯的广告推广）。
+4. 【翻译与提取】(title_cn, summary_cn, full_text_cn, publish_time)。
    - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
      - 涉及国外重点公司名称时，保持英文原名，不要翻译成中文。
      - 禁止使用 "董事会"、"可持续发展"、"我们的技术"、"市场更新" 等泛泛而谈的短语作为标题。
@@ -329,38 +346,38 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "id": item.get("id")
         }
 
-    # 优先级策略：VLM (视觉) 优先处理分类和标题，Text (文本) 负责全文翻译和详细摘要
-    if vl_res and not vl_res.get('is_junk'):
-        # 1. 以 VLM 结果为基础
-        final_result = vl_res.copy()
-        analysis_log.append(f"4. **VL分析 (优先)**: 成功 ({final_result.get('category')})")
-        
-        if text_res and not text_res.get('is_junk'):
-            # 2. 用 Text 结果补充长文本
-            if text_res.get('summary_cn') and len(text_res.get('summary_cn')) > len(final_result.get('summary_cn', '')):
-                final_result['summary_cn'] = text_res.get('summary_cn')
-            if text_res.get('full_text_cn'):
-                final_result['full_text_cn'] = text_res.get('full_text_cn')
-            
-            # 如果 VLM 没提标题或太短，用 Text 补充
-            if not final_result.get('title_cn') or len(final_result.get('title_cn')) < 5:
-                final_result['title_cn'] = text_res.get('title_cn')
-            
-            # 如果 VLM 没提取到时间，尝试用 Text 的时间
-            if not final_result.get('publish_time') and text_res.get('publish_time'):
-                final_result['publish_time'] = text_res.get('publish_time')
-                
-            analysis_log.append("4.1. **Text辅助**: 完成摘要与全文补充")
-        else:
-            final_result['full_text_cn'] = ""
-            analysis_log.append("4.1. **Text辅助**: 无有效文本内容")
-
-    elif text_res and not text_res.get('is_junk'):
-        # 兜底：只有 Text 成功
+    # 优先级策略：Text (文本) 优先，VLM (视觉) 作为补充或兜底
+    # 因为文本模型通常在分类和摘要生成上更稳定，且成本更低
+    
+    # 1. 首先尝试使用 Text 结果作为基础
+    if text_res and not text_res.get('is_junk'):
         final_result = text_res.copy()
-        analysis_log.append(f"4. **Text分析 (兜底)**: 成功 ({final_result.get('category')})")
-        final_result['image_desc'] = ""
+        analysis_log.append(f"4. **Text分析 (优先)**: 成功 ({final_result.get('category')})")
+        
+        # 2. 如果有 VLM 结果，进行补充
+        if vl_res and not vl_res.get('is_junk'):
+            # 补充图片描述
+            final_result['image_desc'] = vl_res.get('image_desc', '')
+            
+            # 如果 Text 没提取到时间，尝试用 VLM 的时间
+            if not final_result.get('publish_time') and vl_res.get('publish_time'):
+                final_result['publish_time'] = vl_res.get('publish_time')
+                
+            # 如果 Text 没提取到中文标题（极少见），尝试用 VLM
+            if not final_result.get('title_cn'):
+                final_result['title_cn'] = vl_res.get('title_cn')
+                
+            analysis_log.append("4.1. **VL辅助**: 补充图片描述与时间")
+        else:
+            final_result['image_desc'] = ""
+            analysis_log.append("4.1. **VL辅助**: 无有效视觉内容")
 
+    # 3. 如果 Text 失败或为 Junk，尝试使用 VLM 兜底
+    elif vl_res and not vl_res.get('is_junk'):
+        final_result = vl_res.copy()
+        final_result['full_text_cn'] = "" # VLM 通常无法提取全文
+        analysis_log.append(f"4. **VL分析 (兜底)**: 成功 ({final_result.get('category')})")
+        
     else:
         # 全部失败或判定为 Junk
         reason = "判定为垃圾信息" if (vl_res and vl_res.get('is_junk')) or (text_res and text_res.get('is_junk')) else "分析失败"
