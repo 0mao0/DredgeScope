@@ -6,7 +6,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
-    meta: { title: '全球疏浚情报' }
+    meta: { title: '全球疏浚情报 v0.1.29' }
   },
   {
     path: '/history',

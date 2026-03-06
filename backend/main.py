@@ -1,7 +1,5 @@
 import asyncio
 import json
-import acquisition.info_acquisition as info_acquisition
-import acquisition.wechat_acquisition as wechat_acquisition
 import analysis.info_analysis as info_analysis
 import reporting.report_generation as report_generation
 import config
@@ -14,6 +12,10 @@ from playwright.async_api import async_playwright
 
 import database
 from static.constants import JUNK_TITLES_EXACT, JUNK_KEYWORDS_PARTIAL
+
+# 新的采集模块
+from acquisition.source_manager import SourceManager
+from acquisition.sources.wechat import WeChatSource
 
 
 def is_tracking_param(param_key):
@@ -197,6 +199,47 @@ def write_markdown_audit(rows):
     except Exception:
         pass
 
+
+async def fetch_wechat_articles() -> list:
+    """获取微信公众号文章"""
+    wechat_biz_list = []
+    
+    # 从 SOURCES_FILE 加载微信公众号配置
+    try:
+        with open(config.SOURCES_FILE, "r", encoding="utf-8") as f:
+            file_sources = json.load(f)
+            for src in file_sources:
+                if src.get("type") == "wechat" and src.get("fakeid"):
+                    existing_fakeids = [b.get("fakeid") for b in wechat_biz_list]
+                    if src.get("fakeid") not in existing_fakeids:
+                        wechat_biz_list.append({
+                            "name": src.get("name"),
+                            "fakeid": src.get("fakeid")
+                        })
+                        print(f"已加载微信源: {src.get('name')}")
+    except Exception as e:
+        print(f"加载微信源失败: {e}")
+        return []
+    
+    if not wechat_biz_list:
+        return []
+    
+    # 创建微信采集器并采集
+    wechat_source = WeChatSource()
+    all_items = []
+    
+    for biz in wechat_biz_list:
+        try:
+            items = await wechat_source.fetch_by_biz(biz["fakeid"], count=10)
+            for item in items:
+                item["source_name"] = biz["name"]
+            all_items.extend(items)
+        except Exception as e:
+            print(f"采集微信源 {biz['name']} 失败: {e}")
+    
+    return all_items
+
+
 async def main():
     # 初始化数据库
     database.init_db()
@@ -212,31 +255,13 @@ async def main():
     # 1. 获取信息
     t1_start = time.time()
     print(">>> 阶段1: 获取信息...")
-    raw_items = await info_acquisition.get_all_items()
     
-    # 获取微信公众号文章 (fakeid 列表)
-    wechat_biz_list = []
+    # 使用新的采集管理器
+    manager = SourceManager(config.SOURCES_FILE)
+    raw_items = await manager.fetch_all(hours=24)
     
-    # 从 SOURCES_FILE 加载微信公众号配置
-    try:
-        with open(config.SOURCES_FILE, "r", encoding="utf-8") as f:
-            file_sources = json.load(f)
-            for src in file_sources:
-                if src.get("type") == "wechat" and src.get("fakeid"):
-                    # 避免重复添加 (通过 fakeid 判断)
-                    existing_fakeids = [b.get("fakeid") for b in wechat_biz_list]
-                    if src.get("fakeid") not in existing_fakeids:
-                        wechat_biz_list.append({
-                            "name": src.get("name"),
-                            "fakeid": src.get("fakeid")
-                        })
-                        print(f"已加载微信源: {src.get('name')}")
-    except Exception as e:
-        print(f"加载微信源失败: {e}")
-    
-    # 微信采集 (自动从 backend/data/wechat_session.json 加载持久化的凭证)
-    # 如果 Session 失效，会自动回退到 RSSHub 方案
-    wechat_items = wechat_acquisition.wechat_scraper.batch_get_articles(wechat_biz_list, count_per_biz=10)
+    # 获取微信公众号文章
+    wechat_items = await fetch_wechat_articles()
     if wechat_items:
         print(f"成功获取 {len(wechat_items)} 条微信公众号新闻")
         raw_items.extend(wechat_items)
@@ -452,7 +477,8 @@ async def main():
                     locale="zh-CN",
                     ignore_https_errors=True
                 )
-                await info_acquisition.enrich_web_items(context, items_to_enrich)
+                # 使用新的管理器进行补充采集
+                await manager.enrich_items(items_to_enrich, context)
                 await browser.close()
                 
                 # 补充采集后，更新回数据库，并再次检查时间
