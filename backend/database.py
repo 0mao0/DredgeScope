@@ -567,16 +567,21 @@ def save_raw_articles(items):
             c.execute("SELECT id FROM articles WHERE url = ?", (item['link'],))
             row = c.fetchone()
             if row:
-                pass 
+                pass
             else:
                 # 插入新记录
                 valid = item.get("valid", 1)
                 is_hidden = item.get("is_hidden", 0)
                 remark = item.get("remark", "")
-                
-                c.execute('''INSERT INTO articles 
-                    (url, title, pub_date, source_type, source_name, valid, is_hidden, remark, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+
+                # 对于RSS源，优先使用summary_raw作为content，避免必须网页抓取
+                content = item.get('content', '')
+                if not content and item.get('source_type') == 'rss':
+                    content = item.get('summary_raw', '')
+
+                c.execute('''INSERT INTO articles
+                    (url, title, pub_date, source_type, source_name, valid, is_hidden, remark, content, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (
                         item['link'],
                         item.get('title', ''),
@@ -586,6 +591,7 @@ def save_raw_articles(items):
                         valid,
                         is_hidden,
                         remark,
+                        content,
                         datetime.now().isoformat()
                     )
                 )
@@ -593,7 +599,7 @@ def save_raw_articles(items):
             count += 1
         except Exception as e:
             print(f"[DB] 插入文章失败 {item.get('link')}: {e}")
-            
+
     conn.commit()
     conn.close()
     return count, new_ids

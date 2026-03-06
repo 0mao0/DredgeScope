@@ -370,6 +370,7 @@ def _safe_filename(title, url):
     return f"{base}_{digest}.jpg"
 
 async def fetch_web_article(context, item):
+    """抓取网页文章内容和截图，增强超时和错误处理"""
     url = item.get("link")
     if not url:
         return item
@@ -378,12 +379,13 @@ async def fetch_web_article(context, item):
     screenshot_path = ""
     try:
         page = await context.new_page()
+        # 增加超时时间以应对慢速网站（如DredgeWire）
         await goto_with_retry(
             page,
             url,
             [
-                {"wait_until": "domcontentloaded", "timeout_ms": 15000},
-                {"wait_until": "load", "timeout_ms": 20000}
+                {"wait_until": "domcontentloaded", "timeout_ms": 30000},
+                {"wait_until": "load", "timeout_ms": 45000}
             ]
         )
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -598,7 +600,33 @@ async def fetch_web_article(context, item):
         item["screenshot_path"] = screenshot_path
     return item
 
+async def fetch_rss_screenshot(context, item):
+    """为已有内容的RSS条目获取截图（不抓取全文）"""
+    try:
+        page = await context.new_page()
+        await goto_with_retry(
+            page,
+            item["link"],
+            [
+                {"wait_until": "domcontentloaded", "timeout_ms": 20000},
+                {"wait_until": "load", "timeout_ms": 30000}
+            ]
+        )
+        # 简单截图
+        screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
+        filename = _safe_filename(item.get("title"), item["link"])
+        local_path = os.path.join(config.ASSETS_DIR, filename)
+        with open(local_path, 'wb') as f:
+            f.write(screenshot_bytes)
+        item["screenshot_path"] = f"assets/{filename}"
+        await page.close()
+        print(f"[RSS截图] 成功 {item.get('link')}")
+    except Exception as e:
+        print(f"[RSS截图] 失败 {item.get('link')}: {e}")
+
+
 async def enrich_web_items(context, items):
+    """补充采集网页内容，对于已有内容的RSS条目仅获取截图"""
     if not items:
         return []
     results = []
@@ -608,7 +636,19 @@ async def enrich_web_items(context, items):
         async with sem:
             source_type = (item.get("source_type") or "").lower()
             link = (item.get("link") or "").lower()
-            if source_type in ["web", "wechat", "official", "rsshub", "rss"] or "mp.weixin.qq.com" in link:
+
+            # 检查是否已有内容（RSS源可能已经有summary作为content）
+            has_content = item.get("content") and len(item.get("content").strip()) > 100
+            has_screenshot = item.get("screenshot_path") and len(item.get("screenshot_path")) > 0
+
+            if source_type == "rss":
+                if has_content and not has_screenshot:
+                    # RSS有内容但无截图：只获取截图
+                    await fetch_rss_screenshot(context, item)
+                elif not has_content:
+                    # RSS无内容：完整抓取
+                    await fetch_web_article(context, item)
+            elif source_type in ["web", "wechat", "official", "rsshub"] or "mp.weixin.qq.com" in link:
                 await fetch_web_article(context, item)
             results.append(item)
 
