@@ -463,8 +463,8 @@ async def main():
     # --- 改动：从数据库获取需要补充采集的条目 ---
     t2_start = time.time()
     # 逻辑：valid=1 且 (无内容 或 无截图) 且 5天内
-    # 仅处理本次新增的条目，避免重复处理旧数据
-    items_to_enrich = database.get_items_for_enrichment(ids=new_ids)
+    # 处理所有需要补充采集的条目（包括本次新增和之前未完成的）
+    items_to_enrich = database.get_items_for_enrichment()
     
     if items_to_enrich:
         print(f"正在对 {len(items_to_enrich)} 条条目进行补充采集(从数据库读取)...")
@@ -513,9 +513,9 @@ async def main():
     # 2. 分析信息 (文本 + 视觉)
     t3_start = time.time()
     print(">>> 阶段2: 智能分析(从数据库读取)...")
-    
-    # 仅分析本次新增的条目
-    analysis_items = database.get_items_for_analysis(ids=new_ids)
+
+    # 分析所有需要分析的条目（包括本次新增和之前未完成的）
+    analysis_items = database.get_items_for_analysis()
     
     if analysis_items:
 
