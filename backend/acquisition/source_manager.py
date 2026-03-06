@@ -360,6 +360,50 @@ class SourceManager:
         """列出所有已加载的采集源"""
         return list(self.sources.keys())
 
+    @staticmethod
+    async def launch_browser(p):
+        """
+        启动 Playwright 浏览器
+
+        Args:
+            p: Playwright 实例
+
+        Returns:
+            Browser 实例
+        """
+        last_error = None
+
+        # 尝试各种渠道
+        for channel in ["chrome", "msedge", "chromium"]:
+            try:
+                return await p.chromium.launch(channel=channel, headless=True)
+            except Exception as e:
+                last_error = e
+
+        # 尝试无渠道启动
+        try:
+            return await p.chromium.launch(headless=True)
+        except Exception as e:
+            last_error = e
+
+        # 尝试常见路径
+        candidates = [
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable"
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                try:
+                    return await p.chromium.launch(headless=True, executable_path=path)
+                except Exception as e:
+                    last_error = e
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("Playwright 浏览器启动失败")
+
 
 # 便捷函数
 async def fetch_all_news(config_path: str = None, hours: int = 24) -> List[Dict[str, Any]]:

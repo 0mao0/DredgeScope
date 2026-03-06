@@ -470,7 +470,7 @@ async def main():
         print(f"正在对 {len(items_to_enrich)} 条条目进行补充采集(从数据库读取)...")
         try:
             async with async_playwright() as p:
-                browser = await info_acquisition.launch_chromium(p)
+                browser = await manager.launch_browser(p)
                 context = await browser.new_context(
                     viewport={"width": 1280, "height": 800},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",

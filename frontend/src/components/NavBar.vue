@@ -11,7 +11,7 @@
               <h1 class="text-base sm:text-xl font-bold text-white">
                 全球疏浚情报
               </h1>
-              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v0.1.29</span>
+              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v0.1.30</span>
             </div>
           </router-link>
         </div>
