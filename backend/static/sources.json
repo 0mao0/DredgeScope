@@ -77,7 +77,7 @@
         "max_links": 10
     },
     {
-        "name": "CCCC Dredging Group News",
+        "name": "中交疏浚 官网",
         "url": "https://www.cccc-cdc.com/channels/1684.html",
         "type": "web",
         "selector": ".news-list, .content-list, article",
@@ -85,7 +85,7 @@
         "max_links": 30
     },
     {
-        "name": "CCCC Shanghai Dredging News",
+        "name": "中交上航 官网",
         "url": "https://www.cccc-sdc.com/cccc-sdc/channels/2207.html",
         "type": "web",
         "selector": ".news-list, .content-list, article",
@@ -93,7 +93,7 @@
         "max_links": 30
     },
     {
-        "name": "CCCC Guangzhou Dredging News",
+        "name": "中交广航 官网",
         "url": "https://www.ccgdc.com/cccc-gdc/channels/1945.html",
         "type": "web",
         "selector": ".news-list, .content-list, article",
@@ -101,7 +101,7 @@
         "max_links": 30
     },
     {
-        "name": "CCCC Tianjin Dredging News",
+        "name": "中交天航 官网",
         "url": "https://www.zjthbh.com/tjsj/channels/870.html",
         "type": "web",
         "selector": ".news-list, .content-list, article",
@@ -185,28 +185,35 @@
         "name": "中交疏浚",
         "type": "wechat",
         "wechat": {
-            "feed_id": "MP_WXS_PLACEHOLDER_1"
+            "feed_id": "MP_WXS_3257605496"
         }
     },
     {
         "name": "中交天航局",
         "type": "wechat",
         "wechat": {
-            "feed_id": "MP_WXS_PLACEHOLDER_2"
+            "feed_id": "MP_WXS_3286056625"
         }
     },
     {
         "name": "中交广航局",
         "type": "wechat",
         "wechat": {
-            "feed_id": "MP_WXS_PLACEHOLDER_3"
+            "feed_id": "MP_WXS_3245702170"
         }
     },
     {
         "name": "中交上航局",
         "type": "wechat",
         "wechat": {
-            "feed_id": "MP_WXS_PLACEHOLDER_4"
+            "feed_id": "MP_WXS_3090095700"
+        }
+    },
+    {
+        "name": "长江航道",
+        "type": "wechat",
+        "wechat": {
+            "feed_id": "MP_WXS_3299050611"
         }
     }
 ]

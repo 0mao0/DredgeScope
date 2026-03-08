@@ -261,7 +261,7 @@ def push_daily_report():
         "R&D": "研发",
         "Regulation": "法规"
     }
-    category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys()])
+    category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys() if category_counts.get(k, 0) > 0])
     write_scheduler_log(
         f"推送统计: 窗口{label} 原始记录{raw_event_count} 推送{total_count}"
     )
