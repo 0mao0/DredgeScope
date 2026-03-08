@@ -8,19 +8,20 @@
 - **情报归档**：结构化入库与可追溯归档
 - **可视化展示**：大屏仪表盘（自动适配早/晚报时段）、历史新闻筛选、船舶跟踪与分布展示（支持天地图/ArcGIS 切换）
 - **自动推送**：每日生成简报并推送到企业微信
+- **健康监控**：采集源状态实时监控与告警
 
 ## 新闻数据源
 
-当前系统监控 **28** 个全球疏浚行业核心数据源，覆盖国际主流媒体、行业协会、主要承包商及中国官方渠道。
+当前系统监控 **23** 个全球疏浚行业核心数据源，覆盖国际主流媒体、行业协会、主要承包商及中国官方渠道。
 
 ### 1. 数据源分布
 
 | 类型 | 数量 | 占比 | 采集策略 | 特点 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Web (网页)** | 18 | 64% | Playwright 动态渲染 + 智能选择器 | 覆盖面广，支持反爬虫对抗，包含中交系官网 |
-| **RSS (订阅)** | 6 | 21% | Feedparser 标准解析 | 实时性高，结构化好，包含行业主流媒体 |
-| **WeChat (公众号)** | 4 | 14% | 官方 Session 接口 (优先) / RSSHub (回退) | 深度中文内容，覆盖中交系核心大局 |
-| **总计** | **28** | 100% | 混合采集模式 | 全方位覆盖 |
+| **Web (网页)** | 13 | 57% | Playwright 动态渲染 + 智能选择器 | 覆盖面广，支持反爬虫对抗，包含中交系官网 |
+| **RSS (订阅)** | 6 | 26% | Feedparser 标准解析 | 实时性高，结构化好，包含行业主流媒体 |
+| **WeChat (公众号)** | 4 | 17% | 官方 Session 接口 (优先) / RSSHub (回退) | 深度中文内容，覆盖中交系核心大局 |
+| **总计** | **23** | 100% | 混合采集模式 | 全方位覆盖 |
 
 ### 2. 完整数据源清单
 
@@ -33,10 +34,10 @@
 - **Great Lakes Dredge & Dock (GLDD)**: 美国最大疏浚商投资者关系
 
 #### 🏢 国际承包商与组织 (Web)
-- **四大疏浚巨头**: Jan De Nul, Van Oord, Boskalis, DEME
+- **四大疏浚巨头**: Van Oord, Boskalis, DEME
 - **行业协会**: IADC (国际疏浚协会), CEDA (中部疏浚协会), DCA (美洲疏浚商协会)
-- **官方机构**: USACE (美国陆军工程兵团 - 2个频道), BOEM (海洋能源管理局)
-- **区域组织**: AIWA (大西洋沿岸水道协会), AMP (美国海事伙伴关系), NWC (国家水道会议)
+- **官方机构**: USACE (美国陆军工程兵团), BOEM (海洋能源管理局)
+- **区域组织**: National Waterways Conference (国家水道会议)
 
 #### 🇨🇳 中国核心渠道 (Web & WeChat)
 - **行业协会**: 中国疏浚协会 (CHIDA)
@@ -60,7 +61,7 @@ flowchart TB
         A2 & A5 & A7 --> A8
     end
 
-    subgraph 入库层["� 入库层 main.py"]
+    subgraph 入库层["📥 入库层 main.py"]
         A8 --> B1[URL 规范化]
         B1 --> B2[库内去重]
         B2 --> B3[5 天时效初筛]
@@ -80,7 +81,7 @@ flowchart TB
         D3 --> D4[更新分析结果 & valid/is_retained 状态]
     end
 
-    subgraph 输出层["� 输出与推送"]
+    subgraph 输出层["📊 输出与推送"]
         D4 --> E1[生成 MD 审计文件]
         D4 --> E2[企业微信推送]
         D4 --> E3[Dashboard API 展示]
@@ -89,14 +90,14 @@ flowchart TB
 
 ### 流程说明
 
-1.  **采集层 (Acquisition)**：多源并行获取最新 URL。
-2.  **入库层 (Storage)**：进行 URL 去重和时效初筛，确保存入数据库的都是新情报。
-3.  **增强层 (Enrichment)**：利用 Playwright “深潜”详情页，获取 AI 分析所需的“原材料”（正文文字 + 网页截图）。
-4.  **分析层 (Analysis)**：
-    - **VLM 优先**：利用视觉模型判定页面有效性、提取视觉日期、进行事件分类。
-    - **Text 补充**：利用文本模型进行全文翻译和详细摘要生成。
-    - **智能合并**：合并双路结果，根据行业关键词和 AI 语义判定是否为“高价值情报” (`is_retained`)。
-5.  **输出层 (Output)**：自动生成日报，推送至企业微信，并同步更新至前端仪表盘。
+1. **采集层 (Acquisition)**：多源并行获取最新 URL，支持 72 小时时间窗口
+2. **入库层 (Storage)**：进行 URL 去重和时效初筛，确保存入数据库的都是新情报
+3. **增强层 (Enrichment)**：利用 Playwright "深潜"详情页，获取 AI 分析所需的"原材料"（正文文字 + 网页截图）
+4. **分析层 (Analysis)**：
+   - **VLM 优先**：利用视觉模型判定页面有效性、提取视觉日期、进行事件分类
+   - **Text 补充**：利用文本模型进行全文翻译和详细摘要生成
+   - **智能合并**：合并双路结果，根据行业关键词和 AI 语义判定是否为"高价值情报" (`is_retained`)
+5. **输出层 (Output)**：自动生成日报，推送至企业微信，并同步更新至前端仪表盘
 
 ## 项目结构
 
@@ -104,20 +105,48 @@ flowchart TB
 dredgescope
 ├─ backend
 │  ├─ acquisition      # 采集模块 (RSS, Web, WeChat, Ship)
+│  │  └─ sources/      # 采集源实现 (base.py 定义基类)
 │  ├─ analysis         # 分析模块 (LLM, VL, Ship Status)
 │  ├─ reporting        # 报告与推送 (Dashboard API, Report, WeCom)
 │  ├─ static           # 静态配置 (Sources, GeoJSON, Constants)
-│  ├─ scripts          # 实用脚本 (Init Ships, WeChat Session)
 │  ├─ data             # 数据存储 (DB, Logs)
 │  ├─ config.py        # 全局配置
 │  ├─ main.py          # 采集任务入口
+│  ├─ database.py      # 数据库操作
 │  └─ scheduler.py     # 调度器
 ├─ frontend            # Vue 3 + TypeScript 前端
 │  ├─ src/views        # 页面 (Dashboard, Map, Acquisition, etc.)
+│  ├─ src/components   # 公共组件
+│  ├─ src/stores       # Pinia 状态管理
 │  └─ vite.config.ts   # 构建配置
+├─ docs                # 详细文档
+├─ AGENTS.md           # AI Agent 指南 (Harness Engineering)
 ├─ docker-compose.yml  # 容器编排
 └─ requirements.txt    # 后端依赖
 ```
+
+## 技术栈
+
+### 前端
+- **核心**: Vue 3.4+, TypeScript 5.4+, Vite 5.2+
+- **UI**: Ant Design Vue 4.x, Tailwind CSS (样式工具)
+- **状态/路由**: Pinia, Vue Router 4.x
+- **可视化/地图**: Chart.js, Leaflet (支持天地图与ArcGIS切换)
+- **工具**: Axios, Day.js, Marked
+
+### 后端
+- **核心**: Python 3.11+
+- **Web**: FastAPI, Uvicorn
+- **爬虫**: Playwright 1.44+, Feedparser, Requests, BeautifulSoup4
+- **数据处理**: Pandas, OpenPyXL
+- **地理信息**: Reverse Geocoder, Pycountry
+
+### AI/LLM
+- **文本**: SiliconFlow API (Qwen2.5-7B-Instruct)
+- **视觉**: Aliyun DashScope (Qwen-VL)
+
+### 数据库
+- **SQLite**: 主数据库 (dredge_intel.db) + 船舶轨迹库 (ship_tracks.db)
 
 ## 运行指南
 
@@ -128,22 +157,108 @@ dredgescope
 
 ### 快速开始
 
-1.  **安装依赖**:
-    ```bash
-    # 后端
-    cd backend
-    pip install -r requirements.txt
-    playwright install chromium
+1. **安装依赖**:
+   ```bash
+   # 后端
+   cd backend
+   pip install -r requirements.txt
+   playwright install chromium
 
-    # 前端
-    cd frontend
-    pnpm install
-    ```
+   # 前端
+   cd frontend
+   pnpm install
+   ```
 
-2.  **配置环境**:
-    在项目根目录创建 `.env` 文件，配置 API Key 和数据库路径（参考 `backend/config.py`）。
+2. **配置环境**:
+   在项目根目录创建 `.env` 文件，配置 API Key 和数据库路径（参考 `backend/config.py`）。
 
-3.  **启动项目**:
-    - **本地开发**: 运行 `run_dev.bat` (Windows)
-    - **Docker**: `docker-compose up -d --build`
-    - **单次采集**: `cd backend && python main.py`
+3. **启动项目**:
+   - **本地开发**: 运行 `run_dev.bat` (Windows)
+   - **Docker**: `docker-compose up -d --build`
+   - **单次采集**: `cd backend && python run_tasks_manually.py`
+
+### 常用命令
+
+```bash
+# 后端开发服务器
+cd backend && python -m uvicorn reporting.dashboard_server:app --reload --port 8000
+
+# 前端开发服务器
+cd frontend && pnpm run serve
+
+# 手动执行采集任务
+cd backend && python run_tasks_manually.py
+
+# 测试模式（仅采集少量数据）
+cd backend && python run_tasks_manually.py --test
+
+# 代码检查
+cd backend && ruff check .
+cd frontend && pnpm run lint
+```
+
+## 配置说明
+
+### 采集源配置 (`backend/static/sources.json`)
+
+```json
+{
+    "name": "Dredging Today",
+    "url": "https://dredgingtoday.com/feed/",
+    "type": "rss"
+},
+{
+    "name": "Van Oord News",
+    "url": "https://www.vanoord.com/en/updates/",
+    "type": "web",
+    "selector": "article, .news-item",
+    "url_patterns": ["/updates/", "/news/"],
+    "blacklist": ["/user/", "/login"],
+    "max_links": 15
+}
+```
+
+配置项说明：
+- `type`: `rss` | `web` | `wechat`
+- `selector`: CSS 选择器，用于定位新闻列表
+- `url_patterns`: URL 白名单模式（链接必须包含这些路径片段）
+- `blacklist`: URL 黑名单模式
+- `max_links`: 单次最大抓取链接数
+
+### 环境变量 (`.env`)
+
+| 变量名 | 说明 | 必需 |
+|--------|------|------|
+| `SILICONFLOW_API_KEY` | SiliconFlow API 密钥 | 是 |
+| `ALIYUN_DASHSCOPE_API_KEY` | 阿里云 DashScope API 密钥 | 是 |
+| `WECOM_WEBHOOK_URL` | 企业微信机器人 Webhook | 否 |
+| `FLEET_API_KEY` | Fleet 船舶追踪 API 密钥 | 否 |
+
+## 健康监控
+
+系统内置采集源健康监控功能，记录每次采集的状态：
+
+- **监控指标**: 获取条目数、新增条目数、响应时间、错误信息
+- **告警机制**: 连续失败 3 次自动告警
+- **查询接口**: 
+  - `GET /api/source-health/summary` - 健康状态摘要
+  - `GET /api/source-health/alerts` - 告警列表
+  - `GET /api/source-health/history` - 历史记录
+
+## 文档索引
+
+- [AGENTS.md](./AGENTS.md) - AI Agent 开发指南（基于 Harness Engineering）
+- [CLAUDE.md](./CLAUDE.md) - Claude AI 助手专用指南
+- `docs/` - 详细设计文档
+
+## 更新日志
+
+### 2026-03
+- 扩大 RSS 时间窗口从 24 小时到 72 小时
+- 优化 Web 源选择器，增加 URL 白名单模式
+- 新增采集源健康监控功能
+- 新增 AGENTS.md 文档
+
+## 许可证
+
+MIT License

@@ -257,8 +257,9 @@ async def main():
     print(">>> 阶段1: 获取信息...")
     
     # 使用新的采集管理器
+    # 扩大时间窗口到72小时，确保不遗漏新闻（后续入库时会进行5天时效过滤）
     manager = SourceManager(config.SOURCES_FILE)
-    raw_items = await manager.fetch_all(hours=24)
+    raw_items = await manager.fetch_all(hours=72)
     
     # 获取微信公众号文章
     wechat_items = await fetch_wechat_articles()

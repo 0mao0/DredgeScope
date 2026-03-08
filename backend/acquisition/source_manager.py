@@ -119,38 +119,13 @@ class SourceManager:
             sources_to_fetch = self.sources
 
         print(f"\n{'='*60}")
-        print(f"开始采集 {len(sources_to_fetch)} 个数据源")
+        print(f"开始采集 {len(sources_to_fetch)} 个数据源（顺序执行）")
         print(f"{'='*60}\n")
 
-        # 并发采集
-        sem = asyncio.Semaphore(5)  # 最多5个并发
-
-        async def fetch_with_source(name: str, source: BaseSource) -> tuple:
-            async with sem:
-                try:
-                    items = await source.fetch(hours=hours)
-                    return name, items, None
-                except Exception as e:
-                    return name, [], str(e)
-
-        tasks = [
-            fetch_with_source(name, source)
-            for name, source in sources_to_fetch.items()
-        ]
-
-        results = await asyncio.gather(*tasks)
-
-        # 处理结果
-        for name, items, error in results:
-            if error:
-                print(f"[Manager] {name} 采集失败: {error}")
-                self.stats['by_source'][name] = {
-                    'status': 'failed',
-                    'error': error,
-                    'count': 0
-                }
-                self.stats['total_failed'] += 1
-            else:
+        # 顺序采集（避免并发导致的结果不稳定）
+        for name, source in sources_to_fetch.items():
+            try:
+                items = await source.fetch(hours=hours)
                 all_items.extend(items)
                 self.stats['by_source'][name] = {
                     'status': 'success',
@@ -158,6 +133,15 @@ class SourceManager:
                 }
                 self.stats['total_success'] += 1
                 self.stats['total_fetched'] += len(items)
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[Manager] {name} 采集失败: {error_msg}")
+                self.stats['by_source'][name] = {
+                    'status': 'failed',
+                    'error': error_msg,
+                    'count': 0
+                }
+                self.stats['total_failed'] += 1
 
         self.stats['end_time'] = datetime.now().isoformat()
 

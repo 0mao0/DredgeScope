@@ -31,8 +31,9 @@ class WeChatSource(BaseSource):
         self.cookie = ""
         self.token = ""
         self.base_url = "https://mp.weixin.qq.com/cgi-bin/appmsg"
+        # 计算项目根目录: backend/acquisition/sources/wechat/ -> backend/
         self.session_file = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
             "static", "wechat_session.json"
         )
 
@@ -91,8 +92,9 @@ class WeChatSource(BaseSource):
             文章列表
         """
         # 从配置文件加载公众号列表
+        # 计算项目根目录: backend/acquisition/sources/wechat/ -> backend/
         config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
             "static", "sources.json"
         )
 

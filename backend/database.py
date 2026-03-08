@@ -200,6 +200,21 @@ def init_db():
     c.execute("DROP TABLE IF EXISTS events")
     c.execute("DROP TABLE IF EXISTS event_groups")
     
+    # 创建采集源健康监控表
+    c.execute('''CREATE TABLE IF NOT EXISTS source_health (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_name TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        fetch_time TEXT NOT NULL,
+        items_fetched INTEGER DEFAULT 0,
+        items_new INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'success',
+        error_message TEXT,
+        response_time_ms INTEGER,
+        created_at TEXT
+    )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_source_health_name_time ON source_health(source_name, fetch_time)")
+    
     conn.commit()
     conn.close()
     print(f"[DB] 数据库已初始化: {DB_PATH}")
@@ -787,3 +802,151 @@ def update_ship_mmsi(ship_id, mmsi):
         return False
     finally:
         conn.close()
+
+
+def record_source_health(source_name: str, source_type: str, items_fetched: int = 0,
+                         items_new: int = 0, status: str = 'success', 
+                         error_message: str = None, response_time_ms: int = None):
+    """
+    记录采集源健康状态
+    
+    Args:
+        source_name: 采集源名称
+        source_type: 采集源类型 (rss/web/wechat)
+        items_fetched: 获取到的条目数
+        items_new: 新增条目数
+        status: 状态 (success/failed/timeout)
+        error_message: 错误信息
+        response_time_ms: 响应时间(毫秒)
+    """
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute('''INSERT INTO source_health 
+            (source_name, source_type, fetch_time, items_fetched, items_new, 
+             status, error_message, response_time_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (source_name, source_type, datetime.now().isoformat(), 
+             items_fetched, items_new, status, error_message, response_time_ms,
+             datetime.now().isoformat()))
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] 记录采集源健康状态失败: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def get_source_health_summary(days: int = 7):
+    """
+    获取采集源健康状态摘要
+    
+    Args:
+        days: 统计最近几天的数据
+        
+    Returns:
+        各采集源的健康状态摘要列表
+    """
+    from datetime import timedelta
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    
+    c.execute('''
+        SELECT 
+            source_name,
+            source_type,
+            COUNT(*) as total_fetches,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+            SUM(items_fetched) as total_items,
+            SUM(items_new) as total_new,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(fetch_time) as last_fetch_time
+        FROM source_health
+        WHERE created_at > ?
+        GROUP BY source_name, source_type
+        ORDER BY source_name
+    ''', (cutoff,))
+    
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_source_health_alerts(hours: int = 24, threshold: int = 3):
+    """
+    获取采集源健康告警
+    
+    Args:
+        hours: 检查最近几小时的数据
+        threshold: 连续失败次数阈值
+        
+    Returns:
+        需要告警的采集源列表
+    """
+    from datetime import timedelta
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+    
+    # 查找连续失败的采集源
+    c.execute('''
+        SELECT 
+            source_name,
+            source_type,
+            COUNT(*) as fail_count,
+            GROUP_CONCAT(error_message, '; ') as errors,
+            MAX(fetch_time) as last_fail_time
+        FROM source_health
+        WHERE created_at > ? AND status = 'failed'
+        GROUP BY source_name, source_type
+        HAVING fail_count >= ?
+    ''', (cutoff, threshold))
+    
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_source_health_history(source_name: str = None, days: int = 7, limit: int = 100):
+    """
+    获取采集源健康历史记录
+    
+    Args:
+        source_name: 采集源名称（可选，不指定则返回所有）
+        days: 查询最近几天的数据
+        limit: 返回记录数量限制
+        
+    Returns:
+        健康历史记录列表
+    """
+    from datetime import timedelta
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    
+    if source_name:
+        c.execute('''
+            SELECT * FROM source_health
+            WHERE source_name = ? AND created_at > ?
+            ORDER BY fetch_time DESC
+            LIMIT ?
+        ''', (source_name, cutoff, limit))
+    else:
+        c.execute('''
+            SELECT * FROM source_health
+            WHERE created_at > ?
+            ORDER BY fetch_time DESC
+            LIMIT ?
+        ''', (cutoff, limit))
+    
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]

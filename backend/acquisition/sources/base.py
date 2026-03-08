@@ -100,9 +100,15 @@ class RSSSource(BaseSource):
         """
         import feedparser
         import requests
+        import time
         from datetime import datetime, timedelta
+        from database import record_source_health
 
         print(f"[RSS:{self.name}] 正在抓取: {self.feed_url}")
+
+        start_time = time.time()
+        items = []
+        error_msg = None
 
         try:
             # 使用requests获取内容
@@ -114,7 +120,6 @@ class RSSSource(BaseSource):
 
             # 解析RSS
             d = feedparser.parse(response.content)
-            items = []
             cutoff = datetime.now() - timedelta(hours=hours)
 
             for entry in d.entries:
@@ -134,11 +139,35 @@ class RSSSource(BaseSource):
             self.stats['fetched'] = len(items)
             self.stats['success'] = len(items)
             print(f"[RSS:{self.name}] 成功获取 {len(items)} 条新闻")
+            
+            # 记录健康状态
+            response_time = int((time.time() - start_time) * 1000)
+            record_source_health(
+                source_name=self.name,
+                source_type='rss',
+                items_fetched=len(items),
+                status='success',
+                response_time_ms=response_time
+            )
+            
             return items
 
         except Exception as e:
+            error_msg = str(e)
             self.log_error(e, "RSS抓取失败")
             self.stats['failed'] += 1
+            
+            # 记录失败状态
+            response_time = int((time.time() - start_time) * 1000)
+            record_source_health(
+                source_name=self.name,
+                source_type='rss',
+                items_fetched=0,
+                status='failed',
+                error_message=error_msg,
+                response_time_ms=response_time
+            )
+            
             return []
 
     def _parse_date(self, entry) -> Optional[datetime]:
@@ -187,15 +216,18 @@ class WebSource(BaseSource):
     selector: str = "body"  # 文章列表选择器
     max_links: int = 10  # 最大抓取链接数
     blacklist: List[str] = None  # 黑名单路径
+    url_patterns: List[str] = None  # URL白名单模式（必须包含这些路径片段）
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self.blacklist = self.blacklist or []
+        self.url_patterns = self.url_patterns or []
         if config:
             self.index_url = config.get('url', self.index_url)
             self.selector = config.get('selector', self.selector)
             self.max_links = config.get('max_links', self.max_links)
             self.blacklist = config.get('blacklist', self.blacklist)
+            self.url_patterns = config.get('url_patterns', self.url_patterns)
 
     async def fetch(self, hours: int = 24) -> List[Dict[str, Any]]:
         """
@@ -207,13 +239,17 @@ class WebSource(BaseSource):
         Returns:
             新闻条目列表
         """
+        import time
+        from database import record_source_health
+        
         print(f"[Web:{self.name}] 正在扫描索引页: {self.index_url}")
 
-        # Web源需要Playwright上下文，这里只返回基本结构
-        # 详细内容在enrich阶段抓取
+        start_time = time.time()
+        items = []
+        error_msg = None
+        
         from playwright.async_api import async_playwright
 
-        items = []
         try:
             async with async_playwright() as p:
                 browser = await self._launch_browser(p)
@@ -242,11 +278,35 @@ class WebSource(BaseSource):
             self.stats['fetched'] = len(items)
             self.stats['success'] = len(items)
             print(f"[Web:{self.name}] 成功获取 {len(items)} 条新闻链接")
+            
+            # 记录健康状态
+            response_time = int((time.time() - start_time) * 1000)
+            record_source_health(
+                source_name=self.name,
+                source_type='web',
+                items_fetched=len(items),
+                status='success',
+                response_time_ms=response_time
+            )
+            
             return items
 
         except Exception as e:
+            error_msg = str(e)
             self.log_error(e, "Web抓取失败")
             self.stats['failed'] += 1
+            
+            # 记录失败状态
+            response_time = int((time.time() - start_time) * 1000)
+            record_source_health(
+                source_name=self.name,
+                source_type='web',
+                items_fetched=0,
+                status='failed',
+                error_message=error_msg,
+                response_time_ms=response_time
+            )
+            
             return []
 
     async def _launch_browser(self, p):
@@ -297,14 +357,34 @@ class WebSource(BaseSource):
         }}""", self.selector)
 
     def _is_valid_link(self, url: str, title: str) -> bool:
-        """检查链接是否有效"""
+        """
+        检查链接是否有效
+        
+        Args:
+            url: 链接URL
+            title: 链接标题
+            
+        Returns:
+            是否为有效链接
+        """
         if not url or not title:
             return False
 
-        # 检查黑名单
         url_lower = url.lower()
+        
+        # 检查黑名单
         for pattern in self.blacklist:
             if pattern.lower() in url_lower:
+                return False
+
+        # 检查URL白名单模式（如果配置了，则必须匹配至少一个）
+        if self.url_patterns:
+            matched = False
+            for pattern in self.url_patterns:
+                if pattern.lower() in url_lower:
+                    matched = True
+                    break
+            if not matched:
                 return False
 
         # 过滤导航类链接

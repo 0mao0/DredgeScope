@@ -33,123 +33,153 @@
         "name": "Dredging Contractors of America",
         "url": "https://dredgingcontractors.org/news",
         "type": "web",
-        "selector": ".news-item",
+        "selector": ".news-item, article, .entry-content",
         "blacklist": [
             "/dredging-101/",
-            "/maritime-links/"
-        ]
+            "/maritime-links/",
+            "/about",
+            "/contact",
+            "/membership"
+        ],
+        "url_patterns": ["/news/", "/article/", "/post/"],
+        "max_links": 15
     },
     {
         "name": "IADC Dredging",
         "url": "https://www.iadc-dredging.com/news/",
         "type": "web",
-        "selector": "article"
+        "selector": "article, .news-item, .post",
+        "url_patterns": ["/news/", "/article/"],
+        "max_links": 15
     },
     {
         "name": "CEDA Industry News",
         "url": "https://dredging.org/news/industry-news/",
         "type": "web",
-        "selector": ".news-item",
+        "selector": ".news-item, article, .content-item",
         "blacklist": [
             "/ceda/governance",
             "/ceda/about",
             "/ceda/member",
-            "/ceda/committee"
-        ]
+            "/ceda/committee",
+            "/login",
+            "/register"
+        ],
+        "url_patterns": ["/news/", "/article/"],
+        "max_links": 15
     },
     {
         "name": "China Dredging Association",
         "url": "http://www.chida.org/Market/",
         "type": "web",
-        "selector": ".content-list",
+        "selector": ".content-list, .news-list, article",
+        "url_patterns": ["/Market/", "/News/"],
         "max_links": 10
     },
     {
         "name": "CCCC Dredging Group News",
         "url": "https://www.cccc-cdc.com/channels/1684.html",
         "type": "web",
-        "selector": "body",
+        "selector": ".news-list, .content-list, article",
+        "url_patterns": ["/contents/", "/channels/", "/article/"],
         "max_links": 30
     },
     {
         "name": "CCCC Shanghai Dredging News",
         "url": "https://www.cccc-sdc.com/cccc-sdc/channels/2207.html",
         "type": "web",
-        "selector": ".news-list, .content-list, body",
+        "selector": ".news-list, .content-list, article",
+        "url_patterns": ["/contents/", "/channels/", "/article/"],
         "max_links": 30
     },
     {
         "name": "CCCC Guangzhou Dredging News",
         "url": "https://www.ccgdc.com/cccc-gdc/channels/1945.html",
         "type": "web",
-        "selector": ".news-list, .content-list, body",
+        "selector": ".news-list, .content-list, article",
+        "url_patterns": ["/contents/", "/channels/", "/article/"],
         "max_links": 30
     },
     {
         "name": "CCCC Tianjin Dredging News",
         "url": "https://www.zjthbh.com/tjsj/channels/870.html",
         "type": "web",
-        "selector": ".news-list, .content-list, body",
+        "selector": ".news-list, .content-list, article",
+        "url_patterns": ["/contents/", "/channels/", "/article/"],
         "max_links": 30
     },
     {
-        "name": "Jan De Nul News",
-        "url": "https://www.jandenul.com/en/news/",
-        "type": "web",
-        "selector": "article"
-    },
-    {
         "name": "Van Oord News",
-        "url": "https://www.vanoord.com/en/news/",
+        "url": "https://www.vanoord.com/en/updates/",
         "type": "web",
-        "selector": "article"
+        "selector": "article, .news-item, .update-item, .teaser",
+        "url_patterns": ["/updates/", "/news/", "/projects/"],
+        "blacklist": ["/user/", "/login", "/search"],
+        "max_links": 15
     },
     {
         "name": "Boskalis News",
         "url": "https://boskalis.com/news",
         "type": "web",
-        "selector": "article"
+        "selector": "article, .news-item, .card, .teaser",
+        "url_patterns": ["/news/", "/press/", "/project/"],
+        "blacklist": ["/investor/", "/career/", "/contact"],
+        "max_links": 15
     },
     {
         "name": "DEME News",
         "url": "https://www.deme-group.com/news",
         "type": "web",
-        "selector": "article"
+        "selector": "article, .news-item, .views-row, .card",
+        "url_patterns": ["/news/", "/press/", "/project/"],
+        "blacklist": ["/career/", "/contact", "/about"],
+        "max_links": 15
     },
     {
-        "name": "Atlantic Intracoastal Waterway Association",
-        "url": "https://atlanticintracoastal.org/",
+        "name": "BOEM News",
+        "url": "https://www.boem.gov/newsroom/news-items",
         "type": "web",
-        "selector": "body",
-        "max_links": 20
+        "selector": "article, .news-item, .views-row, .node",
+        "url_patterns": ["/newsroom/", "/oil-and-gas/", "/renewable-energy/"],
+        "blacklist": [
+            "/operating-status",
+            "/subscribe",
+            "/about-boem/frequently-asked-questions",
+            "/about-boem/procurement",
+            "/about-boem/boem-organizational-chart",
+            "/about-boem/regulations",
+            "/about-boem/public-engagement",
+            "/about-boem/tribal-engagement",
+            "/about-boem/unified-interior-regions",
+            "/regions/",
+            "/newsroom/statistics",
+            "/newsroom/boem-manual"
+        ],
+        "max_links": 15
     },
     {
-        "name": "American Maritime Partnership",
-        "url": "https://www.americanmaritimepartnership.com/",
-        "type": "web",
-        "selector": "body",
-        "max_links": 20
-    },
-    {
-        "name": "BOEM Environment",
-        "url": "https://www.boem.gov/environment",
-        "type": "web",
-        "selector": "body",
-        "max_links": 20
-    },
-    {
-        "name": "USACE Navigation Gateway",
+        "name": "USACE News",
         "url": "https://www.usace.army.mil/Media/News/",
         "type": "web",
-        "selector": "body",
+        "selector": "article, .news-item, .views-row, .node",
+        "url_patterns": ["/Media/News/", "/Media/Releases/"],
+        "blacklist": ["/About/", "/Careers/", "/Contact/"],
         "max_links": 20
     },
     {
         "name": "National Waterways Conference",
-        "url": "https://waterways.org/",
+        "url": "https://waterways.org/news",
         "type": "web",
-        "selector": "body",
-        "max_links": 20
+        "selector": "article, .news-item, .views-row, .entry-content",
+        "url_patterns": ["/news-alert", "/federal-spotlight", "/news/"],
+        "blacklist": [
+            "/events-education/",
+            "/advocacy/",
+            "/issues/",
+            "/wordpress2/",
+            "/committees-caucuses/"
+        ],
+        "max_links": 15
     },
     {
         "name": "中交疏浚",
