@@ -14,12 +14,17 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+      - WEWE_RSS_URL=http://wewe-rss:4000
+      - WEWE_RSS_AUTH_CODE=${WEWE_RSS_AUTH_CODE:-dredge2024}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      wewe-rss:
+        condition: service_healthy
 
   scheduler:
     image: ghcr.io/0mao0/dredgescope:latest
@@ -34,15 +39,59 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+      - WEWE_RSS_URL=http://wewe-rss:4000
+      - WEWE_RSS_AUTH_CODE=${WEWE_RSS_AUTH_CODE:-dredge2024}
     command: ["python", "-m", "scheduler"]
+    depends_on:
+      wewe-rss:
+        condition: service_healthy
+
+  wewe-db:
+    image: mysql:8.3.0
+    container_name: wewe_rss_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WEWE_DB_PASSWORD:-wewe_rss_2024}
+      MYSQL_DATABASE: wewe-rss
+      TZ: Asia/Shanghai
+    volumes:
+      - wewe_db_data:/var/lib/mysql
+    command: --mysql-native-password=ON
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  wewe-rss:
+    image: cooderl/wewe-rss:latest
+    container_name: wewe_rss
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: mysql://root:${WEWE_DB_PASSWORD:-wewe_rss_2024}@wewe-db:3306/wewe-rss?schema=public&connect_timeout=30&pool_timeout=30&socket_timeout=30
+      AUTH_CODE: ${WEWE_RSS_AUTH_CODE:-dredge2024}
+      SERVER_ORIGIN_URL: ${WEWE_RSS_URL:-http://124.221.238.70:4000}
+      MAX_REQUEST_PER_MINUTE: 60
+      FEED_MODE: fulltext
+      CRON_EXPRESSION: "0 6,12,18 * * *"
+      UPDATE_DELAY_TIME: 60s
+    depends_on:
+      wewe-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   watchtower:
     image: containrrr/watchtower
     container_name: dredge_watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # 如果是私有仓库(GHCR通常需要)，请取消下面一行的注释，并确保宿主机已通过 docker login 登录
-      # - /root/.docker/config.json:/config.json
     environment:
       - WATCHTOWER_POLL_INTERVAL=300
       - WATCHTOWER_INCLUDE_RESTARTING=true
@@ -50,3 +99,6 @@ services:
       - WATCHTOWER_NOTIFICATIONS=shoutrrr
       - WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL:-}
     restart: always
+
+volumes:
+  wewe_db_data:
