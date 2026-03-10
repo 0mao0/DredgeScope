@@ -24,7 +24,7 @@ if VL_LLM_API_KEY:
 else:
     print("[Config] VL_LLM_API_KEY is None!")
 VL_LLM_API_BASE = os.getenv("Public_ALIYUN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-VL_MODEL = os.getenv("Public_ALIYUN_MODEL2", "qwen3.5-plus")
+VL_MODEL = os.getenv("Public_ALIYUN_MODEL2", "Qwen3.5-35B-A3B-FP8")
 
 # Paths
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
