@@ -58,6 +58,9 @@ class WeChatSource(BaseSource):
         Returns:
             文章列表
         """
+        import time
+        from database import record_source_health
+
         config_path = self._get_config_path()
         wechat_sources = self._load_wechat_sources(config_path)
 
@@ -67,6 +70,7 @@ class WeChatSource(BaseSource):
 
         all_items = []
         for source in wechat_sources:
+            start_time = time.time()
             try:
                 print(f"[WeChat] 正在采集: {source['name']}")
                 items = await self._fetch_source(source, count=10)
@@ -74,8 +78,26 @@ class WeChatSource(BaseSource):
                     item["source_name"] = source["name"]
                 all_items.extend(items)
                 print(f"[WeChat] {source['name']} 获取 {len(items)} 篇文章")
+
+                response_time = int((time.time() - start_time) * 1000)
+                record_source_health(
+                    source_name=source['name'],
+                    source_type='wechat',
+                    items_fetched=len(items),
+                    status='success',
+                    response_time_ms=response_time
+                )
             except Exception as e:
                 self.log_error(e, f"采集 {source['name']} 失败")
+                response_time = int((time.time() - start_time) * 1000)
+                record_source_health(
+                    source_name=source['name'],
+                    source_type='wechat',
+                    items_fetched=0,
+                    status='failed',
+                    error_message=str(e),
+                    response_time_ms=response_time
+                )
 
         return all_items
 
@@ -137,28 +159,39 @@ class WeChatSource(BaseSource):
             response = requests.get(rss_url, headers=self.headers, timeout=30)
 
             if response.status_code == 401:
-                print(f"[WeChat] 认证失败，请检查 AUTH_CODE 配置")
-                return []
+                print(f"[WeChat] ⚠️ 认证失败！请检查 WeWe RSS 的 AUTH_CODE 配置，或账号登录状态可能已过期")
+                raise Exception("WeWe RSS 认证失败 (401)，请检查 AUTH_CODE 或重新扫码登录")
 
             if response.status_code == 404:
                 print(f"[WeChat] feed_id 不存在，请检查配置")
-                return []
+                raise Exception(f"WeWe RSS feed_id 不存在 (404)")
+
+            if response.status_code == 500:
+                print(f"[WeChat] ⚠️ WeWe RSS 服务内部错误，可能需要重新扫码登录")
+                raise Exception("WeWe RSS 服务错误 (500)，账号可能已过期")
 
             if response.status_code != 200:
                 print(f"[WeChat] RSS 请求失败: HTTP {response.status_code}")
-                return []
+                raise Exception(f"WeWe RSS 请求失败: HTTP {response.status_code}")
 
-            return self._parse_rss(response.content, count)
+            articles = self._parse_rss(response.content, count)
+
+            if not articles:
+                print(f"[WeChat] ⚠️ RSS 返回空内容，可能需要检查 WeWe RSS 账号状态")
+
+            return articles
 
         except requests.exceptions.Timeout:
             print(f"[WeChat] RSS 请求超时")
-            return []
+            raise Exception("WeWe RSS 请求超时")
         except requests.exceptions.RequestException as e:
             print(f"[WeChat] RSS 请求异常: {e}")
-            return []
+            raise Exception(f"WeWe RSS 请求异常: {e}")
         except Exception as e:
+            if "WeWe RSS" in str(e):
+                raise
             self.log_error(e, "RSS 解析失败")
-            return []
+            raise Exception(f"RSS 解析失败: {e}")
 
     def _parse_rss(self, content: bytes, count: int) -> List[Dict[str, Any]]:
         """

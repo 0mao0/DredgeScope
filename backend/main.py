@@ -202,42 +202,14 @@ def write_markdown_audit(rows):
 
 async def fetch_wechat_articles() -> list:
     """获取微信公众号文章"""
-    wechat_biz_list = []
-    
-    # 从 SOURCES_FILE 加载微信公众号配置
-    try:
-        with open(config.SOURCES_FILE, "r", encoding="utf-8") as f:
-            file_sources = json.load(f)
-            for src in file_sources:
-                if src.get("type") == "wechat" and src.get("fakeid"):
-                    existing_fakeids = [b.get("fakeid") for b in wechat_biz_list]
-                    if src.get("fakeid") not in existing_fakeids:
-                        wechat_biz_list.append({
-                            "name": src.get("name"),
-                            "fakeid": src.get("fakeid")
-                        })
-                        print(f"已加载微信源: {src.get('name')}")
-    except Exception as e:
-        print(f"加载微信源失败: {e}")
-        return []
-    
-    if not wechat_biz_list:
-        return []
-    
-    # 创建微信采集器并采集
     wechat_source = WeChatSource()
-    all_items = []
-    
-    for biz in wechat_biz_list:
-        try:
-            items = await wechat_source.fetch_by_biz(biz["fakeid"], count=10)
-            for item in items:
-                item["source_name"] = biz["name"]
-            all_items.extend(items)
-        except Exception as e:
-            print(f"采集微信源 {biz['name']} 失败: {e}")
-    
-    return all_items
+    try:
+        items = await wechat_source.fetch(hours=72)
+        print(f"[WeChat] 共获取 {len(items)} 篇公众号文章")
+        return items
+    except Exception as e:
+        print(f"[WeChat] 采集失败: {e}")
+        return []
 
 
 async def main():
