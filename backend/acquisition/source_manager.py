@@ -190,6 +190,10 @@ class SourceManager:
                     elif source_type == 'web':
                         # Web源：完整抓取
                         await self._fetch_web_content(context, item)
+                    elif source_type == 'wechat':
+                        # 微信公众号：需要完整抓取内容和截图
+                        print(f"[Enrich] 采集公众号文章: {item.get('title', '')[:40]}...")
+                        await self._fetch_wechat_content(context, item)
 
                 except Exception as e:
                     print(f"[Enrich] 失败 {link}: {e}")
@@ -335,6 +339,76 @@ class SourceManager:
                 pass
 
         return ''
+
+    async def _fetch_wechat_content(self, context, item: Dict[str, Any]):
+        """抓取微信公众号文章内容"""
+        page = None
+        try:
+            page = await context.new_page()
+
+            # 微信公众号页面加载策略
+            strategies = [
+                {"wait_until": "domcontentloaded", "timeout": 30000},
+                {"wait_until": "load", "timeout": 45000}
+            ]
+
+            for strategy in strategies:
+                try:
+                    await page.goto(item['link'], **strategy)
+                    break
+                except Exception:
+                    if strategy == strategies[-1]:
+                        raise
+                    continue
+
+            # 等待文章内容加载
+            await asyncio.sleep(3)
+
+            # 尝试多种选择器提取公众号正文
+            content_selectors = [
+                '#js_content',  # 公众号文章正文ID
+                '.rich_media_content',  # 公众号内容区
+                '#img-content',  # 另一种内容区
+                'article',  # 通用文章标签
+                '.post-content',
+                '#content'
+            ]
+
+            content = ''
+            for selector in content_selectors:
+                try:
+                    element = await page.query_selector(selector)
+                    if element:
+                        text = await element.inner_text()
+                        if len(text.strip()) > 100:
+                            content = text.strip()[:15000]
+                            break
+                except:
+                    continue
+
+            if content:
+                item['content'] = content
+                print(f"[公众号抓取] 成功获取正文: {len(content)} 字符")
+            else:
+                # 如果都没找到，尝试获取body
+                try:
+                    body = await page.query_selector('body')
+                    if body:
+                        content = (await body.inner_text()).strip()[:15000]
+                        if len(content) > 100:
+                            item['content'] = content
+                            print(f"[公众号抓取] 使用body内容: {len(content)} 字符")
+                except:
+                    pass
+
+            # 截图
+            await self._fetch_rss_screenshot(context, item)
+
+        except Exception as e:
+            print(f"[公众号抓取] 失败 {item.get('link')}: {e}")
+        finally:
+            if page:
+                await page.close()
 
     def get_stats(self) -> Dict[str, Any]:
         """获取采集统计信息"""

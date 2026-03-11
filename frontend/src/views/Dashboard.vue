@@ -205,7 +205,7 @@
             <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
           </div>
           <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3-VL多模态识别</span>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3.5 多模态识别</span>
             <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
           </div>
           <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">

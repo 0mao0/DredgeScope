@@ -78,7 +78,7 @@ except Exception as e:
 
 - 使用 `[模块名:来源]` 前缀标识日志来源
 - 例: `[RSS:Dredging Today] 正在抓取...`
-- 例: `[WeChat:中交疏浚] 获取 5 篇文章`
+- 例: `[Web:Van Oord] 获取 3 篇文章`
 
 ## 5. 文件定位
 

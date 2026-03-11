@@ -37,29 +37,32 @@ class MarineLogSource(RSSSource):
         print(f"[RSS:{self.name}] 正在抓取: {self.feed_url}")
 
         try:
-            # 使用更完整的浏览器请求头
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "application/rss+xml, application/xml, text/xml, */*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Cache-Control": "max-age=0",
-                "Referer": "https://www.marinelog.com/"
-            }
-
             loop = asyncio.get_running_loop()
 
             def fetch_with_requests():
                 session = requests.Session()
+                # 使用更完整的浏览器请求头
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Cache-Control": "max-age=0"
+                }
                 # 先访问主页获取cookie
-                session.get("https://www.marinelog.com/", headers=headers, timeout=10)
-                # 再获取RSS
-                response = session.get(self.feed_url, headers=headers, timeout=20)
+                session.get("https://www.marinelog.com/", headers=headers, timeout=15)
+                
+                # 再获取RSS，使用RSS特定的Accept头
+                rss_headers = headers.copy()
+                rss_headers["Accept"] = "application/rss+xml, application/xml, text/xml, */*;q=0.8"
+                rss_headers["Referer"] = "https://www.marinelog.com/"
+                response = session.get(self.feed_url, headers=rss_headers, timeout=30)
                 response.raise_for_status()
                 return response.content
 

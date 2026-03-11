@@ -15,6 +15,10 @@ from static.constants import (
 )
 
 def is_relevant_news(item, text_content, final_result):
+    # 防御性检查：final_result 必须是字典
+    if not isinstance(final_result, dict):
+        final_result = {}
+    
     source_name = str(item.get("source_name") or "")
     if source_name:
         source_lower = source_name.lower()
@@ -26,14 +30,14 @@ def is_relevant_news(item, text_content, final_result):
         url_lower = url.lower()
         if any(k in url_lower for k in ["dredg", "dredging", "waterway", "harbor", "harbour", "port", "channel"]):
             return True
-    category = normalize_category(final_result.get("category")) if isinstance(final_result, dict) else None
+    category = normalize_category(final_result.get("category")) if final_result else None
     if category and category != "Other":
         return True
     fields = [
         item.get("title"),
-        final_result.get("title_cn"),
-        final_result.get("summary_cn"),
-        final_result.get("full_text_cn"),
+        final_result.get("title_cn") if final_result else None,
+        final_result.get("summary_cn") if final_result else None,
+        final_result.get("full_text_cn") if final_result else None,
         text_content
     ]
     combined = " ".join([str(f) for f in fields if f])
@@ -61,44 +65,19 @@ async def analyze_with_vl(client, item, b64_img):
     """
     print(f"[VL] 正在进行视觉分析: {item['title']}")
     
-    vl_prompt = f"""
-请基于这张网页截图和以下基本信息，提取并分析疏浚行业新闻：
-标题：{item['title']}
-URL：{item.get('url', '')}
+    # Qwen3.5 是推理模型，无法直接输出 JSON，使用自然语言提示
+    vl_prompt = f"""分析这张网页截图，提取疏浚行业新闻信息。
 
-任务说明：
-1. 【有效性】(is_junk) - 如果截图显示的是“404”、“禁止访问”、“Cookie设置”、“订阅提示”、“登录页面”或与疏浚行业完全无关的内容（如纯广告、纯人事变动列表），is_junk 设为 true。
-2. 【语义分类】(Category) - 请根据截图描述的核心事件性质进行分类（优先级从上到下）：
-   - **Project (项目)**: 涉及具体的疏浚/填海/海洋工程项目的物理进展（开工/完工/施工中）。
-   - **Equipment (设备)**: 涉及船舶或疏浚设备的建造、交付、交易或维护。
-   - **Bid (中标/合同)**: 仅涉及合同签署、中标通知、招标发布或资金获批。
-   - **Regulation (法规/政策)**: 涉及政府/官方机构发布的政策、法律裁决、许可证发放/吊销、环保标准。
-   - **R&D (技术/研发)**: 涉及新技术、新工艺、新材料的研究、测试或理论探讨。
-   - **Market (市场/其他)**: 公司动态、宏观市场分析、或无法归入上述类别的行业新闻。
+请分析后告诉我：
+1. 这是否是404/登录页/无关内容？（是/否）
+2. 属于哪类：Project(项目)/Equipment(设备)/Bid(中标)/Regulation(法规)/R&D(研发)/Market(市场)
+3. 中文标题（谁+在哪里+做了什么）
+4. 中文摘要
+5. 发布日期（YYYY-MM-DD格式）
+6. 截图内容描述
 
-3. 【信息提取】
-   - title_cn: 中文标题。必须严格遵守 "谁(主体) + 在哪里(若有) + 做了什么(动作)" 的格式。
-   - summary_cn: 中文摘要（简练精准，包含关键数据）。
-   - publish_time: 【极重要】请仔细逐行扫描截图文字（特别是标题下方、文章开头、页眉页脚、来源旁），寻找发布的具体日期/时间。
-     - 重点寻找关键词："发布时间："、"发布于："、"Date:"、"Time:"、"日期："。
-     - 格式必须统一为 YYYY-MM-DD。
-     - 识别 "2025-01-21", "2025.01.21", "Jan 21, 2025", "2025年1月21日", "21/01/2025" 等所有格式。
-     - 若仅有月份（如"2025年1月"），默认为该月1号（2025-01-01）。
-     - 若为相对时间（如"2 days ago", "昨天"），请基于当前日期（{item.get('date', '')}）推算。
-     - 若找不到确切日期，但内容提及"本周"、"近日"且有明确年份上下文，可估算为当月1号。
-     - 只有在完全无法找到任何时间信息时才留空。请务必尽力寻找，通常在标题下方或页面底部。
-   - image_desc: 简要描述截图中展示的主要画面内容。
-
-返回 JSON:
-{{
-  "is_junk": boolean,
-  "category": "...",
-  "title_cn": "...",
-  "summary_cn": "...",
-  "publish_time": "YYYY-MM-DD",
-  "image_desc": "..."
-}}
-"""
+请用清晰的格式回答。"""
+    
     try:
         resp_vl = await client.chat.completions.create(
             model=config.VL_MODEL,
@@ -112,31 +91,81 @@ URL：{item.get('url', '')}
                 }
             ],
             max_tokens=1000,
-            temperature=0.1,
-            response_format={"type": "json_object"}
+            temperature=0.1
         )
-        content = resp_vl.choices[0].message.content
-        # 清洗 JSON
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-            
-        res_json = json.loads(content)
         
-        # 增强：清洗 publish_time
-        pt = res_json.get("publish_time")
-        if pt:
-            # 去除可能的中文或额外字符，只保留 YYYY-MM-DD
-            # 简单的正则提取，支持 - . /
-            import re
-            # 支持 YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YYYY年MM月DD日
-            # 增加对空格的宽容度
-            match = re.search(r'(\d{4})\s*[-年\.\/]\s*(\d{1,2})\s*[-月\.\/]\s*(\d{1,2})', str(pt))
-            if match:
-                res_json["publish_time"] = f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+        # Qwen3.5 是推理模型，内容在 reasoning 字段而不是 content 字段
+        message = resp_vl.choices[0].message
+        content = message.content
+        
+        # 如果 content 为空，尝试从 reasoning 获取
+        if not content:
+            if hasattr(message, 'reasoning') and message.reasoning:
+                content = message.reasoning
+            else:
+                print(f"[VL] 警告: 无法从响应中获取内容")
+                return None
+        
+        # 从推理内容中提取字段
+        import re
+        result = {
+            "is_junk": False,
+            "category": "Market",
+            "title_cn": "",
+            "summary_cn": "",
+            "publish_time": "",
+            "image_desc": ""
+        }
+        
+        # 提取 is_junk
+        if re.search(r'is_junk.*?(true|是|yes|无关)', content, re.I):
+            result["is_junk"] = True
+        elif re.search(r'(404|登录页|login|禁止访问|cookie|订阅)', content, re.I):
+            result["is_junk"] = True
             
-        return res_json
+        # 提取 category
+        category_patterns = [
+            (r'Project|项目', 'Project'),
+            (r'Equipment|设备|船舶|挖泥船|dredger|vessel', 'Equipment'),
+            (r'Bid|中标|合同|contract|award', 'Bid'),
+            (r'Regulation|法规|政策|license|permit|approval', 'Regulation'),
+            (r'R&D|研发|技术|研究|research|technology|innovation', 'R&D'),
+            (r'Market|市场|company|财报|merger|acquisition', 'Market'),
+        ]
+        for pattern, cat in category_patterns:
+            if re.search(pattern, content, re.I):
+                result["category"] = cat
+                break
+        
+        # 提取 title_cn - 查找包含"标题"或"title_cn"的行
+        title_match = re.search(r'(?:标题|title_cn|title)[：:\s]+["\']?([^"\'\n]{5,100})["\']?', content, re.I)
+        if title_match:
+            result["title_cn"] = title_match.group(1).strip()
+        
+        # 提取 summary_cn - 查找包含"摘要"或"summary_cn"的行
+        summary_match = re.search(r'(?:摘要|summary_cn|summary)[：:\s]+["\']?([^"\'\n]{10,300})["\']?', content, re.I)
+        if summary_match:
+            result["summary_cn"] = summary_match.group(1).strip()
+        
+        # 提取 publish_time - 查找日期格式
+        date_match = re.search(r'(\d{4})\s*[-年/]\s*(\d{1,2})\s*[-月/]\s*(\d{1,2})', content)
+        if date_match:
+            result["publish_time"] = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
+        
+        # 提取 image_desc - 查找包含"描述"或"image_desc"的行
+        desc_match = re.search(r'(?:描述|image_desc|description)[：:\s]+["\']?([^"\'\n]{10,500})["\']?', content, re.I)
+        if desc_match:
+            result["image_desc"] = desc_match.group(1).strip()
+        
+        # 如果标题为空，尝试从内容中提取其他可能的标题格式
+        if not result["title_cn"]:
+            # 尝试匹配 "中文标题" 后面的内容
+            alt_title = re.search(r'中文标题[：:\s]+(.+?)(?:\n|$)', content)
+            if alt_title:
+                result["title_cn"] = alt_title.group(1).strip()
+        
+        return result
+        
     except Exception as e:
         print(f"[VL] 分析失败: {e}")
         return None
@@ -300,6 +329,18 @@ def is_obvious_junk(title):
     return False
 
 def _normalize_llm_result(result, item):
+    # 防御性检查：如果 result 为 None 或不是字典/列表，返回默认结构
+    if result is None:
+        return {
+            "is_junk": False,
+            "category": "Market",
+            "title_cn": item.get("title"),
+            "summary_cn": "",
+            "full_text_cn": "",
+            "publish_time": str(item.get("pub_date") or ""),
+            "image_desc": ""
+        }
+    
     if isinstance(result, list):
         if len(result) == 1 and isinstance(result[0], dict):
             return result[0]
@@ -309,9 +350,32 @@ def _normalize_llm_result(result, item):
             "title_cn": item.get("title"),
             "summary_cn": "",
             "full_text_cn": "",
-            "publish_time": str(item.get("pub_date") or "")
+            "publish_time": str(item.get("pub_date") or ""),
+            "image_desc": ""
         }
-    return result
+    
+    # 如果是字典，确保有必要的字段
+    if isinstance(result, dict):
+        return {
+            "is_junk": result.get("is_junk", False),
+            "category": result.get("category", "Market"),
+            "title_cn": result.get("title_cn", item.get("title", "")),
+            "summary_cn": result.get("summary_cn", ""),
+            "full_text_cn": result.get("full_text_cn", ""),
+            "publish_time": result.get("publish_time", str(item.get("pub_date") or "")),
+            "image_desc": result.get("image_desc", "")
+        }
+    
+    # 其他类型，返回默认结构
+    return {
+        "is_junk": False,
+        "category": "Market",
+        "title_cn": item.get("title"),
+        "summary_cn": "",
+        "full_text_cn": "",
+        "publish_time": str(item.get("pub_date") or ""),
+        "image_desc": ""
+    }
 
 def _resolve_screenshot_path(screenshot_path, screenshot_filename):
     if screenshot_path:

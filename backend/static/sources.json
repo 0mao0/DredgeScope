@@ -159,10 +159,10 @@
     },
     {
         "name": "USACE News",
-        "url": "https://www.usace.army.mil/Media/News/",
+        "url": "https://www.usace.army.mil/Media/News-Releases/",
         "type": "web",
-        "selector": "article, .news-item, .views-row, .node",
-        "url_patterns": ["/Media/News/", "/Media/Releases/"],
+        "selector": "article, .news-item, .views-row, .node, .field-content",
+        "url_patterns": ["/News-Releases/", "/Media/News/"],
         "blacklist": ["/About/", "/Careers/", "/Contact/"],
         "max_links": 20
     },

@@ -3,7 +3,7 @@
 面向全球疏浚行业的情报采集、分析与可视化系统，支持新闻抓取、AI 分析、情报结构化提取、仪表盘展示与企业微信推送。
 
 ## 主要能力
-- **多源新闻采集**：RSS 订阅源 + 网站索引页抓取 + 微信公众号 (WeWe RSS)
+- **多源新闻采集**：RSS 订阅源 + 网站索引页抓取
 - **AI 智能分析**：基于 LLM 与 VLM 进行标题翻译、摘要生成、事件抽取与垃圾信息过滤
 - **情报归档**：结构化入库与可追溯归档
 - **可视化展示**：大屏仪表盘（自动适配早/晚报时段）、历史新闻筛选、船舶跟踪与分布展示（支持天地图/ArcGIS 切换）
@@ -12,7 +12,7 @@
 
 ## 新闻数据源
 
-当前系统监控 **24** 个全球疏浚行业核心数据源。
+当前系统监控 **19** 个全球疏浚行业核心数据源。
 
 ### 数据源分布
 
@@ -20,8 +20,7 @@
 | :--- | :--- | :--- | :--- |
 | **Web** | 13 | Playwright 动态渲染 | 覆盖国际承包商、协会、官方机构 |
 | **RSS** | 6 | Feedparser 标准解析 | 行业主流媒体，实时性高 |
-| **WeChat** | 5 | WeWe RSS | 中交系公众号、长江航道 |
-| **总计** | **24** | 混合采集模式 | 全方位覆盖 |
+| **总计** | **19** | 混合采集模式 | 全方位覆盖 |
 
 ### 完整数据源清单
 
@@ -39,13 +38,12 @@
 - **官方机构**: USACE, BOEM
 - **区域组织**: National Waterways Conference
 
-#### 🇨🇳 中国核心渠道 (Web & WeChat)
+#### 🇨🇳 中国核心渠道 (Web)
 - **行业协会**: 中国疏浚协会 (CHIDA)
-- **中交疏浚**: 官网 + 公众号
-- **中交天航局**: 官网 + 公众号
-- **中交上航局**: 官网 + 公众号
-- **中交广航局**: 官网 + 公众号
-- **长江航道**: 公众号
+- **中交疏浚**: 官网
+- **中交天航局**: 官网
+- **中交上航局**: 官网
+- **中交广航局**: 官网
 
 ## 核心架构
 
@@ -81,7 +79,7 @@ dredgescope/
 │       ├── views/           # 页面
 │       ├── components/      # 组件
 │       └── stores/          # Pinia 状态
-├── docker-compose.yml       # Docker 编排 (含 WeWe RSS)
+├── docker-compose.yml       # Docker 编排
 ├── AGENTS.md                # AI Agent 代码规范
 ├── CLAUDE.md                # 项目导航
 └── .env                     # 环境变量
@@ -95,7 +93,6 @@ dredgescope/
 | **后端** | Python 3.11+, FastAPI, Uvicorn, Playwright, Feedparser, BeautifulSoup4 |
 | **AI/LLM** | SiliconFlow (Qwen2.5), Aliyun DashScope (Qwen-VL) |
 | **数据库** | SQLite |
-| **微信采集** | WeWe RSS (Docker) |
 
 ## 运行指南
 
@@ -122,8 +119,6 @@ dredgescope/
    Public_ALIYUN_API_KEY=your_key
    TEXT_LLM_API_KEY=your_key
    WECOM_WEBHOOK_URL=your_webhook
-   WEWE_RSS_URL=http://localhost:4000
-   WEWE_RSS_AUTH_CODE=your_code
    ```
 
 3. **启动项目**:
@@ -171,27 +166,7 @@ pnpm run lint --prefix frontend/
     "blacklist": ["/user/", "/login"],
     "max_links": 15
 }
-
-// 微信公众号
-{
-    "name": "中交疏浚",
-    "type": "wechat",
-    "wechat": {
-        "feed_id": "MP_WXS_xxxxx"
-    }
-}
 ```
-
-## 微信公众号采集
-
-基于 [WeWe RSS](https://github.com/cooderl/wewe-rss) 实现：
-
-1. 访问 WeWe RSS 管理后台 (默认端口 4000)
-2. 微信读书扫码登录
-3. 添加公众号（提交任意文章链接）
-4. 获取 `feed_id` 配置到 `sources.json`
-
-Docker Compose 已集成 WeWe RSS 服务。
 
 ## 健康监控
 
@@ -210,7 +185,6 @@ Docker Compose 已集成 WeWe RSS 服务。
 ## 更新日志
 
 ### 2026-03
-- 集成 WeWe RSS 实现微信公众号采集
 - 扩大 RSS 时间窗口至 72 小时
 - 新增采集源健康监控
 - 优化企业微信推送卡片显示

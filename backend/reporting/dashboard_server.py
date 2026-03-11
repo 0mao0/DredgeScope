@@ -63,7 +63,7 @@ async def get_events(
             end = end_dt.isoformat()
             
         articles = database.get_articles_by_time_range_strict(start, end, is_retained=is_retained)
-        return {"events": articles}
+        return {"events": articles, "count": len(articles)}
     except Exception as e:
         print(f"Error in get_events: {e}")
         return {"events": [], "error": str(e)}

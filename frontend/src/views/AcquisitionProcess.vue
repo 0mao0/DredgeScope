@@ -295,11 +295,11 @@
               </div>
             </div>
 
-            <!-- Qwen3-VL 识别内容 -->
+            <!-- Qwen3.5 识别内容 -->
             <div class="space-y-3">
               <div class="flex items-center gap-2">
                 <div class="w-1 h-4 bg-purple-500 rounded-full"></div>
-                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Qwen3-VL 视觉多模态识别</h4>
+                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Qwen3.5 视觉多模态识别</h4>
               </div>
               <div class="bg-purple-500/5 rounded-xl p-4 border border-purple-500/10">
                 <p class="text-sm text-gray-300 leading-relaxed">
