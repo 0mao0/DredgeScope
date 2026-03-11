@@ -205,6 +205,60 @@ class RSSSource(BaseSource):
                     return datetime(int(y), int(m), int(d))
                 except:
                     pass
+
+        # 尝试解析英文月份格式，如 "Mon, 10 Mar 2026 12:00:00 GMT" 或 "March 10, 2026"
+        month_names = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                       'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+        full_month_names = ['january', 'february', 'march', 'april', 'may', 'june',
+                           'july', 'august', 'september', 'october', 'november', 'december']
+
+        text = str(date_str).lower()
+
+        # 匹配格式: "10 Mar 2026" 或 "Mar 10, 2026"
+        # 简写月份
+        for i, month_abbr in enumerate(month_names):
+            # 格式: 10 Mar 2026
+            match = re.search(r'(\d{1,2})\s+' + month_abbr + r'\s+(\d{4})', text)
+            if match:
+                try:
+                    day = int(match.group(1))
+                    year = int(match.group(2))
+                    return datetime(year, i + 1, day)
+                except:
+                    pass
+
+            # 格式: Mar 10, 2026
+            match = re.search(month_abbr + r'\s+(\d{1,2}),?\s+(\d{4})', text)
+            if match:
+                try:
+                    day = int(match.group(1))
+                    year = int(match.group(2))
+                    return datetime(year, i + 1, day)
+                except:
+                    pass
+
+        # 全拼月份
+        for i, month_name in enumerate(full_month_names):
+            # 格式: 10 March 2026
+            match = re.search(r'(\d{1,2})\s+' + month_name + r'\s+(\d{4})', text)
+            if match:
+                try:
+                    day = int(match.group(1))
+                    year = int(match.group(2))
+                    return datetime(year, i + 1, day)
+                except:
+                    pass
+
+            # 格式: March 10, 2026
+            match = re.search(month_name + r'\s+(\d{1,2}),?\s+(\d{4})', text)
+            if match:
+                try:
+                    day = int(match.group(1))
+                    year = int(match.group(2))
+                    return datetime(year, i + 1, day)
+                except:
+                    pass
+
         return None
 
 

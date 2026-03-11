@@ -314,7 +314,9 @@ class SourceManager:
     async def _extract_page_date(self, page) -> str:
         """提取页面日期"""
         import re
+        from datetime import datetime
 
+        # 首先尝试从 meta 标签和 time 标签获取
         date_selectors = [
             'meta[property="article:published_time"]',
             'meta[name="publishdate"]',
@@ -335,6 +337,52 @@ class SourceManager:
                         match = re.search(r'(\d{4})[-年\./](\d{1,2})[-月\./](\d{1,2})', date_str)
                         if match:
                             return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+            except:
+                pass
+
+        # 尝试从页面文本中提取日期（如 "Posted on March 10, 2026"）
+        text_date_selectors = [
+            '.posted-on', '.entry-date', '.publish-date', '.post-date',
+            '.date', '[class*="date"]', '[class*="time"]'
+        ]
+
+        for selector in text_date_selectors:
+            try:
+                element = await page.query_selector(selector)
+                if element:
+                    text = await element.inner_text()
+                    if text:
+                        # 尝试解析英文日期格式，如 "March 10, 2026" 或 "Posted on March 10, 2026"
+                        date_patterns = [
+                            # March 10, 2026
+                            r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})',
+                            # 10 March 2026
+                            r'(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})',
+                        ]
+
+                        for pattern in date_patterns:
+                            match = re.search(pattern, text, re.IGNORECASE)
+                            if match:
+                                try:
+                                    # 解析月份名称
+                                    if pattern.startswith('(January'):
+                                        month_names = ['january', 'february', 'march', 'april', 'may', 'june',
+                                                      'july', 'august', 'september', 'october', 'november', 'december']
+                                        month = month_names.index(match.group(1).lower()) + 1
+                                        day = int(match.group(2))
+                                        year = int(match.group(3))
+                                    else:
+                                        day = int(match.group(1))
+                                        month_names = ['january', 'february', 'march', 'april', 'may', 'june',
+                                                      'july', 'august', 'september', 'october', 'november', 'december']
+                                        month = month_names.index(match.group(2).lower()) + 1
+                                        year = int(match.group(3))
+
+                                    # 验证日期有效性
+                                    dt = datetime(year, month, day)
+                                    return f"{year}-{month:02d}-{day:02d}"
+                                except (ValueError, IndexError):
+                                    continue
             except:
                 pass
 
