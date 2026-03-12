@@ -61,9 +61,21 @@ async def get_events(
             start_dt = end_dt - timedelta(days=1)
             start = start_dt.isoformat()
             end = end_dt.isoformat()
-            
+        
         articles = database.get_articles_by_time_range_strict(start, end, is_retained=is_retained)
-        return {"events": articles, "count": len(articles)}
+        
+        # 获取数据库中所有有效文章的总数
+        conn = sqlite3.connect(database.DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            SELECT COUNT(*) FROM articles 
+            WHERE (is_hidden = 0 OR is_hidden IS NULL) 
+            AND (valid = 1 OR valid IS NULL)
+        """)
+        total_count = c.fetchone()[0]
+        conn.close()
+        
+        return {"events": articles, "count": len(articles), "total_count": total_count}
     except Exception as e:
         print(f"Error in get_events: {e}")
         return {"events": [], "error": str(e)}

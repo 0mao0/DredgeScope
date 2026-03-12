@@ -442,7 +442,7 @@ def save_article(article_data):
                 article_data.get('summary_cn', ''),
                 article_data.get('full_text_cn', ''),
                 article_data.get('content', ''),
-                article_data.get('screenshot_path', ''),
+                article_data.get('screenshot_path') or '',  # 处理 None 值
                 article_data.get('significant', None),
                 article_data.get('image_desc', ''),
                 primary_category or '',
@@ -620,7 +620,7 @@ def save_raw_articles(items):
     return count, new_ids
 
 def get_items_for_enrichment(created_after=None, ids=None):
-    """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图) 且 5天内"""
+    """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图 或 RSS源) 且 5天内"""
     from datetime import timedelta
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -628,11 +628,18 @@ def get_items_for_enrichment(created_after=None, ids=None):
     # 计算5天前的日期
     cutoff = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
     
+    # 修改逻辑：
+    # 1. 无内容 或 无截图 的文章需要补充采集
+    # 2. RSS源文章(source_type='rss')也需要补充采集（获取完整内容和截图）
     query = '''
         SELECT * FROM articles 
         WHERE valid = 1 
         AND (pub_date >= ? OR pub_date IS NULL OR pub_date = '')
-        AND (content IS NULL OR content = '' OR screenshot_path IS NULL OR screenshot_path = '')
+        AND (
+            content IS NULL OR content = '' 
+            OR screenshot_path IS NULL OR screenshot_path = ''
+            OR source_type = 'rss'
+        )
     '''
     params = [cutoff]
     

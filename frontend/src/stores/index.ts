@@ -90,7 +90,8 @@ export const useNewsStore = defineStore('news', () => {
       }
       const data = await response.json()
       newsList.value = data.events || []
-      historyTotal.value = data.count || data.article_count || data.event_count || 0
+      // 优先使用 total_count（数据库所有文章总数），否则使用当前时间段数量
+      historyTotal.value = data.total_count || data.count || data.article_count || data.event_count || 0
     } catch (error) {
       console.error('Failed to fetch news:', error)
     } finally {

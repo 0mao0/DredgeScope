@@ -181,15 +181,12 @@ class SourceManager:
 
                 try:
                     if source_type == 'rss':
-                        if has_content and not has_screenshot:
-                            # RSS有内容但无截图：只获取截图
-                            await self._fetch_rss_screenshot(context, item)
-                        elif not has_content:
-                            # RSS无内容：完整抓取
-                            await self._fetch_web_content(context, item)
+                        # RSS源：始终进行完整网页抓取，获取完整内容、截图和准确时间
+                        # 因为RSS通常只提供摘要，需要访问网页获取完整内容
+                        await self._fetch_web_content(context, item, is_rss=True)
                     elif source_type == 'web':
                         # Web源：完整抓取
-                        await self._fetch_web_content(context, item)
+                        await self._fetch_web_content(context, item, is_rss=False)
                     elif source_type == 'wechat':
                         # 微信公众号：需要完整抓取内容和截图
                         print(f"[Enrich] 采集公众号文章: {item.get('title', '')[:40]}...")
@@ -206,13 +203,21 @@ class SourceManager:
         print(f"[Enrich] 补充采集完成\n")
         return results
 
-    async def _fetch_rss_screenshot(self, context, item: Dict[str, Any]):
-        """为RSS条目获取截图"""
-        page = None
+    async def _fetch_rss_screenshot(self, context, item: Dict[str, Any], page=None):
+        """为RSS条目获取截图
+        
+        Args:
+            context: Playwright浏览器上下文
+            item: 新闻条目
+            page: 可选，如果提供了已打开的页面，则直接使用；否则创建新页面
+        """
+        new_page = None
         try:
-            page = await context.new_page()
-            await page.goto(item['link'], wait_until='domcontentloaded', timeout=20000)
-            await asyncio.sleep(1)
+            if page is None:
+                new_page = await context.new_page()
+                await new_page.goto(item['link'], wait_until='domcontentloaded', timeout=20000)
+                await asyncio.sleep(1)
+                page = new_page
 
             screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
 
@@ -231,18 +236,28 @@ class SourceManager:
             with open(local_path, 'wb') as f:
                 f.write(screenshot_bytes)
 
+            # 只有截图成功保存后才设置路径
             item['screenshot_path'] = f"assets/{filename}"
             print(f"[RSS截图] 成功 {item.get('title', '')[:50]}...")
 
         except Exception as e:
             print(f"[RSS截图] 失败 {item.get('link')}: {e}")
+            # 截图失败时清除路径，避免数据库中有路径但文件不存在
+            item['screenshot_path'] = None
         finally:
-            if page:
-                await page.close()
+            if new_page:
+                await new_page.close()
 
-    async def _fetch_web_content(self, context, item: Dict[str, Any]):
-        """抓取网页内容"""
+    async def _fetch_web_content(self, context, item: Dict[str, Any], is_rss: bool = False):
+        """抓取网页内容
+        
+        Args:
+            context: Playwright浏览器上下文
+            item: 新闻条目
+            is_rss: 是否为RSS源，RSS源需要强制更新内容和时间
+        """
         page = None
+        source_type_label = "RSS" if is_rss else "Web"
         try:
             page = await context.new_page()
 
@@ -263,23 +278,31 @@ class SourceManager:
 
             await asyncio.sleep(2)
 
-            # 提取内容
+            # 提取内容 - RSS源强制更新，Web源只在无内容时更新
             content = await self._extract_page_content(page)
             if content:
-                item['content'] = content
+                if is_rss:
+                    # RSS源：用网页完整内容替换RSS摘要
+                    item['content'] = content
+                elif not item.get('content'):
+                    item['content'] = content
 
-            # 提取日期
+            # 提取日期 - RSS源强制更新，Web源只在无时间时更新
             date = await self._extract_page_date(page)
-            if date and not item.get('pub_date'):
-                item['pub_date'] = date
+            if date:
+                if is_rss:
+                    # RSS源：用网页准确时间替换RSS时间
+                    item['pub_date'] = date
+                elif not item.get('pub_date'):
+                    item['pub_date'] = date
 
-            # 截图
-            await self._fetch_rss_screenshot(context, item)
+            # 截图 - 使用已打开的页面，避免重复创建页面
+            await self._fetch_rss_screenshot(context, item, page=page)
 
-            print(f"[Web抓取] 成功 {item.get('title', '')[:50]}...")
+            print(f"[{source_type_label}抓取] 成功 {item.get('title', '')[:50]}...")
 
         except Exception as e:
-            print(f"[Web抓取] 失败 {item.get('link')}: {e}")
+            print(f"[{source_type_label}抓取] 失败 {item.get('link')}: {e}")
         finally:
             if page:
                 await page.close()

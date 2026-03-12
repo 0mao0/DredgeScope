@@ -117,8 +117,8 @@ async def analyze_with_vl(client, item, b64_img):
             "image_desc": ""
         }
         
-        # 提取 is_junk
-        if re.search(r'is_junk.*?(true|是|yes|无关)', content, re.I):
+        # 提取 is_junk - 更精确地匹配 true，避免匹配到 false
+        if re.search(r'is_junk["\']?\s*[=:]\s*["\']?true["\']?', content, re.I):
             result["is_junk"] = True
         elif re.search(r'(404|登录页|login|禁止访问|cookie|订阅)', content, re.I):
             result["is_junk"] = True
@@ -220,8 +220,16 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
      - 涉及国外重点公司名称时，保持英文原名，不要翻译成中文。
      - 禁止使用 "董事会"、"可持续发展"、"我们的技术"、"市场更新" 等泛泛而谈的短语作为标题。
      - 正确示例："中交二航局在上海中标三个市政项目"、"Van Oord在荷兰完成海滩修复工程"。
+   - summary_cn: 中文摘要。用2-3句话概括文章核心内容，突出关键信息（谁、在哪里、做了什么、为什么重要）。
+   - full_text_cn: 中文全文翻译。必须翻译完整的正文内容，不要只翻译摘要！
+     - 翻译整个文章正文，保持原文段落结构
+     - 仅包含正文内容，不要包含导航、菜单、页脚、隐私政策、Cookie提示、社交链接
+     - 如果正文很长，优先翻译前3000字的内容
    - publish_time: 提取文章的发布日期（格式 YYYY-MM-DD）。如果文中明确提到时间（如"2024年9月2日"），请提取该时间。
-   - full_text_cn: 中文全文翻译，仅包含正文内容，不要包含导航、菜单、页脚、隐私政策、Cookie提示、社交链接或站内栏目标题；尽量保持原文段落结构。
+   
+   【重要】summary_cn 和 full_text_cn 必须是不同的内容：
+   - summary_cn 是简短摘要（2-3句话）
+   - full_text_cn 是完整正文翻译（包含所有细节）
 
 返回 JSON:
 {{
@@ -489,7 +497,30 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
     # 如果 VL/Text 提取到了有效时间（格式正确），则使用它
     # 否则回退到原始 item 的 pub_date
     if pub_date and len(str(pub_date)) >= 10:
-        pass # keep extracted date
+        # 验证日期合理性：不能是未来日期，也不能是太早的日期（超过1年）
+        try:
+            from datetime import datetime
+            extracted_date = datetime.strptime(str(pub_date)[:10], "%Y-%m-%d")
+            now = datetime.now()
+            # 如果提取的日期在未来，或者超过1年前，可能是错误的
+            if extracted_date > now:
+                analysis_log.append(f"4.3. **时间验证**: 提取日期{pub_date}在未来，使用原始时间")
+                pub_date = str(item.get('pub_date', ''))
+            elif (now - extracted_date).days > 365:
+                analysis_log.append(f"4.3. **时间验证**: 提取日期{pub_date}超过1年前，尝试使用VL时间或原始时间")
+                # 尝试使用VL的时间
+                if vl_res and vl_res.get('publish_time'):
+                    vl_date = datetime.strptime(str(vl_res['publish_time'])[:10], "%Y-%m-%d")
+                    if vl_date <= now and (now - vl_date).days <= 365:
+                        pub_date = vl_res['publish_time']
+                        analysis_log.append(f"4.3. **时间修正**: 使用VL提取的时间{pub_date}")
+                    else:
+                        pub_date = str(item.get('pub_date', ''))
+                else:
+                    pub_date = str(item.get('pub_date', ''))
+        except Exception as e:
+            # 日期解析失败，回退到原始时间
+            pub_date = str(item.get('pub_date', ''))
     else:
         pub_date = str(item.get('pub_date', ''))
 
