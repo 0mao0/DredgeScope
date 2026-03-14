@@ -3,8 +3,13 @@
     <!-- Top Filter Area -->
     <header class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]">
       <div class="flex items-center gap-4 flex-wrap">
-        <div class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
-          共 <span class="text-white font-bold mx-1">{{ total }}</span> 条记录
+        <div class="flex items-center gap-3">
+          <div class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
+            总文章数: <span class="text-white font-bold mx-1">{{ total }}</span>
+          </div>
+          <div v-if="filters.valid !== null" class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
+            {{ filters.valid === 1 ? '有效' : '无效' }}文章
+          </div>
         </div>
       </div>
       
@@ -24,28 +29,16 @@
           ></i>
         </div>
         
-        <!-- 有效/失效筛选 -->
+        <!-- 有效/无效筛选 -->
         <a-select 
           v-model:value="filters.valid" 
           placeholder="数据状态"
           class="w-32 custom-select"
           @change="handleSearch"
         >
-          <a-select-option :value="null">全部有效性</a-select-option>
-          <a-select-option :value="1">有效数据</a-select-option>
-          <a-select-option :value="0">失效数据</a-select-option>
-        </a-select>
-
-        <!-- 保留/全部筛选 -->
-        <a-select 
-          v-model:value="filters.is_retained" 
-          placeholder="保留状态"
-          class="w-32 custom-select"
-          @change="handleSearch"
-        >
           <a-select-option :value="null">全部文章</a-select-option>
-          <a-select-option :value="1">保留文章</a-select-option>
-          <a-select-option :value="0">未保留文章</a-select-option>
+          <a-select-option :value="1">有效文章</a-select-option>
+          <a-select-option :value="0">无效文章</a-select-option>
         </a-select>
         
         <!-- 时间维度 -->
@@ -295,8 +288,7 @@ const filters = reactive({
   page_size: 20,
   keyword: '',
   date: null as string | null,
-  valid: 1, // 默认只看有效
-  is_retained: 1, // 默认只看保留
+  valid: null, // 默认显示全部文章
   category: null as string | null,
   start: '',
   end: ''
@@ -368,10 +360,7 @@ const fetchArticles = async () => {
       params.valid = filters.valid
     }
 
-    // 如果 is_retained 不为 null (全部)，则传递 is_retained 参数
-    if (filters.is_retained !== null) {
-      params.is_retained = filters.is_retained
-    }
+
 
     const res = await axios.get('/api/articles', { params })
     articleList.value = res.data.items
@@ -403,8 +392,7 @@ const changePage = (page: number) => {
 
 const resetFilters = () => {
   filters.keyword = ''
-  filters.valid = 1
-  filters.is_retained = 1
+  filters.valid = null
   filters.start = ''
   filters.end = ''
   dateRange.value = undefined

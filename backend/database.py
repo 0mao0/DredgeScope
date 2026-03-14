@@ -423,9 +423,9 @@ def save_article(article_data):
                     summary_cn = COALESCE(NULLIF(?, ''), summary_cn),
                     full_text_cn = COALESCE(NULLIF(?, ''), full_text_cn),
                     content = COALESCE(NULLIF(?, ''), content),
-                screenshot_path = COALESCE(NULLIF(?, ''), screenshot_path),
+                screenshot_path = CASE WHEN ? = '__CLEAR__' THEN '' ELSE COALESCE(NULLIF(?, ''), screenshot_path) END,
                 is_significant = COALESCE(?, is_significant),
-                vl_desc = COALESCE(NULLIF(?, ''), vl_desc),
+                vl_desc = CASE WHEN ? = '__CLEAR__' THEN '' ELSE COALESCE(NULLIF(?, ''), vl_desc) END,
                 category = COALESCE(NULLIF(?, ''), category),
                 valid = COALESCE(?, valid),
                 is_hidden = COALESCE(?, is_hidden),
@@ -442,9 +442,13 @@ def save_article(article_data):
                 article_data.get('summary_cn', ''),
                 article_data.get('full_text_cn', ''),
                 article_data.get('content', ''),
-                article_data.get('screenshot_path') or '',  # 处理 None 值
+                # screenshot_path 特殊处理：'__CLEAR__' 表示清除，None/空字符串表示不修改，其他值表示更新
+                article_data.get('screenshot_path') if article_data.get('screenshot_path') else '__NO_CHANGE__',
+                article_data.get('screenshot_path') if article_data.get('screenshot_path') else '__NO_CHANGE__',
                 article_data.get('significant', None),
-                article_data.get('image_desc', ''),
+                # vl_desc 特殊处理：'__CLEAR__' 表示清除，None/空字符串表示不修改，其他值表示更新
+                article_data.get('image_desc') if article_data.get('image_desc') else '__NO_CHANGE__',
+                article_data.get('image_desc') if article_data.get('image_desc') else '__NO_CHANGE__',
                 primary_category or '',
                 article_data.get('valid', None),
                 article_data.get('is_hidden', None),
@@ -705,6 +709,30 @@ def get_recent_retained_articles(hours=24):
     c.execute("SELECT * FROM articles WHERE is_retained=1 AND created_at >= ? ORDER BY pub_date DESC", (cutoff,))
     rows = c.fetchall()
     items = [dict(row) for row in rows]
+    conn.close()
+    return items
+
+def get_articles_need_enrich(limit=100):
+    """获取需要enrich的文章（content为空或screenshot_path为空且valid=1的）"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('''
+        SELECT id, title, url, pub_date, content, screenshot_path, source_type, source_name, valid
+        FROM articles
+        WHERE valid = 1 
+        AND ((content IS NULL OR content = '') 
+             OR (screenshot_path IS NULL OR screenshot_path = ''))
+        ORDER BY id DESC
+        LIMIT ?
+    ''', (limit,))
+    rows = c.fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        # 将url映射为link，因为enrich函数期望使用link字段
+        item['link'] = item.get('url', '')
+        items.append(item)
     conn.close()
     return items
 

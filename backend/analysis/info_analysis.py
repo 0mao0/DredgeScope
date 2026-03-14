@@ -59,6 +59,28 @@ def is_relevant_news(item, text_content, final_result):
     hit_count = sum(1 for k in secondary_keywords if k in lower)
     return hit_count >= 2
 
+def _clean_vl_description(text):
+    """清理VL描述中的结构化标记，保留纯描述内容"""
+    import re
+    
+    # 移除 Markdown 粗体标记 **xxx**
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    
+    # 移除 bullet point 标记 (*   )
+    text = re.sub(r'^\s*\*\s+', '', text, flags=re.MULTILINE)
+    
+    # 移除 "页面类型："、"标题："、"正文内容：" 等结构化前缀
+    text = re.sub(r'^(?:页面类型|标题|正文内容|主要内容|截图内容)[：:]\s*', '', text, flags=re.MULTILINE)
+    
+    # 合并多行，用空格连接
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    text = ' '.join(lines)
+    
+    # 清理多余空格
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
+
 async def analyze_with_vl(client, item, b64_img):
     """
     使用视觉模型进行首要分析
@@ -68,15 +90,23 @@ async def analyze_with_vl(client, item, b64_img):
     # Qwen3.5 是推理模型，无法直接输出 JSON，使用自然语言提示
     vl_prompt = f"""分析这张网页截图，提取疏浚行业新闻信息。
 
-请分析后告诉我：
-1. 这是否是404/登录页/无关内容？（是/否）
-2. 属于哪类：Project(项目)/Equipment(设备)/Bid(中标)/Regulation(法规)/R&D(研发)/Market(市场)
-3. 中文标题（谁+在哪里+做了什么）
-4. 中文摘要
-5. 发布日期（YYYY-MM-DD格式）
-6. 截图内容描述
+【重要】请只输出最终答案，不要输出任何分析过程、思考步骤或结构化标记（如"**标题**"、"正文内容"等）。
 
-请用清晰的格式回答。"""
+请输出以下6行：
+1. 是否是404/登录页/无关内容？只回答一个字：是 或 否
+2. 属于哪类：只回答类别名：Project/Equipment/Bid/Regulation/R&D/Market
+3. 中文标题：谁+在哪里+做了什么（不超过30字）
+4. 中文摘要：概括文章核心内容（不超过100字）
+5. 发布日期：YYYY-MM-DD格式（从页面中寻找，找不到则留空）
+6. 截图内容描述：用一段话描述截图中显示的网页主要内容（不超过150字，纯描述，不要分析）
+
+【格式示例】
+1. 否
+2. Project
+3. 美国陆军工程兵团在缅因州推进航道疏浚项目
+4. 美国陆军工程兵团新英格兰区表示，位于缅因州的纳拉瓜古斯河联邦航道项目进展顺利，预计将于2026年4月完工，将疏浚约15.4万立方码沙子。
+5. 2026-03-12
+6. 网页截图显示DredgingToday.com的新闻详情页，标题为Narraguagus River Federal Navigation Project moves ahead，正文介绍美国陆军工程兵团的疏浚项目进展，配有一张挖泥船作业图片。"""
     
     try:
         resp_vl = await client.chat.completions.create(
@@ -91,14 +121,19 @@ async def analyze_with_vl(client, item, b64_img):
                 }
             ],
             max_tokens=1000,
-            temperature=0.1
+            temperature=0.1,
+            extra_body={
+                "chat_template_kwargs": {
+                    "enable_thinking": False
+                }
+            }
         )
         
-        # Qwen3.5 是推理模型，内容在 reasoning 字段而不是 content 字段
+        # Qwen3.5 关闭思考模式后，答案直接在 content 字段
         message = resp_vl.choices[0].message
         content = message.content
         
-        # 如果 content 为空，尝试从 reasoning 获取
+        # 如果 content 为空，尝试从 reasoning 获取（兼容模式）
         if not content:
             if hasattr(message, 'reasoning') and message.reasoning:
                 content = message.reasoning
@@ -106,8 +141,8 @@ async def analyze_with_vl(client, item, b64_img):
                 print(f"[VL] 警告: 无法从响应中获取内容")
                 return None
         
-        # 从推理内容中提取字段
         import re
+        
         result = {
             "is_junk": False,
             "category": "Market",
@@ -117,52 +152,56 @@ async def analyze_with_vl(client, item, b64_img):
             "image_desc": ""
         }
         
-        # 提取 is_junk - 更精确地匹配 true，避免匹配到 false
-        if re.search(r'is_junk["\']?\s*[=:]\s*["\']?true["\']?', content, re.I):
-            result["is_junk"] = True
-        elif re.search(r'(404|登录页|login|禁止访问|cookie|订阅)', content, re.I):
-            result["is_junk"] = True
+        # 提取 is_junk - 查找"1."开头的行，提取"是"或"否"
+        is_junk_match = re.search(r'^1\.\s*(?:[^\n]*?)(是|否)', content, re.I | re.MULTILINE)
+        if is_junk_match:
+            result["is_junk"] = is_junk_match.group(1).strip() == '是'
+        else:
+            # 备选：查找明确标记为无关的内容
+            if re.search(r'(?:404页面|登录页面|完全无关)(?!.*正常)', content, re.I):
+                result["is_junk"] = True
             
-        # 提取 category
-        category_patterns = [
-            (r'Project|项目', 'Project'),
-            (r'Equipment|设备|船舶|挖泥船|dredger|vessel', 'Equipment'),
-            (r'Bid|中标|合同|contract|award', 'Bid'),
-            (r'Regulation|法规|政策|license|permit|approval', 'Regulation'),
-            (r'R&D|研发|技术|研究|research|technology|innovation', 'R&D'),
-            (r'Market|市场|company|财报|merger|acquisition', 'Market'),
-        ]
-        for pattern, cat in category_patterns:
-            if re.search(pattern, content, re.I):
-                result["category"] = cat
-                break
+        # 提取 category - 查找"2."开头的行
+        category_match = re.search(r'^2\.\s*(?:[^\n]*?)(Project|Equipment|Bid|Regulation|R&D|Market)', content, re.I | re.MULTILINE)
+        if category_match:
+            result["category"] = category_match.group(1).strip()
+        else:
+            # 备选：从内容中匹配类别关键词
+            category_patterns = [
+                (r'Project|项目', 'Project'),
+                (r'Equipment|设备|船舶|挖泥船|dredger|vessel', 'Equipment'),
+                (r'Bid|中标|合同|contract|award', 'Bid'),
+                (r'Regulation|法规|政策|license|permit|approval', 'Regulation'),
+                (r'R&D|研发|技术|研究|research|technology|innovation', 'R&D'),
+                (r'Market|市场|company|财报|merger|acquisition', 'Market'),
+            ]
+            for pattern, cat in category_patterns:
+                if re.search(pattern, content, re.I):
+                    result["category"] = cat
+                    break
         
-        # 提取 title_cn - 查找包含"标题"或"title_cn"的行
-        title_match = re.search(r'(?:标题|title_cn|title)[：:\s]+["\']?([^"\'\n]{5,100})["\']?', content, re.I)
+        # 提取 title_cn - 查找"3."开头的行，提取后面的内容
+        title_match = re.search(r'^3\.\s*(?:[^\n]*?)[：:\s]*\n*\s*([^\n]+)', content, re.I | re.MULTILINE)
         if title_match:
             result["title_cn"] = title_match.group(1).strip()
         
-        # 提取 summary_cn - 查找包含"摘要"或"summary_cn"的行
-        summary_match = re.search(r'(?:摘要|summary_cn|summary)[：:\s]+["\']?([^"\'\n]{10,300})["\']?', content, re.I)
+        # 提取 summary_cn - 查找"4."开头的行
+        summary_match = re.search(r'^4\.\s*(?:[^\n]*?)[：:\s]*\n*\s*([^\n]+(?:\n[^\n]+)?)', content, re.I | re.MULTILINE)
         if summary_match:
-            result["summary_cn"] = summary_match.group(1).strip()
+            result["summary_cn"] = summary_match.group(1).strip()[:300]
         
-        # 提取 publish_time - 查找日期格式
-        date_match = re.search(r'(\d{4})\s*[-年/]\s*(\d{1,2})\s*[-月/]\s*(\d{1,2})', content)
+        # 提取 publish_time - 查找"5."开头的行中的日期格式
+        date_match = re.search(r'^5\.\s*(?:[^\n]*?)(\d{4})\s*[-年/]\s*(\d{1,2})\s*[-月/]\s*(\d{1,2})', content, re.I | re.MULTILINE)
         if date_match:
             result["publish_time"] = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
         
-        # 提取 image_desc - 查找包含"描述"或"image_desc"的行
-        desc_match = re.search(r'(?:描述|image_desc|description)[：:\s]+["\']?([^"\'\n]{10,500})["\']?', content, re.I)
+        # 提取 image_desc - 查找"6."开头的行
+        desc_match = re.search(r'^6\.\s*(?:[^\n]*?)[：:\s]*\n*\s*([^\n]+(?:\n[^\n]+)?)', content, re.I | re.MULTILINE)
         if desc_match:
-            result["image_desc"] = desc_match.group(1).strip()
-        
-        # 如果标题为空，尝试从内容中提取其他可能的标题格式
-        if not result["title_cn"]:
-            # 尝试匹配 "中文标题" 后面的内容
-            alt_title = re.search(r'中文标题[：:\s]+(.+?)(?:\n|$)', content)
-            if alt_title:
-                result["title_cn"] = alt_title.group(1).strip()
+            image_desc = desc_match.group(1).strip()[:500]
+            # 清理结构化标记，保留纯描述内容
+            image_desc = _clean_vl_description(image_desc)
+            result["image_desc"] = image_desc
         
         return result
         
