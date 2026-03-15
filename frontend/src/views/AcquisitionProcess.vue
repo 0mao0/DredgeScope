@@ -358,13 +358,13 @@
       v-model:open="isSchedulerModalVisible"
       title="调度任务执行历史"
       :footer="null"
-      width="1200px"
+      width="1400px"
       centered
       class="scheduler-modal"
     >
-      <div class="flex h-[600px] overflow-hidden">
+      <div class="flex h-[700px] overflow-hidden">
         <!-- Sidebar: List of runs -->
-        <div class="w-1/4 border-r border-white/5 pr-4 overflow-y-auto custom-scrollbar">
+        <div class="w-1/5 border-r border-white/5 pr-4 overflow-y-auto custom-scrollbar">
           <div 
             v-for="run in schedulerRuns" 
             :key="run.id"
@@ -381,18 +381,65 @@
           </div>
         </div>
         
-        <!-- Content: Markdown preview -->
-        <div class="w-3/4 pl-4 overflow-y-auto custom-scrollbar bg-black/10 rounded-lg p-4">
-          <div v-if="loadingRun" class="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
-            <a-spin />
-            <span class="text-[10px]">正在加载详情...</span>
+        <!-- Content Area -->
+        <div class="w-4/5 pl-4 flex flex-col gap-4 overflow-hidden">
+          <!-- Source Stats Table -->
+          <div v-if="selectedRunStats.sources.length > 0" class="flex-shrink-0">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-bold text-gray-300 flex items-center gap-2">
+                <i class="fa-solid fa-chart-bar text-brand-400"></i>
+                采集统计
+              </h3>
+              <div class="flex items-center gap-4 text-xs text-gray-400">
+                <span>总源数: <span class="text-white font-mono">{{ selectedRunStats.total_sources }}</span></span>
+                <span>总爬取: <span class="text-blue-400 font-mono">{{ selectedRunStats.total_fetched }}</span></span>
+                <span>总入库: <span class="text-green-400 font-mono">{{ selectedRunStats.total_inserted }}</span></span>
+              </div>
+            </div>
+            <div class="bg-black/20 rounded-lg border border-white/5 overflow-hidden">
+              <div class="grid grid-cols-[50px_1fr_80px_80px_1fr] gap-2 text-[11px] text-gray-500 border-b border-white/10 p-2 bg-white/5">
+                <span class="text-center">序号</span>
+                <span>网站</span>
+                <span class="text-center">爬取数</span>
+                <span class="text-center">入库数</span>
+                <span>备注</span>
+              </div>
+              <div class="max-h-[200px] overflow-y-auto custom-scrollbar">
+                <div 
+                  v-for="(stat, idx) in selectedRunStats.sources" 
+                  :key="stat.name"
+                  class="grid grid-cols-[50px_1fr_80px_80px_1fr] gap-2 text-xs p-2 border-b border-white/5 hover:bg-white/5 transition-colors"
+                  :class="stat.fetched === 0 ? 'bg-red-500/5' : ''"
+                >
+                  <span class="text-center text-gray-500">{{ idx + 1 }}</span>
+                  <span class="text-gray-300 truncate" :title="stat.name">{{ stat.name }}</span>
+                  <span class="text-center font-mono" :class="stat.fetched > 0 ? 'text-blue-400' : 'text-gray-500'">{{ stat.fetched }}</span>
+                  <span class="text-center font-mono" :class="stat.inserted > 0 ? 'text-green-400' : 'text-gray-500'">{{ stat.inserted }}</span>
+                  <span class="text-gray-500 text-[11px] truncate" :title="stat.remark">{{ stat.remark || '-' }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-else-if="selectedRunContent" class="markdown-body">
-            <div class="prose prose-invert max-w-none text-xs" v-html="renderedRunContent"></div>
-          </div>
-          <div v-else class="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
-            <i class="fa-solid fa-list-check text-2xl opacity-20"></i>
-            <span class="text-xs">请选择左侧日期查看执行详情</span>
+          
+          <!-- Markdown preview -->
+          <div class="flex-1 overflow-hidden flex flex-col">
+            <h3 class="text-sm font-bold text-gray-300 mb-2 flex items-center gap-2">
+              <i class="fa-solid fa-file-lines text-brand-400"></i>
+              执行日志
+            </h3>
+            <div class="flex-1 overflow-y-auto custom-scrollbar bg-black/10 rounded-lg p-4">
+              <div v-if="loadingRun" class="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
+                <a-spin />
+                <span class="text-[10px]">正在加载详情...</span>
+              </div>
+              <div v-else-if="selectedRunContent" class="markdown-body">
+                <div class="prose prose-invert max-w-none text-xs" v-html="renderedRunContent"></div>
+              </div>
+              <div v-else class="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
+                <i class="fa-solid fa-list-check text-2xl opacity-20"></i>
+                <span class="text-xs">请选择左侧日期查看执行详情</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -421,6 +468,28 @@ const isSchedulerModalVisible = ref(false)
 const selectedRunContent = ref('')
 const selectedRunId = ref('')
 const loadingRun = ref(false)
+
+// 采集统计
+interface SourceStat {
+  name: string
+  fetched: number
+  inserted: number
+  valid: number
+  status: string
+  remark: string
+}
+
+const selectedRunStats = ref<{
+  total_sources: number
+  total_fetched: number
+  total_inserted: number
+  sources: SourceStat[]
+}>({
+  total_sources: 0,
+  total_fetched: 0,
+  total_inserted: 0,
+  sources: []
+})
 
 const filters = reactive({
   keyword: '',
@@ -640,6 +709,27 @@ const fetchRunDetail = async (runId: string) => {
     const res = await fetch(`/api/scheduler/run/${runId}`)
     const data = await res.json()
     selectedRunContent.value = data.content
+    
+    // 解析采集统计信息
+    if (data.content) {
+      const statsMatch = data.content.match(/SOURCE_STATS: ({.+})/)
+      if (statsMatch) {
+        try {
+          const stats = JSON.parse(statsMatch[1])
+          selectedRunStats.value = {
+            total_sources: stats.total_sources || 0,
+            total_fetched: stats.total_fetched || 0,
+            total_inserted: stats.total_inserted || 0,
+            sources: stats.sources || []
+          }
+        } catch (e) {
+          console.error('解析采集统计失败:', e)
+          selectedRunStats.value = { total_sources: 0, total_fetched: 0, total_inserted: 0, sources: [] }
+        }
+      } else {
+        selectedRunStats.value = { total_sources: 0, total_fetched: 0, total_inserted: 0, sources: [] }
+      }
+    }
   } catch (err) {
     console.error('获取调度详情失败:', err)
   } finally {

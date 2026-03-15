@@ -78,10 +78,15 @@ export const useNewsStore = defineStore('news', () => {
     return grouped
   })
 
-  async function fetchNews() {
+  async function fetchNews(days: number = 7) {
     loading.value = true
     try {
-      const response = await fetch('/api/events')
+      // 默认获取最近N天的数据，用于前端筛选
+      const end = new Date().toISOString()
+      const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+      const url = `/api/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+
+      const response = await fetch(url)
       if (!response.ok) {
         console.error('Failed to fetch news:', response.status, response.statusText)
         newsList.value = []

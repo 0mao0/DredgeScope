@@ -227,8 +227,8 @@ async def get_statistics(
     }
 
 @app.get("/api/ship_tracks")
-async def get_ship_tracks(mmsi: str, days: int = 3):
-    """获取指定船舶的历史轨迹 (默认3天)"""
+async def get_ship_tracks(mmsi: str, days: int = 15):
+    """获取指定船舶的历史轨迹 (默认15天)"""
     tracks = database.get_ship_tracks(mmsi, days=days)
     return tracks
 

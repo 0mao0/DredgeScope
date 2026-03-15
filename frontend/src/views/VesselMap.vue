@@ -213,31 +213,47 @@
           </div>
         </div>
 
-        <div v-if="trackDisplayList.length" ref="trackListRef" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[240px] flex flex-col overflow-hidden">
+        <div v-if="trackDisplayList.length" ref="trackListRef" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[280px] flex flex-col overflow-hidden">
           <div class="flex-1 overflow-y-auto custom-scrollbar">
             <div class="flex flex-col gap-3">
-              <div v-for="item in trackDisplayList" :key="item.mmsi" class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col max-h-[180px]">
+              <div v-for="item in trackDisplayList" :key="item.mmsi" class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col max-h-[220px]">
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: item.color }"></span>
                     <span class="font-semibold text-gray-200">{{ item.name }}</span>
                     <span class="text-gray-500 font-mono">MMSI {{ item.mmsi }}</span>
-                    <span class="text-[10px] text-blue-400 border border-blue-400/30 px-1 rounded bg-blue-400/10 ml-2">最近3天轨迹</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400">时间范围:</span>
+                    <select 
+                      :value="getTrackDays(item.mmsi)" 
+                      @change="(e) => onTrackDaysChange(item.mmsi, Number((e.target as HTMLSelectElement).value))"
+                      class="bg-slate-800/50 border border-white/10 rounded px-2 py-0.5 text-[11px] text-gray-300 focus:outline-none focus:border-blue-500"
+                    >
+                      <option v-for="opt in trackDaysOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
                   </div>
                 </div>
-                <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400">暂无轨迹点</div>
+                <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400 text-center py-4">暂无轨迹点</div>
                 <div v-else class="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
-                  <div class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1 text-center">
+                  <div class="grid grid-cols-[40px_1fr_1fr_1fr_60px] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1 text-center">
                     <span class="text-center">序号</span>
                     <span class="text-center">时间</span>
                     <span class="text-center">位置</span>
                     <span class="text-center">拉取时间</span>
+                    <span class="text-center">状态</span>
                   </div>
-                  <div v-for="(p, idx) in getTrackPage(item.mmsi)" :key="`${p.timestamp}-${p.created_at}-${idx}`" class="grid grid-cols-[40px_1fr_1fr_1fr] gap-2 items-center">
-                    <span class="text-gray-500">#{{ getTrackRowIndex(item.mmsi, idx) }}</span>
-                    <span class="text-gray-400">{{ formatTrackTime(p.timestamp) }}</span>
-                    <span class="font-mono">{{ formatTrackCoord(p.lat) }}, {{ formatTrackCoord(p.lng) }}</span>
-                    <span class="text-gray-500 text-right">{{ formatTrackTime(p.created_at) }}</span>
+                  <div v-for="(p, idx) in getTrackPage(item.mmsi)" :key="`${p.timestamp}-${p.created_at}-${idx}`" class="grid grid-cols-[40px_1fr_1fr_1fr_60px] gap-2 items-center text-center">
+                    <span class="text-gray-500 text-center">#{{ getTrackRowIndex(item.mmsi, idx) }}</span>
+                    <span class="text-gray-400 text-center">{{ formatTrackTime(p.timestamp) }}</span>
+                    <span class="font-mono text-center">{{ formatTrackCoord(p.lat) }}, {{ formatTrackCoord(p.lng) }}</span>
+                    <span class="text-gray-500 text-center">{{ formatTrackTime(p.created_at) }}</span>
+                    <span class="text-center">
+                      <span 
+                        class="text-[10px] px-1.5 py-0.5 rounded"
+                        :class="getTrackStatusClass(p.status)"
+                      >{{ getTrackStatusText(p.status) }}</span>
+                    </span>
                   </div>
                 </div>
                 <div class="flex items-center justify-between mt-2">
@@ -342,15 +358,24 @@ interface TrackPoint {
   lng: number
   timestamp?: string
   created_at?: string
+  speed?: number
+  status?: 'dredging' | 'underway' | 'moored'
 }
 
 interface TrackState {
   points: TrackPoint[]
   pageIndex: number
   pageSize: number
+  days: number
 }
 
 const trackStates = ref<Record<string, TrackState>>({})
+const trackDaysOptions = [
+  { label: '1天', value: 1 },
+  { label: '3天', value: 3 },
+  { label: '7天', value: 7 },
+  { label: '15天', value: 15 }
+]
 const selectedTrackMmsi = computed(() => {
   if (!selectedVesselId.value) return null
   const vessel = vessels.value.find(v => v.id === selectedVesselId.value)
@@ -952,6 +977,48 @@ function nextTrackPage(mmsi: string) {
 }
 
 /**
+ * 获取轨迹天数
+ */
+function getTrackDays(mmsi: string): number {
+  const state = getTrackState(mmsi)
+  return state ? state.days : 3
+}
+
+/**
+ * 切换轨迹时间范围
+ */
+async function onTrackDaysChange(mmsi: string, days: number) {
+  const state = getTrackState(mmsi)
+  if (!state || state.days === days) return
+  // 重新加载轨迹
+  await showTrack(mmsi, { days })
+}
+
+/**
+ * 获取轨迹状态显示文本
+ */
+function getTrackStatusText(status: 'dredging' | 'underway' | 'moored' | undefined): string {
+  const statusMap: Record<string, string> = {
+    dredging: '施工',
+    underway: '航行',
+    moored: '停泊'
+  }
+  return statusMap[status || ''] || '未知'
+}
+
+/**
+ * 获取轨迹状态样式类
+ */
+function getTrackStatusClass(status: 'dredging' | 'underway' | 'moored' | undefined): string {
+  const classMap: Record<string, string> = {
+    dredging: 'bg-blue-500/20 text-blue-300 border border-blue-400/30',
+    underway: 'bg-green-500/20 text-green-300 border border-green-400/30',
+    moored: 'bg-red-500/20 text-red-300 border border-red-400/30'
+  }
+  return classMap[status || ''] || 'bg-gray-500/20 text-gray-300 border border-gray-400/30'
+}
+
+/**
  * 删除单条轨迹
  */
 function removeTrack(mmsi: string) {
@@ -983,12 +1050,27 @@ function clearAllTracks() {
 }
 
 /**
- * 显示最近三天轨迹
+ * 根据速度判断轨迹点状态 (speed单位: 节 knots)
+ * 参考后端逻辑: classify_status(speed_ms)
+ * - 停泊: speed < 0.58 节 (约0.3 m/s)
+ * - 施工: 0.58 节 <= speed <= 5.83 节 (约3 m/s)
+ * - 航行: speed > 5.83 节
  */
-async function showTrack(mmsi: string, options?: { animate?: boolean; includeLatLng?: L.LatLng | null }) {
+function getTrackPointStatus(speed: number | undefined): 'dredging' | 'underway' | 'moored' {
+  if (speed === undefined || speed === null) return 'underway'
+  if (speed < 0.58) return 'moored'
+  if (speed <= 5.83) return 'dredging'
+  return 'underway'
+}
+
+/**
+ * 显示船舶轨迹 (支持按状态分段显示)
+ */
+async function showTrack(mmsi: string, options?: { animate?: boolean; includeLatLng?: L.LatLng | null; days?: number }) {
   if (!map || !trackLayerGroup) return
+  const days = options?.days || 3
   try {
-    const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=3`)
+    const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=${days}`)
     const tracks = await response.json()
     
     if (!tracks || tracks.length < 2) {
@@ -1006,15 +1088,50 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
     }
 
     const color = trackColors[trackOrder.value.length % trackColors.length]
-    const latlngs = tracks.map((t: any) => [t.lat, t.lng])
-    const line = L.polyline(latlngs, {
-      color,
-      weight: 3,
-      opacity: 0.85,
-      dashArray: '5, 10'
-    }).addTo(trackLayerGroup!)
     const points = L.layerGroup().addTo(trackLayerGroup!)
-    tracks.forEach((t: any) => {
+    
+    // 为每个轨迹点添加状态
+    const tracksWithStatus = tracks.map((t: any) => ({
+      ...t,
+      status: getTrackPointStatus(t.speed)
+    }))
+    
+    // 按状态分段绘制轨迹
+    const segments: { latlngs: [number, number][]; status: 'dredging' | 'underway' | 'moored' }[] = []
+    let currentSegment: [number, number][] = []
+    let currentStatus: 'dredging' | 'underway' | 'moored' | null = null
+    
+    tracksWithStatus.forEach((t: any, index: number) => {
+      const status = t.status
+      if (currentStatus === null || currentStatus !== status) {
+        if (currentSegment.length > 0) {
+          segments.push({ latlngs: currentSegment, status: currentStatus! })
+        }
+        currentSegment = [[t.lat, t.lng]]
+        currentStatus = status
+      } else {
+        currentSegment.push([t.lat, t.lng])
+      }
+      // 最后一个点
+      if (index === tracksWithStatus.length - 1 && currentSegment.length > 0) {
+        segments.push({ latlngs: currentSegment, status: currentStatus! })
+      }
+    })
+    
+    // 绘制分段轨迹
+    const lineGroup = L.layerGroup().addTo(trackLayerGroup!)
+    segments.forEach((segment) => {
+      const isDredging = segment.status === 'dredging'
+      L.polyline(segment.latlngs, {
+        color,
+        weight: isDredging ? 5 : 3,
+        opacity: 0.85,
+        dashArray: isDredging ? undefined : '5, 10'
+      }).addTo(lineGroup)
+    })
+    
+    // 绘制轨迹点
+    tracksWithStatus.forEach((t: any) => {
       const point = L.circleMarker([t.lat, t.lng], {
         radius: 2,
         color,
@@ -1025,21 +1142,26 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
       const timeText = formatTrackTime(t.timestamp || t.created_at)
       point.bindTooltip(timeText, { direction: 'top', className: 'map-tooltip', opacity: 0.9, offset: [0, -6] })
     })
-    line.on('click', () => removeTrack(mmsi))
+    
+    // 点击轨迹移除
+    lineGroup.on('click', () => removeTrack(mmsi))
 
-    trackLayerMap.set(mmsi, { line, points, color })
+    trackLayerMap.set(mmsi, { line: lineGroup as unknown as L.Polyline, points, color })
     trackOrder.value = [...trackOrder.value, mmsi]
     trackStates.value = {
       ...trackStates.value,
       [mmsi]: {
-        points: tracks.map((t: any) => ({
+        points: tracksWithStatus.map((t: any) => ({
           lat: Number(t.lat),
           lng: Number(t.lng),
           timestamp: t.timestamp,
-          created_at: t.created_at
+          created_at: t.created_at,
+          speed: t.speed,
+          status: t.status
         })),
         pageIndex: 1,
-        pageSize: 10
+        pageSize: 10,
+        days
       }
     }
 
@@ -1048,21 +1170,25 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
       selectedVesselId.value = vessel.id
     }
 
-    const bounds = line.getBounds()
-    const includeLatLng = options?.includeLatLng
-    if (includeLatLng) {
-      bounds.extend(includeLatLng)
-    }
-    if (bounds.isValid()) {
-      const animate = options?.animate !== false
-      if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
-        const center = bounds.getCenter()
-        const singleBounds = L.latLngBounds(center, center)
-        const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
-        map.fitBounds(singleBounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
-      } else {
-        const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
-        map.fitBounds(bounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
+    // 计算所有轨迹点的bounds
+    const allLatLngs = tracksWithStatus.map((t: any) => [t.lat, t.lng] as [number, number])
+    if (allLatLngs.length > 0) {
+      const bounds = L.latLngBounds(allLatLngs)
+      const includeLatLng = options?.includeLatLng
+      if (includeLatLng) {
+        bounds.extend(includeLatLng)
+      }
+      if (bounds.isValid()) {
+        const animate = options?.animate !== false
+        if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+          const center = bounds.getCenter()
+          const singleBounds = L.latLngBounds(center, center)
+          const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
+          map.fitBounds(singleBounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
+        } else {
+          const { paddingTopLeft, paddingBottomRight } = getTrackFitPadding()
+          map.fitBounds(bounds, { paddingTopLeft, paddingBottomRight, maxZoom: 12, animate })
+        }
       }
     }
     return true

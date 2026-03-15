@@ -252,8 +252,8 @@ def add_ship_track(mmsi, lat, lng, speed, heading, status_raw, timestamp, vessel
     finally:
         conn.close()
 
-def get_ship_tracks(mmsi, days=3):
-    """获取船舶历史轨迹"""
+def get_ship_tracks(mmsi, days=15):
+    """获取船舶历史轨迹 (默认15天)"""
     from datetime import timedelta
     conn = sqlite3.connect(TRACK_DB_PATH)
     c = conn.cursor()
@@ -442,13 +442,13 @@ def save_article(article_data):
                 article_data.get('summary_cn', ''),
                 article_data.get('full_text_cn', ''),
                 article_data.get('content', ''),
-                # screenshot_path 特殊处理：'__CLEAR__' 表示清除，None/空字符串表示不修改，其他值表示更新
-                article_data.get('screenshot_path') if article_data.get('screenshot_path') else '__NO_CHANGE__',
-                article_data.get('screenshot_path') if article_data.get('screenshot_path') else '__NO_CHANGE__',
+                # screenshot_path 特殊处理：'__CLEAR__' 表示清除，None表示不修改，空字符串/其他值表示更新
+                '__NO_CHANGE__' if article_data.get('screenshot_path') is None else article_data.get('screenshot_path'),
+                '__NO_CHANGE__' if article_data.get('screenshot_path') is None else article_data.get('screenshot_path'),
                 article_data.get('significant', None),
-                # vl_desc 特殊处理：'__CLEAR__' 表示清除，None/空字符串表示不修改，其他值表示更新
-                article_data.get('image_desc') if article_data.get('image_desc') else '__NO_CHANGE__',
-                article_data.get('image_desc') if article_data.get('image_desc') else '__NO_CHANGE__',
+                # vl_desc 特殊处理：'__CLEAR__' 表示清除，None表示不修改，空字符串/其他值表示更新
+                '__NO_CHANGE__' if article_data.get('image_desc') is None else article_data.get('image_desc'),
+                '__NO_CHANGE__' if article_data.get('image_desc') is None else article_data.get('image_desc'),
                 primary_category or '',
                 article_data.get('valid', None),
                 article_data.get('is_hidden', None),

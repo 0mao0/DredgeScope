@@ -242,6 +242,35 @@ async def main():
     print(f"共获取到 {len(raw_items)} 条潜在新闻")
     t1_end = time.time()
     
+    # 生成采集源统计报告
+    source_stats = []
+    for name, stat in manager.stats.get('by_source', {}).items():
+        # 计算该源实际入库数量
+        source_fetched = stat.get('count', 0)
+        source_inserted = len([item for item in raw_items if item.get('source_name') == name and item.get('link') in new_ids])
+        source_valid = len([item for item in raw_items if item.get('source_name') == name and item.get('link') in seen_links])
+        
+        status = stat.get('status', 'unknown')
+        error = stat.get('error', '')
+        
+        # 构建备注
+        remark = ""
+        if status == 'failed':
+            remark = f"采集失败: {error[:50]}" if error else "采集失败"
+        elif source_fetched == 0:
+            remark = "网站无最新新闻"
+        elif source_inserted == 0:
+            remark = "爬取成功但无新内容(可能已存在或过期)"
+        
+        source_stats.append({
+            'name': name,
+            'fetched': source_fetched,
+            'inserted': source_inserted,
+            'valid': source_valid,
+            'status': status,
+            'remark': remark
+        })
+    
     # --- 改动：预先规范化所有 URL ---
     # 在入库前进行规范化，确保去重逻辑生效 (避免 http/https, trailing slash, params 导致的重复)
     for item in raw_items:
@@ -429,9 +458,22 @@ async def main():
     print(f"过滤掉 {skipped_count} 条垃圾/无效信息")
     print(f"跳过 {processed_count} 条已处理信息")
     print(f"超期入库 {outdated_count} 条")
+    
+    # 写入详细采集统计到日志
     write_scheduler_log(
         f"采集统计: 源站点{sources_count} 潜在消息{len(raw_items)} 新增入库{new_inserted_count} 跳过已处理{processed_count} 过滤无效{skipped_count} 超期入库{outdated_count}"
     )
+    
+    # 写入采集源详细统计 (JSON格式，便于前端解析)
+    import json
+    stats_summary = {
+        "type": "source_stats",
+        "total_sources": len(source_stats),
+        "total_fetched": sum(s['fetched'] for s in source_stats),
+        "total_inserted": sum(s['inserted'] for s in source_stats),
+        "sources": source_stats
+    }
+    write_scheduler_log(f"SOURCE_STATS: {json.dumps(stats_summary, ensure_ascii=False)}")
 
     # --- 改动：从数据库获取需要补充采集的条目 ---
     t2_start = time.time()

@@ -45,7 +45,7 @@
           <div>
             <p class="text-sm font-medium text-gray-400">本次新闻</p>
             <div class="flex items-end gap-2 mt-1">
-              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ reportItems.length }}</span>
+              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ previewItems.length }}</span>
               <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
             </div>
           </div>
@@ -267,41 +267,14 @@
       </div>
     </a-modal>
 
-    <a-modal
-      v-model:open="previewVisible"
-      :title="previewTitle"
-      :footer="null"
-      :width="800"
-      centered
-    >
-      <div class="max-h-[70vh] overflow-y-auto custom-scrollbar">
-        <div class="text-xs text-gray-400 mb-3">时间范围：{{ previewRangeLabel }}</div>
-        <div v-if="previewLoading" class="text-gray-400 text-sm">加载中...</div>
-        <div v-else-if="previewItems.length === 0" class="text-gray-400 text-sm">暂无数据</div>
-        <div v-else class="flex flex-col gap-2">
-          <div v-for="(item, idx) in previewItems" :key="item.id || `${item.url}-${idx}`" class="rounded-lg border border-white/10 bg-white/5 p-3">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex-1">
-                <div class="text-sm text-gray-200 font-medium">{{ item.title_cn || item.title || item.summary_cn || '无标题' }}</div>
-                <div class="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
-                  <span>分类：{{ getCategoryMeta(item.category).name }}</span>
-                  <span>来源：{{ item.source_name || item.source_type || '未知' }}</span>
-                  <span>时间：{{ item.pub_date || item.created_at || '' }}</span>
-                </div>
-              </div>
-              <span class="text-xs text-gray-500 whitespace-nowrap">#{{ idx + 1 }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </a-modal>
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useNewsStore, useVesselStore, type NewsItem } from '@/stores'
-import dayjs, { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 
 const newsStore = useNewsStore()
 const vesselStore = useVesselStore()
@@ -318,17 +291,16 @@ const currentHour = dayjs().hour()
 // 0点到12点显示早报，12点到24点显示晚报
 const isEvening = currentHour >= 12
 const reportType = ref<'morning' | 'evening'>(isEvening ? 'evening' : 'morning')
-const selectedDate = ref<Dayjs>(dayjs())
-const previewVisible = ref(false)
-const previewLoading = ref(false)
+const selectedDate = ref(dayjs())
+
+// 早报/晚报预览数据
 const previewItems = ref<NewsItem[]>([])
-const previewRangeLabel = ref('')
-const previewTitle = computed(() => (reportType.value === 'morning' ? '早报筛选结果' : '晚报筛选结果'))
+const previewLoading = ref(false)
 
 /**
  * 获取早报/晚报的时间区间
  */
-function getReportRange(type: 'morning' | 'evening', date: Dayjs) {
+function getReportRange(type: 'morning' | 'evening', date: dayjs.Dayjs) {
   if (type === 'morning') {
     // 早报：前一天18:00 到 当天08:00
     const start = date.subtract(1, 'day').hour(18).minute(0).second(0)
@@ -342,22 +314,22 @@ function getReportRange(type: 'morning' | 'evening', date: Dayjs) {
 }
 
 /**
- * 切换早报/晚报并展示筛选结果
+ * 切换早报/晚报
  */
 function handleReportTypeChange(type: 'morning' | 'evening') {
   reportType.value = type
-  loadReportData(true)
 }
+
+const reportTimeRange = computed(() => {
+  const { start, end } = getReportRange(reportType.value, selectedDate.value)
+  return `${start.format('MM-DD HH:mm')} 至 ${end.format('MM-DD HH:mm')}`
+})
 
 /**
  * 拉取早晚报数据
  */
-async function loadReportData(openModal: boolean) {
+async function loadReportData() {
   const { start, end } = getReportRange(reportType.value, selectedDate.value)
-  previewRangeLabel.value = `${start.format('MM-DD HH:mm')} 至 ${end.format('MM-DD HH:mm')}`
-  if (openModal) {
-    previewVisible.value = true
-  }
   previewLoading.value = true
   try {
     const startStr = start.format('YYYY-MM-DDTHH:mm:ss')
@@ -366,23 +338,17 @@ async function loadReportData(openModal: boolean) {
     const data = await response.json()
     previewItems.value = data.events || []
   } catch (error) {
-    console.error('加载早晚报预览失败', error)
+    console.error('加载早晚报数据失败', error)
     previewItems.value = []
   } finally {
     previewLoading.value = false
   }
 }
 
-const reportTimeRange = computed(() => {
-  const { start, end } = getReportRange(reportType.value, selectedDate.value)
-  return `${start.format('MM-DD HH:mm')} 至 ${end.format('MM-DD HH:mm')}`
-})
-
-const reportItems = computed(() => previewItems.value)
-
+// 监听日期和类型变化，自动加载数据
 watch([selectedDate, reportType], () => {
-  loadReportData(false)
-})
+  loadReportData()
+}, { immediate: true })
 
 const categories = {
   Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
@@ -397,7 +363,7 @@ const categories = {
 const quickSummary = computed(() => {
   const seenTitles = new Set()
   const unique: NewsItem[] = []
-  for (const e of reportItems.value) {
+  for (const e of previewItems.value) {
     const title = e.title_cn || e.title
     if (!seenTitles.has(title)) {
       seenTitles.add(title)
@@ -415,7 +381,7 @@ function getCategoryMeta(category: string | undefined) {
 function getGroupedArticles(category: string) {
   const seen = new Set<string>()
   const unique: NewsItem[] = []
-  for (const item of reportItems.value) {
+  for (const item of previewItems.value) {
     if (item.category !== category) continue
     const key = item.id || item.url || item.title_cn || item.title
     if (!key) {
@@ -498,7 +464,6 @@ onMounted(async () => {
     newsStore.fetchNews(),
     vesselStore.fetchVessels()
   ])
-  await loadReportData(false)
   loading.value = false
 
   // Auto-refresh every 5 minutes
@@ -507,8 +472,6 @@ onMounted(async () => {
       newsStore.fetchNews(),
       vesselStore.fetchVessels()
     ])
-    // Also refresh report data if needed, but maybe less frequently or just with the others
-    await loadReportData(false)
   }, 5 * 60 * 1000)
 })
 
