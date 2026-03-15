@@ -8,23 +8,29 @@ loaded = load_dotenv(env_path, override=True)
 print(f"[Config] Loading .env from {env_path}, Success: {loaded}")
 
 # API Keys
-# SiliconFlow (Text Model)
-TEXT_LLM_API_KEY = os.getenv("TEXT_LLM_API_KEY") 
-TEXT_LLM_API_BASE = os.getenv("TEXT_LLM_API_BASE", "https://api.siliconflow.cn/v1")
-TEXT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
-
-# BIM-ACE (VL Model)
+# 阿里云 DashScope (优先使用 Qwen3.5)
 # Debug: Print relevant keys
 keys = [k for k in os.environ.keys() if "ALIYUN" in k]
 print(f"[Config] Found keys with 'ALIYUN': {keys}")
 
-VL_LLM_API_KEY = os.getenv("Public_ALIYUN_API_KEY") 
-if VL_LLM_API_KEY:
-    print(f"[Config] VL_LLM_API_KEY: {VL_LLM_API_KEY[:5]}...")
+ALIYUN_API_KEY = os.getenv("Public_ALIYUN_API_KEY")
+if ALIYUN_API_KEY:
+    print(f"[Config] ALIYUN_API_KEY: {ALIYUN_API_KEY[:5]}...")
 else:
-    print("[Config] VL_LLM_API_KEY is None!")
-VL_LLM_API_BASE = os.getenv("Public_ALIYUN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-VL_MODEL = os.getenv("Public_ALIYUN_MODEL2", "Qwen3.5-35B-A3B-FP8")
+    print("[Config] ALIYUN_API_KEY is None!")
+ALIYUN_API_BASE = os.getenv("Public_ALIYUN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+ALIYUN_MODEL = os.getenv("Public_ALIYUN_MODEL2", "Qwen3.5-35B-A3B-FP8")
+
+# TEXT LLM 配置（优先阿里云，备选 SiliconFlow）
+TEXT_LLM_API_KEY = ALIYUN_API_KEY or os.getenv("TEXT_LLM_API_KEY")
+TEXT_LLM_API_BASE = ALIYUN_API_BASE or os.getenv("TEXT_LLM_API_BASE", "https://api.siliconflow.cn/v1")
+# 如果使用阿里云，模型为 Qwen3.5；否则使用 SiliconFlow 的模型
+TEXT_MODEL = ALIYUN_MODEL if ALIYUN_API_KEY else "Qwen/Qwen2.5-7B-Instruct"
+
+# VL Model 配置（与 TEXT LLM 使用相同配置）
+VL_LLM_API_KEY = ALIYUN_API_KEY
+VL_LLM_API_BASE = ALIYUN_API_BASE
+VL_MODEL = ALIYUN_MODEL
 
 # Paths
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')

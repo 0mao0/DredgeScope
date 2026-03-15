@@ -281,11 +281,25 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
 }}
 """
     try:
-        resp = await client.chat.completions.create(
-            model=config.TEXT_MODEL,
-            messages=[{"role": "user", "content": filter_prompt}],
-            response_format={"type": "json_object"}
-        )
+        # 判断是否为 Qwen3.5 模型，需要添加 enable_thinking 参数
+        is_qwen35 = "qwen3.5" in config.TEXT_MODEL.lower()
+        
+        if is_qwen35:
+            resp = await client.chat.completions.create(
+                model=config.TEXT_MODEL,
+                messages=[{"role": "user", "content": filter_prompt}],
+                extra_body={
+                    "chat_template_kwargs": {
+                        "enable_thinking": False
+                    }
+                }
+            )
+        else:
+            resp = await client.chat.completions.create(
+                model=config.TEXT_MODEL,
+                messages=[{"role": "user", "content": filter_prompt}],
+                response_format={"type": "json_object"}
+            )
         content = resp.choices[0].message.content
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()

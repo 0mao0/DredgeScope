@@ -242,8 +242,22 @@ async def main():
     print(f"共获取到 {len(raw_items)} 条潜在新闻")
     t1_end = time.time()
     
+    # --- 改动：预先规范化所有 URL ---
+    # 在入库前进行规范化，确保去重逻辑生效 (避免 http/https, trailing slash, params 导致的重复)
+    for item in raw_items:
+        normalized_link = normalize_article_url(item.get('link'))
+        if normalized_link:
+            item['link'] = normalized_link
+
+    # --- 改动：采集阶段立即入库 (不重复) ---
+    print(f"正在保存原始数据到数据库...")
+    total_scanned, new_ids = database.save_raw_articles(raw_items)
+    new_inserted_count = len(new_ids)
+    print(f"入库完成: 扫描 {total_scanned} 条, 实际新增 {new_inserted_count} 条")
+    
     # 生成采集源统计报告
     source_stats = []
+    seen_links = set()  # 初始化 seen_links
     for name, stat in manager.stats.get('by_source', {}).items():
         # 计算该源实际入库数量
         source_fetched = stat.get('count', 0)
@@ -271,19 +285,6 @@ async def main():
             'remark': remark
         })
     
-    # --- 改动：预先规范化所有 URL ---
-    # 在入库前进行规范化，确保去重逻辑生效 (避免 http/https, trailing slash, params 导致的重复)
-    for item in raw_items:
-        normalized_link = normalize_article_url(item.get('link'))
-        if normalized_link:
-            item['link'] = normalized_link
-
-    # --- 改动：采集阶段立即入库 (不重复) ---
-    print(f"正在保存原始数据到数据库...")
-    total_scanned, new_ids = database.save_raw_articles(raw_items)
-    new_inserted_count = len(new_ids)
-    print(f"入库完成: 扫描 {total_scanned} 条, 实际新增 {new_inserted_count} 条")
-    
     # 去重 & 状态更新 (更新数据库中的 valid/remark 状态)
     items = [] # 这里的 items 仅用于记录本次处理的有效条目(内存中)，用于后续流程参考(如统计)
                # 实际流程将转向从数据库读取
@@ -295,7 +296,6 @@ async def main():
     audit_rows = []
     pending_map = {}
     pub_date_map = {}
-    seen_links = set()
 
     for item in raw_items:
 
