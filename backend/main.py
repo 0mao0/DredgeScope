@@ -159,16 +159,44 @@ def bool_to_cn(value):
     """布尔值转中文 是/否"""
     return "是" if bool(value) else "否"
 
-def write_markdown_audit(rows):
-    """输出调度审核Markdown清单"""
+def write_markdown_audit(rows, source_stats=None):
+    """输出调度审核Markdown清单，包含网站爬取统计和新闻明细"""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
     os.makedirs(scheduler_dir, exist_ok=True)
     md_path = os.path.join(scheduler_dir, f"{ts}.md")
+
+    content_parts = []
+
+    # 1. 网站爬取统计表格
+    if source_stats:
+        content_parts.append("## 网站爬取统计\n")
+        content_parts.append("| 序号 | 网站 | 爬取数 | 入库数 | 状态 | 备注 |")
+        content_parts.append("| --- | --- | --- | --- | --- | --- |")
+
+        for idx, stat in enumerate(source_stats, 1):
+            name = (stat.get('name') or '').replace("|", " ").replace("\n", " ").replace("\r", "")
+            fetched = stat.get('fetched', 0)
+            inserted = stat.get('inserted', 0)
+            status = stat.get('status', 'unknown')
+            remark = (stat.get('remark') or '').replace("|", " ").replace("\n", " ").replace("\r", " ")
+            line = f"| {idx} | {name} | {fetched} | {inserted} | {status} | {remark} |"
+            content_parts.append(line)
+
+        # 添加汇总行
+        total_fetched = sum(s.get('fetched', 0) for s in source_stats)
+        total_inserted = sum(s.get('inserted', 0) for s in source_stats)
+        content_parts.append(f"| - | **合计** | **{total_fetched}** | **{total_inserted}** | - | - |")
+        content_parts.append("")  # 空行分隔
+
+    # 2. 新闻明细表格
+    content_parts.append("## 新闻明细\n")
     header = [
         "| 序号 | 网站 | 新闻名称 | 发布时间 | 是否保留 | TextLLM识别成功 | VL识别成功 | 数据来源 | 备注 | 新闻链接 |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
+    content_parts.extend(header)
+
     lines = []
     source_map = {
         "rss": "RSS",
@@ -191,7 +219,10 @@ def write_markdown_audit(rows):
         remark = (r.get("remark") or "").replace("|", " ").replace("\n", " ").replace("\r", " ")
         line = f"| {idx} | {site} | {name} | {date_str} | {keep_str} | {txt_ok} | {vl_ok} | {source_label} | {remark} | {link} |"
         lines.append(line)
-    content = "\n".join(header + lines) + "\n"
+
+    content_parts.extend(lines)
+    content = "\n".join(content_parts) + "\n"
+
     try:
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -623,7 +654,7 @@ async def main():
     print(">>> 阶段3: 结果已同步至数据库")
     # report_generation.save_history(kept_results) # 移除：info_analysis 已实时保存
     try:
-        write_markdown_audit(audit_rows)
+        write_markdown_audit(audit_rows, source_stats)
     except Exception:
         pass
     write_scheduler_log(f"分析完成: 文章{len(kept_results)}")

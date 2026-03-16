@@ -481,33 +481,50 @@ async def get_scheduler_runs():
     scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
     if not os.path.exists(scheduler_dir):
         return {"runs": []}
-    
+
     files = [f for f in os.listdir(scheduler_dir) if f.endswith(".md")]
     files.sort(reverse=True)
-    
+
     runs = []
     for f in files:
         # Parse timestamp from filename: YYYYMMDD_HHMMSS.md
         try:
             ts_str = f.split(".")[0]
             dt = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
-            
+
             # Read stats from file content
             file_path = os.path.join(scheduler_dir, f)
             searched_count = 0
             inserted_count = 0
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as file:
-                    lines = file.readlines()
-                    # Skip header (2 lines) and iterate
-                    for line in lines[2:]:
-                        if not line.strip(): continue
+                    content = file.read()
+                    lines = content.split('\n')
+
+                    # 找到"新闻明细"部分
+                    in_news_section = False
+                    header_skipped = False
+                    for line in lines:
+                        line = line.strip()
+                        if '## 新闻明细' in line:
+                            in_news_section = True
+                            continue
+                        if not in_news_section:
+                            continue
+                        if not header_skipped:
+                            # 跳过表头行 (分隔符行)
+                            if line.startswith('| ---'):
+                                header_skipped = True
+                            continue
+                        if not line or not line.startswith('|'):
+                            continue
+                        # 统计新闻行
                         searched_count += 1
                         parts = line.split("|")
                         # Column 5 is "是否保留" (index 5 because of leading empty string from split)
                         if len(parts) > 5 and "是" in parts[5]:
                             inserted_count += 1
-            
+
             runs.append({
                 "id": f,
                 "timestamp": dt.strftime("%Y-%m-%d %H:%M:%S"),
@@ -516,22 +533,71 @@ async def get_scheduler_runs():
             })
         except:
             continue
-            
+
     return {"runs": runs}
 
 @app.get("/api/scheduler/run/{filename}")
 async def get_scheduler_run_detail(filename: str):
-    """获取指定调度任务运行详情"""
+    """获取指定调度任务运行详情，包含网站统计和新闻明细"""
     scheduler_dir = os.path.join(config.DATA_DIR, "scheduler")
     file_path = os.path.join(scheduler_dir, filename)
-    
+
     if not os.path.exists(file_path):
-        return {"content": "文件不存在"}
-        
+        return {"content": "文件不存在", "source_stats": []}
+
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
-        
-    return {"content": content}
+
+    # 解析网站统计信息
+    source_stats = []
+    lines = content.split('\n')
+    in_source_section = False
+    header_skipped = False
+
+    for line in lines:
+        line = line.strip()
+        if '## 网站爬取统计' in line:
+            in_source_section = True
+            continue
+        if '## 新闻明细' in line:
+            break
+        if not in_source_section:
+            continue
+        if not header_skipped:
+            # 跳过表头行 (分隔符行)
+            if line.startswith('| ---'):
+                header_skipped = True
+            continue
+        if not line or not line.startswith('|'):
+            continue
+        # 解析统计行
+        parts = line.split("|")
+        if len(parts) >= 6:
+            # parts[0] 是空字符串（因为行以 | 开头）
+            # parts[1] 是序号
+            # parts[2] 是网站名
+            # parts[3] 是爬取数
+            # parts[4] 是入库数
+            # parts[5] 是状态
+            # parts[6] 是备注
+            name = parts[2].strip()
+            if name and name != '**合计**':
+                try:
+                    fetched = int(parts[3].strip()) if parts[3].strip() else 0
+                    inserted = int(parts[4].strip()) if parts[4].strip() else 0
+                    status = parts[5].strip()
+                    remark = parts[6].strip() if len(parts) > 6 else ''
+                    source_stats.append({
+                        'name': name,
+                        'fetched': fetched,
+                        'inserted': inserted,
+                        'status': status,
+                        'remark': remark
+                    })
+                except (ValueError, IndexError):
+                    continue
+
+    return {"content": content, "source_stats": source_stats}
 
 if __name__ == "__main__":
     # 允许外部访问

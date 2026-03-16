@@ -709,10 +709,19 @@ const fetchRunDetail = async (runId: string) => {
     const res = await fetch(`/api/scheduler/run/${runId}`)
     const data = await res.json()
     selectedRunContent.value = data.content
-    
-    // 解析采集统计信息
-    if (data.content) {
-      const statsMatch = data.content.match(/SOURCE_STATS: ({.+})/)
+
+    // 使用后端返回的采集统计信息
+    if (data.source_stats && data.source_stats.length > 0) {
+      const sources = data.source_stats
+      selectedRunStats.value = {
+        total_sources: sources.length,
+        total_fetched: sources.reduce((sum: number, s: SourceStat) => sum + s.fetched, 0),
+        total_inserted: sources.reduce((sum: number, s: SourceStat) => sum + s.inserted, 0),
+        sources: sources
+      }
+    } else {
+      // 兼容旧格式：尝试从 Markdown 内容中解析
+      const statsMatch = data.content?.match(/SOURCE_STATS: ({.+})/)
       if (statsMatch) {
         try {
           const stats = JSON.parse(statsMatch[1])

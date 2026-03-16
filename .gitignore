@@ -11,6 +11,10 @@ venv/
 *.db
 .DS_Store
 
+# Cache
+.ruff_cache/
+.pytest_cache/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
