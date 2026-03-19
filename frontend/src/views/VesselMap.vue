@@ -310,7 +310,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import L from 'leaflet'
-import type { LeafletMouseEvent } from 'leaflet'
+import type { LatLng, LeafletMouseEvent } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import ShipTrackProgress from '@/components/ShipTrackProgress.vue'
 
