@@ -1,6 +1,6 @@
 <template>
-  <div class="h-full overflow-y-auto custom-scrollbar">
-    <main class="w-full px-4 sm:px-6 lg:px-8 space-y-6 pb-6">
+  <div class="h-full flex flex-col overflow-hidden p-4">
+    <main class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
       <!-- Filter Bar -->
       <div class="glass-card rounded-2xl p-5">
         <div class="flex flex-wrap items-center gap-3">

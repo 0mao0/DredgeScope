@@ -1,11 +1,11 @@
 <template>
-  <div class="h-full flex flex-col text-white overflow-hidden">
+  <div class="h-full flex flex-col text-white overflow-hidden p-4">
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden relative min-h-0">
       <!-- Sidebar -->
       <aside
         class="glass-card flex flex-col overflow-hidden transition-all duration-300 z-10 flex-shrink-0 transform vessel-sidebar"
-        :class="sidebarOpen ? 'w-64 translate-x-0 m-4 mr-0' : 'w-0 -translate-x-full m-0'"
+        :class="sidebarOpen ? 'w-64 translate-x-0 mr-4' : 'w-0 -translate-x-full'"
       >
         <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
           <h2 class="font-bold text-lg">船舶列表</h2>
@@ -110,7 +110,7 @@
       <!-- Toggle Sidebar Button (When closed) -->
       <div
         v-if="!sidebarOpen"
-        class="absolute top-8 left-4 z-20 glass-card p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors vessel-sidebar-toggle"
+        class="absolute top-4 left-4 z-20 glass-card p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors vessel-sidebar-toggle"
         @click="sidebarOpen = true"
       >
         <svg
@@ -130,8 +130,8 @@
       </div>
 
       <!-- Map Container -->
-      <div class="flex-1 m-4 ml-0 glass-card overflow-hidden flex flex-col min-h-0">
-        <div class="relative flex-1 min-h-[360px]">
+      <div class="flex-1 glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="relative flex-1 min-h-0" style="min-height: 280px;">
           <div ref="mapContainer" class="w-full h-full z-0"></div>
 
           <!-- Map Source Selector (Icon Based) -->
@@ -266,9 +266,10 @@
         <div
           v-if="trackDisplayList.length"
           ref="trackListRef"
-          class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 flex flex-col overflow-hidden"
+          class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 flex flex-col overflow-hidden flex-shrink-0"
+          style="min-height: 110px;"
         >
-          <div class="flex-1 overflow-hidden flex flex-col">
+          <div class="overflow-y-auto custom-scrollbar">
             <div class="flex flex-col gap-3">
               <div
                 v-for="item in trackDisplayList"
@@ -292,8 +293,9 @@
                 <ShipTrackProgress
                   v-if="getTrackPoints(item.mmsi).length > 0"
                   :points="getTrackPoints(item.mmsi)"
-                  :model-value="{ days: getTrackDays(item.mmsi) }"
+                  :model-value="{ days: getTrackDays(item.mmsi), zoomLevel: getTrackZoomLevel(item.mmsi) }"
                   @time-change="(days) => onTrackDaysChange(item.mmsi, days)"
+                  @zoom-level-change="(level) => onTrackZoomLevelChange(item.mmsi, level)"
                   @position-change="(point) => onTrackPositionChange(item.mmsi, point)"
                 />
                 <div v-else class="text-gray-400 text-center py-8">暂无轨迹点</div>
@@ -423,6 +425,7 @@ interface TrackState {
   pageIndex: number
   pageSize: number
   days: number
+  zoomLevel: number
 }
 
 const trackStates = ref<Record<string, TrackState>>({})
@@ -1013,7 +1016,15 @@ function getTrackState(mmsi: string | undefined): TrackState | null {
  */
 function getTrackDays(mmsi: string): number {
   const state = getTrackState(mmsi)
-  return state ? state.days : 3
+  return state ? state.days : 1
+}
+
+/**
+ * 获取轨迹底图等级
+ */
+function getTrackZoomLevel(mmsi: string): number {
+  const state = getTrackState(mmsi)
+  return state ? (state.zoomLevel ?? 16) : 16
 }
 
 /**
@@ -1035,6 +1046,24 @@ async function onTrackDaysChange(mmsi: string, days: number) {
 }
 
 /**
+ * 切换轨迹底图等级
+ */
+function onTrackZoomLevelChange(mmsi: string, level: number) {
+  const state = getTrackState(mmsi)
+  if (!state) return
+  trackStates.value = {
+    ...trackStates.value,
+    [mmsi]: {
+      ...state,
+      zoomLevel: level
+    }
+  }
+  if (map) {
+    map.setZoom(level, { animate: true, duration: 0.3 })
+  }
+}
+
+/**
  * 进度条位置变化时，地图船舶跟随移动
  */
 const trackMarkerMap = new Map<string, L.Marker>()
@@ -1045,7 +1074,8 @@ function onTrackPositionChange(mmsi: string, point: TrackPoint | null) {
   if (!map || !point) return
   if (point.lat == null || point.lng == null) return
 
-  const targetZoom = Math.max(currentZoom.value, 17)
+  const state = getTrackState(mmsi)
+  const targetZoom = state ? (state.zoomLevel ?? 16) : Math.max(currentZoom.value, 16)
   const currentCenter = map.getCenter()
   const distance = map.distance(currentCenter, [point.lat, point.lng])
 
@@ -1061,17 +1091,12 @@ function updateTrackMarkerTarget(mmsi: string, point: TrackPoint) {
 
   if (trackMarkerMap.has(mmsi)) {
     const marker = trackMarkerMap.get(mmsi)!
-    const existing = markerAnimationMap.get(mmsi)
-    if (existing) {
-      existing.target = targetLatLng
-      existing.progress = 0
-    } else {
-      markerAnimationMap.set(mmsi, {
-        current: marker.getLatLng(),
-        target: targetLatLng,
-        progress: 0
-      })
-    }
+    const currentLatLng = marker.getLatLng()
+    markerAnimationMap.set(mmsi, {
+      current: currentLatLng,
+      target: targetLatLng,
+      progress: 0
+    })
     startMarkerAnimation()
     updateTrackMarkerIcon(mmsi, point.status || 'underway')
   } else {
@@ -1206,7 +1231,7 @@ async function showTrack(
   options?: { animate?: boolean; includeLatLng?: L.LatLng | null; days?: number }
 ) {
   if (!map || !trackLayerGroup) return
-  const days = options?.days || 3
+  const days = options?.days || 1
   try {
     const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=${days}`)
     const tracks = await response.json()
@@ -1290,6 +1315,16 @@ async function showTrack(
     // 点击轨迹移除
     lineGroup.on('click', () => removeTrack(mmsi))
 
+    // 计算所有轨迹点的bounds
+    const allLatLngs = tracksWithStatus.map((t: any) => [t.lat, t.lng] as [number, number])
+    let calculatedZoom = 16
+    if (allLatLngs.length > 0) {
+      const bounds = L.latLngBounds(allLatLngs)
+      if (bounds.isValid()) {
+        calculatedZoom = calculateZoomFromBounds(bounds)
+      }
+    }
+
     trackLayerMap.set(mmsi, { line: lineGroup as unknown as L.Polyline, points, color })
     trackOrder.value = [...trackOrder.value, mmsi]
     trackStates.value = {
@@ -1306,6 +1341,7 @@ async function showTrack(
         pageIndex: 1,
         pageSize: 10,
         days,
+        zoomLevel: calculatedZoom,
       },
     }
 
@@ -1314,8 +1350,7 @@ async function showTrack(
       selectedVesselId.value = vessel.id
     }
 
-    // 计算所有轨迹点的bounds
-    const allLatLngs = tracksWithStatus.map((t: any) => [t.lat, t.lng] as [number, number])
+    // 使用已计算的bounds调整地图视野
     if (allLatLngs.length > 0) {
       const bounds = L.latLngBounds(allLatLngs)
       const includeLatLng = options?.includeLatLng
@@ -1353,6 +1388,19 @@ function getTrackFitPadding() {
     paddingTopLeft: [basePadding, basePadding] as L.PointExpression,
     paddingBottomRight: [basePadding, bottomPadding] as L.PointExpression,
   }
+}
+
+/**
+ * 根据轨迹bounds计算合适的缩放等级
+ */
+function calculateZoomFromBounds(bounds: L.LatLngBounds): number {
+  if (!map) return 13
+  const mapSize = map.getSize()
+  const boundsSize = bounds.getNorthEast().distanceTo(bounds.getSouthWest())
+  const mapDiagonal = Math.sqrt(mapSize.x * mapSize.x + mapSize.y * mapSize.y)
+  const worldDiagonal = 40075016.686
+  const zoom = Math.log2(worldDiagonal / boundsSize) + Math.log2(mapDiagonal / 256)
+  return Math.max(1, Math.min(18, Math.round(zoom)))
 }
 
 /**

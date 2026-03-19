@@ -61,7 +61,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - WATCHTOWER_POLL_INTERVAL=3600
+      - WATCHTOWER_POLL_INTERVAL=1800
       - WATCHTOWER_INCLUDE_RESTARTING=true
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_NOTIFICATIONS=shoutrrr

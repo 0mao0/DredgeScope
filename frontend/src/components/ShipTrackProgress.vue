@@ -1,17 +1,29 @@
 <template>
-  <div class="ship-track-progress" @mouseenter="isHovering = true" @mouseleave="isHovering = false">
-    <div class="time-range-selector flex items-center gap-2 mb-3">
-      <span class="text-xs text-gray-400">时间范围:</span>
-      <div class="flex gap-1">
-        <button
-          v-for="opt in timeRangeOptions"
-          :key="opt.value"
-          class="px-2 py-0.5 rounded text-xs transition-colors"
-          :class="modelValue.days === opt.value ? 'bg-blue-500/70 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'"
-          @click="onDaysChange(opt.value)"
+  <div class="ship-track-progress" style="min-height: 90px;">
+    <div class="time-range-selector flex items-center justify-between gap-2 mb-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-400">时间范围:</span>
+        <div class="flex gap-1">
+          <button
+            v-for="opt in timeRangeOptions"
+            :key="opt.value"
+            class="px-2 py-0.5 rounded text-xs transition-colors"
+            :class="modelValue.days === opt.value ? 'bg-blue-500/70 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'"
+            @click="onDaysChange(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-400">底图等级:</span>
+        <select
+          :value="modelValue.zoomLevel"
+          @change="onZoomLevelChange(($event.target as HTMLSelectElement).value)"
+          class="bg-slate-800/50 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
         >
-          {{ opt.label }}
-        </button>
+          <option v-for="level in zoomLevelOptions" :key="level" :value="level">{{ level }}</option>
+        </select>
       </div>
     </div>
 
@@ -21,17 +33,12 @@
         :style="{ height: chartHeight + 'px', bottom: trackAreaHeight + 'px' }"
       >
         <svg class="w-full h-full" :viewBox="`0 0 ${chartWidth} ${chartHeight}`" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="speedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="rgba(59, 130, 246, 0.5)" />
-              <stop offset="100%" stop-color="rgba(59, 130, 246, 0.1)" />
-            </linearGradient>
-          </defs>
-          <path :d="speedAreaPath" fill="url(#speedGradient)" />
           <path
-            :d="speedLinePath"
+            v-for="(segment, idx) in speedSegmentPaths"
+            :key="idx"
+            :d="segment.linePath"
             fill="none"
-            stroke="#3b82f6"
+            :class="'stroke-' + segment.status"
             stroke-width="1.5"
             vector-effect="non-scaling-stroke"
           />
@@ -46,26 +53,20 @@
         @mousemove="onTrackHover"
         @mouseleave="isHovering = false"
       >
-        <div class="status-bars absolute inset-x-0 bottom-0 flex h-2">
+        <div class="status-bars absolute inset-x-0 bottom-0 flex h-1.5">
           <div
             v-for="(segment, idx) in statusSegments"
             :key="idx"
             class="status-segment h-full"
-            :class="segment.status"
+            :class="[segment.status, { 'is-active': idx === activeSegmentIndex }]"
             :style="{ width: segment.width + '%' }"
           ></div>
         </div>
 
         <div
-          class="progress-played absolute left-0 bottom-0 h-2 transition-all duration-75"
-          :class="currentStatusClass"
-          :style="{ width: playedWidth + '%' }"
-        ></div>
-
-        <div
           class="progress-handle absolute transform -translate-x-1/2 translate-y-1/2 cursor-pointer z-20"
           :class="{ 'is-playing': isPlaying }"
-          :style="{ left: playedWidth + '%', bottom: '4px' }"
+          :style="{ left: playedWidth + '%', bottom: '3px' }"
           @mousedown.stop="startSeek"
           @touchstart.stop="startSeek"
         >
@@ -77,12 +78,12 @@
             <div class="handle-inner bg-white/90 rounded-full"></div>
           </div>
           <div
-            v-if="isHovering || isSeeking"
+            v-if="isHovering || isSeeking || isPlaying"
             class="handle-tooltip absolute bottom-full transform -translate-x-1/2 mb-2 px-2 py-1.5 rounded text-xs whitespace-nowrap z-30"
             :class="currentStatusClass"
           >
             <div class="text-center font-medium">{{ formatDateTime(currentPointTime) }}</div>
-            <div class="text-center font-semibold mt-0.5">{{ getStatusText(currentStatus) }}</div>
+            <div class="text-center font-semibold mt-0.5">{{ getStatusText(currentStatus) }}{{ currentSpeedText }}</div>
           </div>
         </div>
 
@@ -114,16 +115,17 @@
       </div>
 
       <div class="speed-controls flex items-center gap-2">
-        <span class="text-xs text-gray-400">倍速:</span>
+        <span class="text-xs text-gray-400">播放时长:</span>
         <select
-          v-model="playbackSpeed"
+          :value="playbackDuration"
+          @change="onDurationChange(($event.target as HTMLSelectElement).value)"
           class="bg-slate-800/50 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
         >
-          <option :value="0.5">0.5x</option>
-          <option :value="1">1x</option>
-          <option :value="1.5">1.5x</option>
-          <option :value="2">2x</option>
-          <option :value="3">3x</option>
+          <option :value="5">5秒</option>
+          <option :value="10">10秒</option>
+          <option :value="15">15秒</option>
+          <option :value="30">30秒</option>
+          <option :value="60">60秒</option>
         </select>
       </div>
     </div>
@@ -145,12 +147,14 @@ const props = defineProps<{
   points: TrackPoint[]
   modelValue: {
     days: number
+    zoomLevel?: number
   }
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: { days: number }): void
+  (e: 'update:modelValue', value: { days: number; zoomLevel?: number }): void
   (e: 'timeChange', days: number): void
+  (e: 'zoomLevelChange', level: number): void
   (e: 'positionChange', point: TrackPoint | null): void
 }>()
 
@@ -161,10 +165,12 @@ const timeRangeOptions = [
   { label: '10天', value: 10 }
 ]
 
-const chartHeight = 36
+const zoomLevelOptions = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+const chartHeight = 16
 const chartWidth = 1000
-const trackAreaHeight = 28
-const handleSize = 16
+const trackAreaHeight = 12
+const handleSize = 10
 
 const progressContainerRef = ref<HTMLDivElement | null>(null)
 const isHovering = ref(false)
@@ -172,8 +178,7 @@ const isSeeking = ref(false)
 const isPlaying = ref(false)
 const seekPosition = ref(0)
 
-const playbackSpeed = ref(1)
-const defaultDuration = 15
+const playbackDuration = ref(60)
 
 const playedIndex = ref(0)
 const playProgress = ref(0)
@@ -242,40 +247,83 @@ const currentStatusClass = computed(() => {
   return map[currentStatus.value] || 'bg-blue-500'
 })
 
-const speedLinePath = computed(() => {
-  if (!props.points || props.points.length < 2) return ''
-
-  const maxSpeed = Math.max(...props.points.map((p) => p.speed || 0), 10)
-  const points: string[] = []
-
-  props.points.forEach((p, i) => {
-    const x = (i / (props.points.length - 1)) * chartWidth
-    const y = chartHeight - ((p.speed || 0) / maxSpeed) * (chartHeight - 4) - 2
-    points.push(`${i === 0 ? 'M' : 'L'}${x},${y}`)
-  })
-
-  return points.join(' ')
+const activeSegmentIndex = computed(() => {
+  const segments = statusSegments.value
+  if (!segments || segments.length === 0) return -1
+  
+  let accumulatedWidth = 0
+  const currentPos = playedWidth.value
+  
+  for (let i = 0; i < segments.length; i++) {
+    const segmentWidth = segments[i]?.width || 0
+    if (currentPos >= accumulatedWidth && currentPos < accumulatedWidth + segmentWidth) {
+      return i
+    }
+    accumulatedWidth += segmentWidth
+  }
+  return segments.length - 1
 })
 
-const speedAreaPath = computed(() => {
-  if (!props.points || props.points.length < 2) return ''
+const currentSpeed = computed(() => {
+  if (!props.points || props.points.length === 0) return 0
+  const point = props.points[Math.min(playedIndex.value, props.points.length - 1)]
+  return point?.speed || 0
+})
+
+const currentSpeedText = computed(() => {
+  const speed = currentSpeed.value
+  if (speed <= 0) return ''
+  const knots = (speed * 1.94384).toFixed(1)
+  return ` ${knots}节`
+})
+
+const speedSegmentPaths = computed(() => {
+  if (!props.points || props.points.length < 2) return []
 
   const maxSpeed = Math.max(...props.points.map((p) => p.speed || 0), 10)
-  const points: string[] = []
+  const segments: { linePath: string; areaPath: string; status: string }[] = []
 
-  props.points.forEach((p, i) => {
-    const x = (i / (props.points.length - 1)) * chartWidth
-    const y = chartHeight - ((p.speed || 0) / maxSpeed) * (chartHeight - 4) - 2
-    points.push(`${i === 0 ? 'M' : 'L'}${x},${y}`)
-  })
+  let currentStatus = props.points[0].status || 'underway'
+  let startIndex = 0
 
-  const lastX = chartWidth
-  const firstX = 0
-  points.push(`L${lastX},${chartHeight}`)
-  points.push(`L${firstX},${chartHeight}`)
-  points.push('Z')
+  for (let i = 1; i <= props.points.length; i++) {
+    const status = i < props.points.length ? (props.points[i].status || 'underway') : null
 
-  return points.join(' ')
+    if (status !== currentStatus || i === props.points.length) {
+      const linePoints: string[] = []
+      const areaPoints: string[] = []
+
+      for (let j = startIndex; j <= i && j < props.points.length; j++) {
+        const x = (j / (props.points.length - 1)) * chartWidth
+        const y = chartHeight - ((props.points[j].speed || 0) / maxSpeed) * (chartHeight - 4) - 2
+        if (j === startIndex) {
+          linePoints.push(`M${x},${y}`)
+          areaPoints.push(`M${x},${y}`)
+        } else {
+          linePoints.push(`L${x},${y}`)
+          areaPoints.push(`L${x},${y}`)
+        }
+      }
+
+      const endX = (Math.min(i, props.points.length - 1) / (props.points.length - 1)) * chartWidth
+      const startX = (startIndex / (props.points.length - 1)) * chartWidth
+
+      areaPoints.push(`L${endX},${chartHeight}`)
+      areaPoints.push(`L${startX},${chartHeight}`)
+      areaPoints.push('Z')
+
+      segments.push({
+        linePath: linePoints.join(' '),
+        areaPath: areaPoints.join(' '),
+        status: currentStatus
+      })
+
+      currentStatus = status || 'underway'
+      startIndex = i
+    }
+  }
+
+  return segments
 })
 
 const previewTime = computed(() => {
@@ -349,7 +397,12 @@ function startPlayback() {
   if (playInterval) clearInterval(playInterval)
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
 
-  const duration = (defaultDuration / playbackSpeed.value) * 1000
+  if (playProgress.value >= 1) {
+    playProgress.value = 0
+    playedIndex.value = 0
+  }
+
+  const duration = playbackDuration.value * 1000
   lastTimestamp = performance.now()
   playProgress.value = playedIndex.value / Math.max(props.points.length - 1, 1)
 
@@ -389,17 +442,20 @@ function stopPlayback() {
   }
 }
 
-watch(playbackSpeed, () => {
-  if (isPlaying.value) {
-    stopPlayback()
-    startPlayback()
-  }
-})
-
 function onDaysChange(days: number) {
   playedIndex.value = 0
   emit('update:modelValue', { days })
   emit('timeChange', days)
+}
+
+function onDurationChange(value: string) {
+  playbackDuration.value = parseInt(value, 10)
+}
+
+function onZoomLevelChange(value: string) {
+  const level = parseInt(value, 10)
+  emit('update:modelValue', { days: props.modelValue.days, zoomLevel: level })
+  emit('zoomLevelChange', level)
 }
 
 function formatDateTime(timestamp: string): string {
@@ -436,11 +492,14 @@ onUnmounted(() => {
   padding: 12px;
   background: rgba(15, 23, 42, 0.6);
   border-radius: 8px;
+  min-height: 90px;
+  flex-shrink: 0;
 }
 
 .progress-wrapper {
   position: relative;
-  height: 68px;
+  height: 30px;
+  flex-shrink: 0;
 }
 
 .progress-container {
@@ -466,8 +525,25 @@ onUnmounted(() => {
   background: rgba(239, 68, 68, 0.6);
 }
 
+.status-segment.is-active {
+  opacity: 0.4;
+}
+
+.stroke-dredging {
+  stroke: rgba(59, 130, 246, 0.9);
+}
+
+.stroke-underway {
+  stroke: rgba(34, 197, 94, 0.9);
+}
+
+.stroke-moored {
+  stroke: rgba(239, 68, 68, 0.9);
+}
+
 .speed-chart {
   pointer-events: none;
+  margin-bottom: 0;
 }
 
 .progress-handle {
@@ -505,15 +581,15 @@ onUnmounted(() => {
 }
 
 .handle-tooltip.bg-blue-500 {
-  background: rgba(59, 130, 246, 0.95);
+  background: rgba(59, 130, 246, 0.7);
 }
 
 .handle-tooltip.bg-green-500 {
-  background: rgba(34, 197, 94, 0.95);
+  background: rgba(34, 197, 94, 0.7);
 }
 
 .handle-tooltip.bg-red-500 {
-  background: rgba(239, 68, 68, 0.95);
+  background: rgba(239, 68, 68, 0.7);
 }
 
 .seek-preview {

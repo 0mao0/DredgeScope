@@ -1,8 +1,8 @@
 <template>
-  <div class="h-full flex flex-col overflow-hidden">
+  <div class="h-full flex flex-col overflow-hidden p-4">
     <!-- Top Filter Area -->
     <header
-      class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
+      class="p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
     >
       <div class="flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-3">
@@ -65,7 +65,7 @@
       </div>
     </header>
 
-    <main class="flex-1 flex flex-col overflow-hidden px-4 py-4 gap-4">
+    <main class="flex-1 flex flex-col overflow-hidden py-4 gap-4">
       <!-- News List Container -->
       <div class="flex-1 flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">

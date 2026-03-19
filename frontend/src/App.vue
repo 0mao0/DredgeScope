@@ -1,7 +1,7 @@
 <template>
   <a-config-provider :theme="themeConfig">
     <div class="h-screen w-screen overflow-hidden flex flex-col bg-[#0f172a] text-slate-200">
-      <NavBar class="flex-shrink-0 z-50 relative mb-2" />
+      <NavBar class="flex-shrink-0 z-50 relative" />
       <div class="flex-1 overflow-hidden relative min-h-0 w-full">
         <router-view />
       </div>

@@ -258,7 +258,8 @@ def get_ship_tracks(mmsi, days=15):
     conn = sqlite3.connect(TRACK_DB_PATH)
     c = conn.cursor()
     
-    start_time = (datetime.now() - timedelta(days=days)).isoformat()
+    start_dt = datetime.now() - timedelta(days=days)
+    start_time = start_dt.strftime('%Y-%m-%d %H:%M:%S')
     
     try:
         c.execute('''

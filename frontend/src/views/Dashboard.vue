@@ -1,6 +1,6 @@
 <template>
-  <div class="h-full overflow-y-auto custom-scrollbar">
-    <main class="w-full px-4 sm:px-6 lg:px-8 space-y-6 pb-6">
+  <div class="h-full flex flex-col overflow-hidden p-4">
+    <main class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
       <!-- Report Selector -->
       <div class="flex flex-col md:flex-row items-stretch gap-4">
         <div

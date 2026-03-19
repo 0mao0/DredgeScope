@@ -1,8 +1,8 @@
 <template>
-  <div class="h-full flex flex-col overflow-hidden">
+  <div class="h-full flex flex-col overflow-hidden p-4">
     <!-- Top Filter Area -->
     <header
-      class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
+      class="p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
     >
       <div class="flex items-center gap-4 flex-wrap">
         <div
@@ -57,7 +57,7 @@
       </div>
     </header>
 
-    <main class="flex-1 flex overflow-hidden px-4 pb-4 pt-2 gap-4">
+    <main class="flex-1 flex overflow-hidden pb-4 pt-2 gap-4">
       <!-- Zone A: Tree (20%) -->
       <aside
         class="w-1/5 glass-card rounded-xl flex flex-col overflow-hidden border border-white/10"
