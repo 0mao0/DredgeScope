@@ -1113,7 +1113,7 @@ function onTrackPositionChange(mmsi: string, point: TrackPoint | null) {
   if (!map || !point) return
   if (point.lat == null || point.lng == null) return
 
-  const targetZoom = Math.max(currentZoom.value, 18)
+  const targetZoom = Math.max(currentZoom.value, 17)
   const currentCenter = map.getCenter()
   const distance = map.distance(currentCenter, [point.lat, point.lng])
 
