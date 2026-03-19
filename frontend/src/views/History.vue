@@ -1,37 +1,44 @@
 <template>
   <div class="h-full flex flex-col overflow-hidden">
     <!-- Top Filter Area -->
-    <header class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]">
+    <header
+      class="mx-4 p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
+    >
       <div class="flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-3">
-          <div class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
+          <div
+            class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center"
+          >
             总文章数: <span class="text-white font-bold mx-1">{{ total }}</span>
           </div>
-          <div v-if="filters.valid !== null" class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center">
+          <div
+            v-if="filters.valid !== null"
+            class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center"
+          >
             {{ filters.valid === 1 ? '有效' : '无效' }}文章
           </div>
         </div>
       </div>
-      
+
       <div class="flex items-center gap-3 flex-wrap">
         <!-- 搜索 -->
         <div class="relative w-64">
-          <input 
-            v-model="filters.keyword" 
-            type="text" 
-            placeholder="搜索标题/摘要..." 
+          <input
+            v-model="filters.keyword"
+            type="text"
+            placeholder="搜索标题/摘要..."
             class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:border-blue-500 transition-colors text-white placeholder-gray-500"
             @keyup.enter="handleSearch"
           />
-          <i 
+          <i
             class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-gray-500 text-xs cursor-pointer hover:text-blue-400 transition-colors"
             @click="handleSearch"
           ></i>
         </div>
-        
+
         <!-- 有效/无效筛选 -->
-        <a-select 
-          v-model:value="filters.valid" 
+        <a-select
+          v-model:value="filters.valid"
           placeholder="数据状态"
           class="w-32 custom-select"
           @change="handleSearch"
@@ -40,17 +47,17 @@
           <a-select-option :value="1">有效文章</a-select-option>
           <a-select-option :value="0">无效文章</a-select-option>
         </a-select>
-        
+
         <!-- 时间维度 -->
-        <a-range-picker 
-          v-model:value="dateRange" 
+        <a-range-picker
+          v-model:value="dateRange"
           class="w-64 custom-picker"
           format="YYYY-MM-DD"
           @change="handleSearch"
         />
 
-        <button 
-          @click="resetFilters" 
+        <button
+          @click="resetFilters"
           class="h-9 px-4 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex items-center gap-2"
         >
           <i class="fa-solid fa-rotate-right"></i> 重置
@@ -61,90 +68,110 @@
     <main class="flex-1 flex flex-col overflow-hidden px-4 py-4 gap-4">
       <!-- News List Container -->
       <div class="flex-1 flex flex-col overflow-hidden">
-        
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
-            <div v-if="loading" class="flex items-center justify-center h-full">
-                <a-spin />
-            </div>
-            <div v-else-if="articleList.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500">
-                <i class="fa-solid fa-inbox text-4xl opacity-20 mb-2"></i>
-                <span class="text-sm">暂无数据</span>
-            </div>
-            <div v-else class="flex flex-col gap-2">
-                <div 
-                    v-for="article in articleList" 
-                    :key="article.id"
-                    class="bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg p-3 cursor-pointer transition-colors flex flex-col gap-2 group"
-                    @click="openDetail(article)"
+          <div v-if="loading" class="flex items-center justify-center h-full">
+            <a-spin />
+          </div>
+          <div
+            v-else-if="articleList.length === 0"
+            class="flex flex-col items-center justify-center h-full text-gray-500"
+          >
+            <i class="fa-solid fa-inbox text-4xl opacity-20 mb-2"></i>
+            <span class="text-sm">暂无数据</span>
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="article in articleList"
+              :key="article.id"
+              class="bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg p-3 cursor-pointer transition-colors flex flex-col gap-2 group"
+              @click="openDetail(article)"
+            >
+              <!-- Top Row: Title & Valid Status -->
+              <div class="flex justify-between items-start gap-2">
+                <h3
+                  class="text-sm font-medium text-gray-200 group-hover:text-brand-400 transition-colors line-clamp-2 leading-snug"
                 >
-                    <!-- Top Row: Title & Valid Status -->
-                    <div class="flex justify-between items-start gap-2">
-                        <h3 class="text-sm font-medium text-gray-200 group-hover:text-brand-400 transition-colors line-clamp-2 leading-snug">
-                            {{ article.title_cn || article.title }}
-                        </h3>
-                         <span :class="['px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap border', article.valid !== 0 ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20']">
-                            {{ article.valid !== 0 ? '有效' : '失效' }}
-                        </span>
-                    </div>
+                  {{ article.title_cn || article.title }}
+                </h3>
+                <span
+                  :class="[
+                    'px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap border',
+                    article.valid !== 0
+                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                      : 'bg-red-500/10 text-red-400 border-red-500/20',
+                  ]"
+                >
+                  {{ article.valid !== 0 ? '有效' : '失效' }}
+                </span>
+              </div>
 
-                    <!-- Middle Row: Summary -->
-                    <p class="text-xs text-gray-500 line-clamp-2">
-                        {{ article.summary_cn || '暂无摘要' }}
-                    </p>
+              <!-- Middle Row: Summary -->
+              <p class="text-xs text-gray-500 line-clamp-2">
+                {{ article.summary_cn || '暂无摘要' }}
+              </p>
 
-                    <!-- Bottom Row: Meta Info -->
-                    <div class="flex items-center justify-between text-[10px] text-gray-500 mt-1">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <!-- Category -->
-                            <span 
-                                :class="['px-1.5 py-0.5 rounded', getCategoryMeta(article.category).bg, getCategoryMeta(article.category).color]"
-                            >
-                                {{ getCategoryMeta(article.category).name }}
-                            </span>
+              <!-- Bottom Row: Meta Info -->
+              <div class="flex items-center justify-between text-[10px] text-gray-500 mt-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <!-- Category -->
+                  <span
+                    :class="[
+                      'px-1.5 py-0.5 rounded',
+                      getCategoryMeta(article.category).bg,
+                      getCategoryMeta(article.category).color,
+                    ]"
+                  >
+                    {{ getCategoryMeta(article.category).name }}
+                  </span>
 
-                            <!-- Source -->
-                            <span class="text-gray-400 flex items-center gap-1">
-                                <i class="fa-solid fa-globe text-[9px]"></i>
-                                {{ article.source_name || '未知来源' }}
-                            </span>
+                  <!-- Source -->
+                  <span class="text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-globe text-[9px]"></i>
+                    {{ article.source_name || '未知来源' }}
+                  </span>
 
-                            <!-- Date -->
-                            <span class="text-gray-400 flex items-center gap-1">
-                                <i class="fa-regular fa-clock text-[9px]"></i>
-                                {{ formatDateShort(article.pub_date) }}
-                            </span>
-                        </div>
-                        
-                        <!-- Actions -->
-                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <a 
-                                v-if="article.url" 
-                                :href="article.url" 
-                                target="_blank" 
-                                class="p-1.5 rounded hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 transition-colors"
-                                title="查看源网页"
-                                @click.stop
-                            >
-                                <i class="fa-solid fa-external-link-alt"></i>
-                            </a>
-                        </div>
-                    </div>
+                  <!-- Date -->
+                  <span class="text-gray-400 flex items-center gap-1">
+                    <i class="fa-regular fa-clock text-[9px]"></i>
+                    {{ formatDateShort(article.pub_date) }}
+                  </span>
                 </div>
+
+                <!-- Actions -->
+                <div
+                  class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <a
+                    v-if="article.url"
+                    :href="article.url"
+                    target="_blank"
+                    class="p-1.5 rounded hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 transition-colors"
+                    title="查看源网页"
+                    @click.stop
+                  >
+                    <i class="fa-solid fa-external-link-alt"></i>
+                  </a>
+                </div>
+              </div>
             </div>
+          </div>
         </div>
-        
+
         <!-- Pagination -->
         <div class="p-3 border-t border-white/5 flex items-center justify-between bg-white/5">
-           <button 
-            :disabled="filters.page <= 1" 
+          <button
+            :disabled="filters.page <= 1"
             @click="changePage(filters.page - 1)"
             class="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10 text-xs text-gray-300 disabled:opacity-30 disabled:hover:bg-white/5 transition-colors flex items-center gap-1"
           >
             <i class="fa-solid fa-chevron-left"></i> 上一页
           </button>
-          <span class="text-xs text-gray-400">第 <span class="text-white font-mono">{{ filters.page }}</span> / {{ maxPage }} 页</span>
-          <button 
-            :disabled="filters.page >= maxPage" 
+          <span class="text-xs text-gray-400"
+            >第 <span class="text-white font-mono">{{ filters.page }}</span> /
+            {{ maxPage }} 页</span
+          >
+          <button
+            :disabled="filters.page >= maxPage"
             @click="changePage(filters.page + 1)"
             class="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10 text-xs text-gray-300 disabled:opacity-30 disabled:hover:bg-white/5 transition-colors flex items-center gap-1"
           >
@@ -166,13 +193,30 @@
       <div class="max-h-[70vh] overflow-y-auto custom-scrollbar">
         <!-- Tags -->
         <div class="flex flex-wrap gap-2 mb-4">
-          <span :class="['px-2 py-1 rounded-full text-xs', getCategoryMeta(currentArticle?.category).bg, getCategoryMeta(currentArticle?.category).color, 'border', getCategoryMeta(currentArticle?.category).border]">
+          <span
+            :class="[
+              'px-2 py-1 rounded-full text-xs',
+              getCategoryMeta(currentArticle?.category).bg,
+              getCategoryMeta(currentArticle?.category).color,
+              'border',
+              getCategoryMeta(currentArticle?.category).border,
+            ]"
+          >
             {{ getCategoryMeta(currentArticle?.category).name }}
           </span>
-          <span v-if="currentArticle?.source_name" class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10">
-            {{ currentArticle.source_name.length > 5 ? currentArticle.source_name.slice(0, 5) : currentArticle.source_name }}
+          <span
+            v-if="currentArticle?.source_name"
+            class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10"
+          >
+            {{
+              currentArticle.source_name.length > 5
+                ? currentArticle.source_name.slice(0, 5)
+                : currentArticle.source_name
+            }}
           </span>
-          <span class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1">
+          <span
+            class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1"
+          >
             <i class="fa-solid fa-clock"></i>
             发布时间: {{ currentArticle?.pub_date || '未知' }}
           </span>
@@ -187,7 +231,11 @@
 
         <!-- Image -->
         <div v-if="currentArticle?.screenshot_path" class="mt-6 group relative cursor-pointer">
-          <img :src="currentArticle.screenshot_path" alt="Screenshot" class="w-full rounded-lg border border-slate-700 shadow-lg">
+          <img
+            :src="currentArticle.screenshot_path"
+            alt="Screenshot"
+            class="w-full rounded-lg border border-slate-700 shadow-lg"
+          />
         </div>
 
         <!-- Translation -->
@@ -204,15 +252,25 @@
             <i class="fa-solid fa-robot"></i> AI 分析过程
           </h4>
           <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen2.5 纯文字解析：</span>
-            <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+              >Qwen2.5 纯文字解析：</span
+            >
+            <p class="text-gray-200 text-sm leading-relaxed">
+              {{ currentArticle?.summary_cn || '暂无摘要' }}
+            </p>
           </div>
           <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3.5 多模态识别</span>
-            <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+              >Qwen3.5 多模态识别</span
+            >
+            <p class="text-gray-300 text-sm leading-relaxed italic">
+              {{ currentArticle?.vl_desc || '暂无描述' }}
+            </p>
           </div>
           <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">关键字段提取：</span>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2"
+              >关键字段提取：</span
+            >
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div v-if="currentArticle.details.project_name" class="flex gap-2">
                 <span class="text-gray-500">项目名称:</span>
@@ -232,7 +290,10 @@
               </div>
               <div v-if="currentArticle.details.amount" class="flex gap-2">
                 <span class="text-gray-500">金额:</span>
-                <span class="text-gray-300">{{ currentArticle.details.amount }} {{ currentArticle.details.currency || '' }}</span>
+                <span class="text-gray-300"
+                  >{{ currentArticle.details.amount }}
+                  {{ currentArticle.details.currency || '' }}</span
+                >
               </div>
               <div v-if="currentArticle.details.event_type" class="flex gap-2">
                 <span class="text-gray-500">事件类型:</span>
@@ -261,7 +322,11 @@
 
       <!-- Footer -->
       <div class="mt-4 flex justify-end gap-3">
-        <a :href="currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
+        <a
+          :href="currentArticle?.url || '#'"
+          target="_blank"
+          class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2"
+        >
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
         <a-button @click="detailVisible = false" class="h-9">
@@ -291,7 +356,7 @@ const filters = reactive({
   valid: null, // 默认显示全部文章
   category: null as string | null,
   start: '',
-  end: ''
+  end: '',
 })
 
 const dateRange = ref<[Dayjs, Dayjs]>()
@@ -315,11 +380,10 @@ const openDetail = (article: NewsItem) => {
     // 兼容 dashboard 样式的类名
     const customScroll = document.querySelector('.detail-modal .custom-scrollbar')
     if (customScroll) {
-        customScroll.scrollTop = 0
+      customScroll.scrollTop = 0
     }
   }, 100)
 }
-
 
 // --- 辅助函数 ---
 const formatDateShort = (dateStr: string | undefined) => {
@@ -328,13 +392,55 @@ const formatDateShort = (dateStr: string | undefined) => {
 }
 
 const categories = {
-  Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  Bid: { name: '中标信息', icon: 'fa-gavel', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  Project: { name: '项目信息', icon: 'fa-building', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-  Equipment: { name: '设备修造', icon: 'fa-gears', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  'R&D': { name: '科技研发', icon: 'fa-flask', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-  Other: { name: '其他信息', icon: 'fa-circle-info', color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/20' }
+  Market: {
+    name: '市场动态',
+    icon: 'fa-chart-line',
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+  },
+  Bid: {
+    name: '中标信息',
+    icon: 'fa-gavel',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/10',
+    border: 'border-yellow-500/20',
+  },
+  Project: {
+    name: '项目信息',
+    icon: 'fa-building',
+    color: 'text-green-400',
+    bg: 'bg-green-500/10',
+    border: 'border-green-500/20',
+  },
+  Equipment: {
+    name: '设备修造',
+    icon: 'fa-gears',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10',
+    border: 'border-orange-500/20',
+  },
+  'R&D': {
+    name: '科技研发',
+    icon: 'fa-flask',
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/20',
+  },
+  Regulation: {
+    name: '技术法规',
+    icon: 'fa-scale-balanced',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/20',
+  },
+  Other: {
+    name: '其他信息',
+    icon: 'fa-circle-info',
+    color: 'text-gray-400',
+    bg: 'bg-gray-500/10',
+    border: 'border-gray-500/20',
+  },
 }
 
 const getCategoryMeta = (category: string | undefined) => {
@@ -352,15 +458,13 @@ const fetchArticles = async () => {
       page_size: filters.page_size,
       keyword: filters.keyword,
       start: filters.start,
-      end: filters.end
+      end: filters.end,
     }
 
     // 如果 valid 不为 null (全部)，则传递 valid 参数
     if (filters.valid !== null) {
       params.valid = filters.valid
     }
-
-
 
     const res = await axios.get('/api/articles', { params })
     articleList.value = res.data.items

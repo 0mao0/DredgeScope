@@ -67,13 +67,13 @@ export const useNewsStore = defineStore('news', () => {
     Project: { name: '项目信息', icon: 'fa-building', color: '#22c55e' },
     Equipment: { name: '设备修造', icon: 'fa-gears', color: '#f97316' },
     'R&D': { name: '科技研发', icon: 'fa-flask', color: '#a855f7' },
-    Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: '#ef4444' }
+    Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: '#ef4444' },
   })
 
   const groupedNews = computed(() => {
     const grouped: Record<string, NewsItem[]> = {}
     for (const key in categories.value) {
-      grouped[key] = newsList.value.filter(item => item.category === key)
+      grouped[key] = newsList.value.filter((item) => item.category === key)
     }
     return grouped
   })
@@ -96,7 +96,8 @@ export const useNewsStore = defineStore('news', () => {
       const data = await response.json()
       newsList.value = data.events || []
       // 优先使用 total_count（数据库所有文章总数），否则使用当前时间段数量
-      historyTotal.value = data.total_count || data.count || data.article_count || data.event_count || 0
+      historyTotal.value =
+        data.total_count || data.count || data.article_count || data.event_count || 0
     } catch (error) {
       console.error('Failed to fetch news:', error)
     } finally {
@@ -117,7 +118,7 @@ export const useNewsStore = defineStore('news', () => {
     categories,
     groupedNews,
     fetchNews,
-    setCurrentNews
+    setCurrentNews,
   }
 })
 
@@ -128,9 +129,9 @@ export const useVesselStore = defineStore('vessel', () => {
   const totalCount = ref(0)
 
   const vesselsByStatus = computed(() => ({
-    dredging: vessels.value.filter(v => v.status === 'dredging').length,
-    underway: vessels.value.filter(v => v.status === 'underway').length,
-    moored: vessels.value.filter(v => v.status === 'moored').length
+    dredging: vessels.value.filter((v) => v.status === 'dredging').length,
+    underway: vessels.value.filter((v) => v.status === 'underway').length,
+    moored: vessels.value.filter((v) => v.status === 'moored').length,
   }))
 
   async function fetchVessels() {
@@ -161,6 +162,6 @@ export const useVesselStore = defineStore('vessel', () => {
     trackedCount,
     totalCount,
     vesselsByStatus,
-    fetchVessels
+    fetchVessels,
   }
 })

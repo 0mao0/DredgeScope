@@ -3,66 +3,101 @@
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden relative min-h-0">
       <!-- Sidebar -->
-      <aside 
+      <aside
         class="glass-card flex flex-col overflow-hidden transition-all duration-300 z-10 flex-shrink-0 transform vessel-sidebar"
         :class="sidebarOpen ? 'w-64 translate-x-0 m-4 mr-0' : 'w-0 -translate-x-full m-0'"
       >
         <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
           <h2 class="font-bold text-lg">船舶列表</h2>
-          <button @click="sidebarOpen = false" class="text-gray-400 hover:text-white cursor-pointer relative z-50 p-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+          <button
+            @click="sidebarOpen = false"
+            class="text-gray-400 hover:text-white cursor-pointer relative z-50 p-1"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
             </svg>
           </button>
         </div>
-        
+
         <!-- Search Box -->
         <div class="p-4 border-b border-white/10">
           <div class="relative">
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="搜索船舶名称/MMSI..." 
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索船舶名称/MMSI..."
               class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
             />
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute right-3 top-2.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4 absolute right-3 top-2.5 text-gray-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
           </div>
         </div>
 
         <!-- Vessel Tree -->
         <div class="flex-1 overflow-y-auto custom-scrollbar">
-          <div v-if="loading" class="p-4 text-center text-gray-400">
-            加载中...
-          </div>
-          <div v-else-if="Object.keys(groupedVessels).length === 0" class="p-4 text-center text-gray-400">
+          <div v-if="loading" class="p-4 text-center text-gray-400">加载中...</div>
+          <div
+            v-else-if="Object.keys(groupedVessels).length === 0"
+            class="p-4 text-center text-gray-400"
+          >
             无匹配船舶
           </div>
-          
+
           <a-collapse v-else v-model:activeKey="activeKeys" ghost expand-icon-position="right">
-            <a-collapse-panel 
-              v-for="(group, company) in groupedVessels" 
-              :key="company" 
+            <a-collapse-panel
+              v-for="(group, company) in groupedVessels"
+              :key="company"
               :header="`${company || '未知船队'} (${group.length})`"
               class="vessel-group"
             >
               <div class="flex flex-col gap-1">
-                <div 
-                  v-for="vessel in group" 
+                <div
+                  v-for="vessel in group"
                   :key="vessel.id"
                   class="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer transition-colors group"
                   :class="{ 'bg-blue-500/10': selectedVesselId === vessel.id }"
                   @click="handleVesselClick(vessel)"
                 >
                   <div class="flex items-center gap-2 overflow-hidden">
-                    <div 
+                    <div
                       class="w-2 h-2 rounded-full flex-shrink-0"
-                      :style="{ backgroundColor: getStatusColor(vessel), boxShadow: `0 0 8px ${getStatusColor(vessel)}` }"
+                      :style="{
+                        backgroundColor: getStatusColor(vessel),
+                        boxShadow: `0 0 8px ${getStatusColor(vessel)}`,
+                      }"
                     ></div>
-                    <span class="text-sm truncate" :style="getStatusTextStyle(vessel)" :title="vessel.name">{{ vessel.name }}</span>
+                    <span
+                      class="text-sm truncate"
+                      :style="getStatusTextStyle(vessel)"
+                      :title="vessel.name"
+                      >{{ vessel.name }}</span
+                    >
                   </div>
-                  <div class="flex items-center gap-2 text-xs font-mono" :style="getStatusTextStyle(vessel)">
+                  <div
+                    class="flex items-center gap-2 text-xs font-mono"
+                    :style="getStatusTextStyle(vessel)"
+                  >
                     <span>{{ formatSpeed(vessel.speed) }}</span>
                   </div>
                 </div>
@@ -71,15 +106,26 @@
           </a-collapse>
         </div>
       </aside>
-      
+
       <!-- Toggle Sidebar Button (When closed) -->
-      <div 
+      <div
         v-if="!sidebarOpen"
         class="absolute top-8 left-4 z-20 glass-card p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors vessel-sidebar-toggle"
         @click="sidebarOpen = true"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-6 w-6 text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h16"
+          />
         </svg>
       </div>
 
@@ -91,7 +137,7 @@
           <!-- Map Source Selector (Icon Based) -->
           <div class="absolute bottom-8 left-4 z-[1000] flex flex-col-reverse gap-2">
             <!-- Main Toggle Button -->
-            <button 
+            <button
               class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white shadow-lg border border-white/10"
               title="切换地图源"
               @click="showMapSourceMenu = !showMapSourceMenu"
@@ -100,11 +146,11 @@
             </button>
 
             <!-- Popup Menu -->
-            <div 
+            <div
               v-if="showMapSourceMenu"
               class="glass-card rounded-lg p-1 flex flex-col gap-1 shadow-lg border border-white/10 w-32 mb-1"
             >
-              <button 
+              <button
                 class="px-3 py-2 text-left text-xs sm:text-sm rounded hover:bg-white/10 transition-colors flex items-center gap-2"
                 :class="{ 'bg-blue-500/20 text-blue-300': mapSource === 'tianditu' }"
                 @click="selectMapSource('tianditu')"
@@ -112,7 +158,7 @@
                 <i class="fa-solid fa-map w-4 text-center"></i>
                 <span>天地图</span>
               </button>
-              <button 
+              <button
                 class="px-3 py-2 text-left text-xs sm:text-sm rounded hover:bg-white/10 transition-colors flex items-center gap-2"
                 :class="{ 'bg-blue-500/20 text-blue-300': mapSource === 'arcgis' }"
                 @click="selectMapSource('arcgis')"
@@ -124,143 +170,133 @@
           </div>
 
           <!-- Status Legend -->
-          <div class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm">
-          <div class="flex flex-wrap gap-x-4 gap-y-1">
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span class="text-gray-400">监控</span>
-              <span class="text-white font-bold" title="配置了MMSI的船舶数量">{{ stats.active }}</span>
+          <div
+            class="absolute top-4 right-4 z-[1000] glass-card px-3 py-2 rounded-xl flex flex-col gap-1 text-xs sm:text-sm"
+          >
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span class="text-gray-400">监控</span>
+                <span class="text-white font-bold" title="配置了MMSI的船舶数量">{{
+                  stats.active
+                }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span class="text-gray-400">总计</span>
+                <span class="text-white font-bold">{{ stats.total }}</span>
+              </div>
             </div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span class="text-gray-400">总计</span>
-              <span class="text-white font-bold">{{ stats.total }}</span>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/10 pt-1">
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span
+                  class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]"
+                  :style="{ backgroundColor: statusColors.dredging }"
+                ></span>
+                <span class="text-gray-300">施工中</span>
+                <span class="text-blue-400 font-mono">{{ stats.dredging }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span
+                  class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                  :style="{ backgroundColor: statusColors.underway }"
+                ></span>
+                <span class="text-gray-300">航行中</span>
+                <span class="text-green-400 font-mono">{{ stats.underway }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span
+                  class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                  :style="{ backgroundColor: statusColors.moored }"
+                ></span>
+                <span class="text-gray-300">停泊</span>
+                <span class="text-red-400 font-mono">{{ stats.moored }}</span>
+              </div>
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span
+                  class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(107,114,128,0.6)]"
+                  :style="{ backgroundColor: statusColors.offline }"
+                ></span>
+                <span class="text-gray-300">离线</span>
+                <span class="text-gray-400 font-mono">{{ stats.offline }}</span>
+              </div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/10 pt-1">
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span 
-                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]"
-                :style="{ backgroundColor: statusColors.dredging }"
-              ></span>
-              <span class="text-gray-300">施工中</span>
-              <span class="text-blue-400 font-mono">{{ stats.dredging }}</span>
-            </div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span 
-                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                :style="{ backgroundColor: statusColors.underway }"
-              ></span>
-              <span class="text-gray-300">航行中</span>
-              <span class="text-green-400 font-mono">{{ stats.underway }}</span>
-            </div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span 
-                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-                :style="{ backgroundColor: statusColors.moored }"
-              ></span>
-              <span class="text-gray-300">停泊</span>
-              <span class="text-red-400 font-mono">{{ stats.moored }}</span>
-            </div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <span 
-                class="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-[0_0_8px_rgba(107,114,128,0.6)]"
-                :style="{ backgroundColor: statusColors.offline }"
-              ></span>
-              <span class="text-gray-300">离线</span>
-              <span class="text-gray-400 font-mono">{{ stats.offline }}</span>
-            </div>
-          </div>
-        </div>
-        
+
           <!-- Map Tools -->
           <div class="absolute bottom-8 right-4 z-[1000] flex flex-col gap-2">
-          <button 
-            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
-            title="刷新数据"
-            @click="fetchVessels"
-          >
-            <i class="fa-solid fa-rotate" :class="{ 'fa-spin': loading }"></i>
-          </button>
-          <button 
-            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
-            title="复位"
-            @click="resetView"
-          >
-            <i class="fa-solid fa-house"></i>
-          </button>
-          <button 
-            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
-            title="清空轨迹"
-            @click="clearAllTracks"
-          >
-            <i class="fa-solid fa-trash"></i>
-          </button>
-          <button 
-            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
-            :class="{ '!bg-blue-600/50': isPickingPoint }"
-            title="点位置"
-            @click="togglePickPoint"
-          >
-            <i class="fa-solid fa-location-dot"></i>
-          </button>
-          <button 
-            class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
-            :class="{ '!bg-blue-600/50': isMeasuring }"
-            title="测距"
-            @click="toggleMeasure"
-          >
-            <i class="fa-solid fa-ruler-horizontal"></i>
-          </button>
+            <button
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              title="刷新数据"
+              @click="fetchVessels"
+            >
+              <i class="fa-solid fa-rotate" :class="{ 'fa-spin': loading }"></i>
+            </button>
+            <button
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              title="复位"
+              @click="resetView"
+            >
+              <i class="fa-solid fa-house"></i>
+            </button>
+            <button
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              title="清空轨迹"
+              @click="clearAllTracks"
+            >
+              <i class="fa-solid fa-trash"></i>
+            </button>
+            <button
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              :class="{ '!bg-blue-600/50': isPickingPoint }"
+              title="点位置"
+              @click="togglePickPoint"
+            >
+              <i class="fa-solid fa-location-dot"></i>
+            </button>
+            <button
+              class="w-10 h-10 glass-card rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors text-white"
+              :class="{ '!bg-blue-600/50': isMeasuring }"
+              title="测距"
+              @click="toggleMeasure"
+            >
+              <i class="fa-solid fa-ruler-horizontal"></i>
+            </button>
           </div>
         </div>
 
-        <div v-if="trackDisplayList.length" ref="trackListRef" class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 max-h-[280px] flex flex-col overflow-hidden">
-          <div class="flex-1 overflow-y-auto custom-scrollbar">
+        <div
+          v-if="trackDisplayList.length"
+          ref="trackListRef"
+          class="border-t border-white/10 bg-white/5 p-3 text-xs text-gray-300 flex flex-col overflow-hidden"
+        >
+          <div class="flex-1 overflow-hidden flex flex-col">
             <div class="flex flex-col gap-3">
-              <div v-for="item in trackDisplayList" :key="item.mmsi" class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col max-h-[220px]">
+              <div
+                v-for="item in trackDisplayList"
+                :key="item.mmsi"
+                class="rounded-lg border border-white/10 bg-white/5 p-2 flex flex-col"
+              >
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: item.color }"></span>
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      :style="{ backgroundColor: item.color }"
+                    ></span>
                     <span class="font-semibold text-gray-200">{{ item.name }}</span>
                     <span class="text-gray-500 font-mono">MMSI {{ item.mmsi }}</span>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-[10px] text-gray-400">时间范围:</span>
-                    <select 
-                      :value="getTrackDays(item.mmsi)" 
-                      @change="(e) => onTrackDaysChange(item.mmsi, Number((e.target as HTMLSelectElement).value))"
-                      class="bg-slate-800/50 border border-white/10 rounded px-2 py-0.5 text-[11px] text-gray-300 focus:outline-none focus:border-blue-500"
-                    >
-                      <option v-for="opt in trackDaysOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                    </select>
+                  <div class="text-xs text-gray-400">
+                    <span>轨迹点数:</span>
+                    <span class="ml-1 text-gray-300">{{ getTrackPoints(item.mmsi).length }}</span>
                   </div>
                 </div>
-                <div v-if="getTrackPage(item.mmsi).length === 0" class="text-gray-400 text-center py-4">暂无轨迹点</div>
-                <div v-else class="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
-                  <div class="grid grid-cols-[40px_1fr_1fr_1fr_60px] gap-2 text-[11px] text-gray-500 border-b border-white/10 pb-1 text-center">
-                    <span class="text-center">序号</span>
-                    <span class="text-center">时间</span>
-                    <span class="text-center">位置</span>
-                    <span class="text-center">拉取时间</span>
-                    <span class="text-center">状态</span>
-                  </div>
-                  <div v-for="(p, idx) in getTrackPage(item.mmsi)" :key="`${p.timestamp}-${p.created_at}-${idx}`" class="grid grid-cols-[40px_1fr_1fr_1fr_60px] gap-2 items-center text-center">
-                    <span class="text-gray-500 text-center">#{{ getTrackRowIndex(item.mmsi, idx) }}</span>
-                    <span class="text-gray-400 text-center">{{ formatTrackTime(p.timestamp) }}</span>
-                    <span class="font-mono text-center">{{ formatTrackCoord(p.lat) }}, {{ formatTrackCoord(p.lng) }}</span>
-                    <span class="text-gray-500 text-center">{{ formatTrackTime(p.created_at) }}</span>
-                    <span class="text-center">
-                      <span 
-                        class="text-[10px] px-1.5 py-0.5 rounded"
-                        :class="getTrackStatusClass(p.status)"
-                      >{{ getTrackStatusText(p.status) }}</span>
-                    </span>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between mt-2">
-                  <button class="px-2 py-1 rounded bg-white/10 hover:bg-white/20" @click="prevTrackPage(item.mmsi)" :disabled="getTrackPageIndex(item.mmsi) <= 1">上一页</button>
-                  <span class="text-gray-400">{{ getTrackPageIndex(item.mmsi) }}/{{ getTrackTotalPages(item.mmsi) }}</span>
-                  <button class="px-2 py-1 rounded bg-white/10 hover:bg-white/20" @click="nextTrackPage(item.mmsi)" :disabled="getTrackPageIndex(item.mmsi) >= getTrackTotalPages(item.mmsi)">下一页</button>
-                </div>
+                <ShipTrackProgress
+                  v-if="getTrackPoints(item.mmsi).length > 0"
+                  :points="getTrackPoints(item.mmsi)"
+                  :model-value="{ days: getTrackDays(item.mmsi) }"
+                  @time-change="(days) => onTrackDaysChange(item.mmsi, days)"
+                  @position-change="(point) => onTrackPositionChange(item.mmsi, point)"
+                />
+                <div v-else class="text-gray-400 text-center py-8">暂无轨迹点</div>
               </div>
             </div>
           </div>
@@ -276,6 +312,7 @@ import { message } from 'ant-design-vue'
 import L from 'leaflet'
 import type { LeafletMouseEvent } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import ShipTrackProgress from '@/components/ShipTrackProgress.vue'
 
 interface Vessel {
   id: string
@@ -308,19 +345,27 @@ let currentBaseLayers: L.TileLayer[] = []
 
 // Fleet colors mapping
 const fleetColors: Record<string, string> = {
-  '上航局': '#3b82f6', // Blue
-  '天航局': '#3b82f6', // Blue
-  '广航局': '#3b82f6', // Blue
-  'Boskalis': '#f97316', // Orange
-  'DEME': '#22c55e', // Green
-  'JanDeNUL': '#eab308', // Yellow
-  'NMDC': '#a855f7', // Purple
-  'VanOORD': '#ec4899', // Pink
-  '其他': '#9ca3af' // Gray
+  上航局: '#3b82f6', // Blue
+  天航局: '#3b82f6', // Blue
+  广航局: '#3b82f6', // Blue
+  Boskalis: '#f97316', // Orange
+  DEME: '#22c55e', // Green
+  JanDeNUL: '#eab308', // Yellow
+  NMDC: '#a855f7', // Purple
+  VanOORD: '#ec4899', // Pink
+  其他: '#9ca3af', // Gray
 }
 
-const fleetSortOrder = ['上航局', '天航局', '广航局', 'Boskalis', 'DEME', 'JanDeNUL', 'NMDC', 'VanOORD']
-
+const fleetSortOrder = [
+  '上航局',
+  '天航局',
+  '广航局',
+  'Boskalis',
+  'DEME',
+  'JanDeNUL',
+  'NMDC',
+  'VanOORD',
+]
 
 const vessels = ref<Vessel[]>([])
 const searchQuery = ref('')
@@ -330,7 +375,7 @@ const stats = ref({
   underway: 0,
   dredging: 0,
   moored: 0,
-  offline: 0
+  offline: 0,
 })
 
 const statusColors: Record<string, string> = {
@@ -338,7 +383,7 @@ const statusColors: Record<string, string> = {
   underway: '#22c55e',
   moored: '#ef4444',
   offline: '#6b7280',
-  untracked: '#6b7280'
+  untracked: '#6b7280',
 }
 
 const currentZoom = ref(3)
@@ -346,10 +391,21 @@ let vesselLayerGroup: L.LayerGroup | null = null
 let tagLayerGroup: L.LayerGroup | null = null
 const vesselMarkerMap = new Map<string, L.Marker>()
 let trackLayerGroup: L.LayerGroup | null = null
-const trackLayerMap = new Map<string, { line: L.Polyline, points: L.LayerGroup, color: string }>()
+const trackLayerMap = new Map<string, { line: L.Polyline; points: L.LayerGroup; color: string }>()
 const trackOrder = ref<string[]>([])
 const maxTrackCount = 10
-const trackColors = ['#3b82f6', '#22c55e', '#f97316', '#eab308', '#a855f7', '#ec4899', '#ef4444', '#14b8a6', '#38bdf8', '#f472b6']
+const trackColors = [
+  '#3b82f6',
+  '#22c55e',
+  '#f97316',
+  '#eab308',
+  '#a855f7',
+  '#ec4899',
+  '#ef4444',
+  '#14b8a6',
+  '#38bdf8',
+  '#f472b6',
+]
 const mapZoomDuration = 3
 const trackListRef = ref<HTMLDivElement | null>(null)
 
@@ -373,24 +429,24 @@ const trackStates = ref<Record<string, TrackState>>({})
 const trackDaysOptions = [
   { label: '1天', value: 1 },
   { label: '3天', value: 3 },
-  { label: '7天', value: 7 },
-  { label: '15天', value: 15 }
+  { label: '5天', value: 5 },
+  { label: '10天', value: 10 },
 ]
 const selectedTrackMmsi = computed(() => {
   if (!selectedVesselId.value) return null
-  const vessel = vessels.value.find(v => v.id === selectedVesselId.value)
+  const vessel = vessels.value.find((v) => v.id === selectedVesselId.value)
   return vessel?.mmsi || null
 })
 
 const trackDisplayList = computed(() => {
   const target = selectedTrackMmsi.value
-  const list = target ? trackOrder.value.filter(mmsi => mmsi === target) : []
+  const list = target ? trackOrder.value.filter((mmsi) => mmsi === target) : []
   return list.map((mmsi, index) => {
-    const vessel = vessels.value.find(v => v.mmsi === mmsi)
+    const vessel = vessels.value.find((v) => v.mmsi === mmsi)
     return {
       mmsi,
       name: vessel?.name || '未知船舶',
-      color: trackLayerMap.get(mmsi)?.color || trackColors[index % trackColors.length]
+      color: trackLayerMap.get(mmsi)?.color || trackColors[index % trackColors.length],
     }
   })
 })
@@ -406,52 +462,52 @@ let measureHintTooltip: L.Tooltip | null = null
 // Group vessels by company
 const groupedVessels = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
-  const filtered = vessels.value.filter(v => {
+  const filtered = vessels.value.filter((v) => {
     if (!query) return true
     const name = String(v.name || '').toLowerCase()
     const mmsi = String(v.mmsi || '')
     const company = String(v.company || '').toLowerCase()
     return name.includes(query) || mmsi.includes(query) || company.includes(query)
   })
-  
+
   const groups: Record<string, Vessel[]> = {}
-  filtered.forEach(v => {
+  filtered.forEach((v) => {
     const company = v.company || '其他'
     if (!groups[company]) {
       groups[company] = []
     }
     groups[company].push(v)
   })
-  
+
   // Sort companies by custom order
   const sortedKeys = Object.keys(groups).sort((a, b) => {
     const indexA = fleetSortOrder.indexOf(a)
     const indexB = fleetSortOrder.indexOf(b)
-    
+
     // Both in list
     if (indexA !== -1 && indexB !== -1) return indexA - indexB
     // A in list, B not
     if (indexA !== -1) return -1
     // B in list, A not
     if (indexB !== -1) return 1
-    
+
     // Special case for '其他' (Others) - always last
     if (a === '其他') return 1
     if (b === '其他') return -1
-    
+
     // Both not in list - alphabetical
     return a.localeCompare(b)
   })
-  
+
   const sortedGroups: Record<string, Vessel[]> = {}
-  sortedKeys.forEach(k => {
+  sortedKeys.forEach((k) => {
     sortedGroups[k] = groups[k].sort((a, b) => {
       const rankDiff = getVesselSortRank(a) - getVesselSortRank(b)
       if (rankDiff !== 0) return rankDiff
       return a.name.localeCompare(b.name)
     })
   })
-  
+
   return sortedGroups
 })
 
@@ -525,25 +581,35 @@ function formatSpeed(value: number | undefined): string {
 function mapStatusToIconKey(status: string | undefined): string {
   if (!status) return 'offline'
   const s = status.toLowerCase().trim()
-  
+
   // Exact matches
   if (s === 'dredging') return 'dredging'
   if (s === 'underway using engine' || s === 'underway') return 'underway'
   if (s === 'moored' || s === 'at anchor') return 'moored'
   if (s === 'stopped') return 'moored'
   if (s === 'offline' || s === 'unknown') return 'offline'
-  
+
   // Keyword matching (Chinese & English)
-  if (s.includes('施工') || s.includes('作业') || s.includes('疏浚') || s.includes('dredging')) return 'dredging'
+  if (s.includes('施工') || s.includes('作业') || s.includes('疏浚') || s.includes('dredging'))
+    return 'dredging'
   if (s.includes('操纵能力受限') || s.includes('restricted maneuverability')) return 'dredging'
-  
+
   if (s.includes('机动船在航') || s.includes('underway') || s.includes('moving')) return 'underway'
   if (s.includes('调遣')) return 'underway'
-  
-  if (s.includes('锚泊') || s.includes('系泊') || s.includes('停泊') || s.includes('停靠') || s.includes('抛锚') || s.includes('moored') || s.includes('anchor')) return 'moored'
-  
+
+  if (
+    s.includes('锚泊') ||
+    s.includes('系泊') ||
+    s.includes('停泊') ||
+    s.includes('停靠') ||
+    s.includes('抛锚') ||
+    s.includes('moored') ||
+    s.includes('anchor')
+  )
+    return 'moored'
+
   if (s.includes('离线') || s.includes('offline')) return 'offline'
-  
+
   return 'offline'
 }
 
@@ -594,14 +660,14 @@ function translateStatusByKey(key: keyof typeof statusColors): string {
 function translateContinent(en: string | undefined): string {
   if (!en) return ''
   const map: Record<string, string> = {
-    'Asia': '亚洲',
-    'Europe': '欧洲',
-    'Africa': '非洲',
+    Asia: '亚洲',
+    Europe: '欧洲',
+    Africa: '非洲',
     'North America': '北美洲',
     'South America': '南美洲',
-    'Oceania': '大洋洲',
-    'Antarctica': '南极洲',
-    'Unknown': ''
+    Oceania: '大洋洲',
+    Antarctica: '南极洲',
+    Unknown: '',
   }
   return map[en] || en
 }
@@ -609,25 +675,47 @@ function translateContinent(en: string | undefined): string {
 function translateCountry(en: string | undefined): string {
   if (!en) return ''
   const map: Record<string, string> = {
-    'China': '中国', 'CN': '中国',
-    'United States': '美国', 'US': '美国', 'USA': '美国',
-    'Netherlands': '荷兰', 'NL': '荷兰',
-    'Singapore': '新加坡', 'SG': '新加坡',
-    'Malaysia': '马来西亚', 'MY': '马来西亚',
-    'Japan': '日本', 'JP': '日本',
-    'Korea': '韩国', 'KR': '韩国', 'South Korea': '韩国',
-    'Australia': '澳大利亚', 'AU': '澳大利亚',
-    'United Kingdom': '英国', 'UK': '英国', 'GB': '英国',
-    'Germany': '德国', 'DE': '德国',
-    'France': '法国', 'FR': '法国',
-    'Indonesia': '印度尼西亚', 'ID': '印度尼西亚',
-    'India': '印度', 'IN': '印度',
-    'Russia': '俄罗斯', 'RU': '俄罗斯',
-    'Saudi Arabia': '沙特阿拉伯', 'SA': '沙特阿拉伯',
-    'United Arab Emirates': '阿联酋', 'AE': '阿联酋',
-    'Brazil': '巴西', 'BR': '巴西',
-    'Vietnam': '越南', 'VN': '越南',
-    'Philippines': '菲律宾', 'PH': '菲律宾'
+    China: '中国',
+    CN: '中国',
+    'United States': '美国',
+    US: '美国',
+    USA: '美国',
+    Netherlands: '荷兰',
+    NL: '荷兰',
+    Singapore: '新加坡',
+    SG: '新加坡',
+    Malaysia: '马来西亚',
+    MY: '马来西亚',
+    Japan: '日本',
+    JP: '日本',
+    Korea: '韩国',
+    KR: '韩国',
+    'South Korea': '韩国',
+    Australia: '澳大利亚',
+    AU: '澳大利亚',
+    'United Kingdom': '英国',
+    UK: '英国',
+    GB: '英国',
+    Germany: '德国',
+    DE: '德国',
+    France: '法国',
+    FR: '法国',
+    Indonesia: '印度尼西亚',
+    ID: '印度尼西亚',
+    India: '印度',
+    IN: '印度',
+    Russia: '俄罗斯',
+    RU: '俄罗斯',
+    'Saudi Arabia': '沙特阿拉伯',
+    SA: '沙特阿拉伯',
+    'United Arab Emirates': '阿联酋',
+    AE: '阿联酋',
+    Brazil: '巴西',
+    BR: '巴西',
+    Vietnam: '越南',
+    VN: '越南',
+    Philippines: '菲律宾',
+    PH: '菲律宾',
   }
   return map[en] || en
 }
@@ -655,7 +743,7 @@ function createIcon(color: string) {
     html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 12px ${color}; border: 2px solid white;"></div>`,
     iconSize: [12, 12],
     iconAnchor: [6, 6],
-    popupAnchor: [0, -6]
+    popupAnchor: [0, -6],
   })
 }
 
@@ -681,7 +769,7 @@ function togglePickPoint() {
 function toggleMeasure() {
   isMeasuring.value = !isMeasuring.value
   isPickingPoint.value = false
-  
+
   if (!isMeasuring.value) {
     // Clear measurement
     if (measureLayerGroup) measureLayerGroup.clearLayers()
@@ -697,49 +785,48 @@ function toggleMeasure() {
 
 function onMapClick(e: LeafletMouseEvent) {
   const latlng = e.latlng
-  
+
   if (isPickingPoint.value) {
     const text = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`
     navigator.clipboard.writeText(text)
     togglePickPoint()
     return
   }
-  
+
   if (isMeasuring.value) {
     measurePoints.value.push(latlng)
-    
+
     // Add marker
     L.circleMarker(latlng, {
       radius: 4,
       color: '#ef4444',
       fillColor: '#ef4444',
-      fillOpacity: 1
+      fillOpacity: 1,
     }).addTo(measureLayerGroup!)
-    
+
     // Draw line if more than 1 point
     if (measurePoints.value.length > 1) {
       const points = measurePoints.value
       const lastPoint = points[points.length - 2]
-      
+
       L.polyline([lastPoint, latlng], {
         color: '#ef4444',
         weight: 2,
-        dashArray: '5, 5'
+        dashArray: '5, 5',
       }).addTo(measureLayerGroup!)
-      
+
       // Calculate total distance
       let totalDist = 0
       for (let i = 0; i < points.length - 1; i++) {
-        totalDist += points[i].distanceTo(points[i+1])
+        totalDist += points[i].distanceTo(points[i + 1])
       }
-      
+
       // Calculate segment distance
       const segmentDist = lastPoint.distanceTo(latlng)
-      
-      const formatDist = (d: number) => d > 1000 
-        ? `${(d / 1000).toFixed(2)} km` 
-        : `${Math.round(d)} m`
-        
+
+      const formatDist = (d: number) =>
+        d > 1000 ? `${(d / 1000).toFixed(2)} km` : `${Math.round(d)} m`
+
       const popupContent = `
         <div class="text-white px-2 py-1 min-w-[120px]">
           <div class="font-bold border-b border-gray-600 mb-1 pb-1">测量结果</div>
@@ -747,14 +834,14 @@ function onMapClick(e: LeafletMouseEvent) {
           <div class="flex justify-between gap-4 text-sm"><span class="text-white">段距离:</span> <span class="font-mono">${formatDist(segmentDist)}</span></div>
         </div>
       `
-      
+
       L.popup({ autoClose: false, closeOnClick: false, className: 'measure-popup' })
         .setLatLng(latlng)
         .setContent(popupContent)
         .addTo(measureLayerGroup!)
     } else {
-       // First point
-       L.popup({ autoClose: false, closeOnClick: false, className: 'measure-popup' })
+      // First point
+      L.popup({ autoClose: false, closeOnClick: false, className: 'measure-popup' })
         .setLatLng(latlng)
         .setContent(`<div class="text-white px-2 py-1 text-sm">起点</div>`)
         .addTo(measureLayerGroup!)
@@ -770,7 +857,12 @@ function onMapMouseMove(e: LeafletMouseEvent) {
   const latlng = e.latlng
   if (isPickingPoint.value) {
     if (!pickTooltip) {
-      pickTooltip = L.tooltip({ direction: 'top', className: 'map-tooltip', opacity: 0.9, offset: [0, -10] })
+      pickTooltip = L.tooltip({
+        direction: 'top',
+        className: 'map-tooltip',
+        opacity: 0.9,
+        offset: [0, -10],
+      })
       pickTooltip.addTo(map)
     }
     pickTooltip.setLatLng(latlng)
@@ -781,7 +873,12 @@ function onMapMouseMove(e: LeafletMouseEvent) {
 
   if (isMeasuring.value) {
     if (!measureHintTooltip) {
-      measureHintTooltip = L.tooltip({ direction: 'top', className: 'map-tooltip', opacity: 0.8, offset: [0, -10] })
+      measureHintTooltip = L.tooltip({
+        direction: 'top',
+        className: 'map-tooltip',
+        opacity: 0.8,
+        offset: [0, -10],
+      })
       measureHintTooltip.addTo(map)
     }
     measureHintTooltip.setLatLng(latlng)
@@ -825,20 +922,23 @@ function clearMeasureHintTooltip() {
  */
 function getCompanyAbbreviation(company: string | undefined): string {
   if (!company) return ''
-  
+
   const cleaned = company.trim()
-  
+
   // 中文处理：取前2-4个字符
   if (/[\u4e00-\u9fa5]/.test(cleaned)) {
     return cleaned.substring(0, 4)
   }
-  
+
   // 英文处理：取首字母缩写或前几个字符
   const words = cleaned.split(/\s+/)
   if (words.length > 1) {
-    return words.map(w => w[0]?.toUpperCase() || '').join('').substring(0, 4)
+    return words
+      .map((w) => w[0]?.toUpperCase() || '')
+      .join('')
+      .substring(0, 4)
   }
-  
+
   return cleaned.substring(0, 4).toUpperCase()
 }
 
@@ -889,14 +989,14 @@ function getCompanyAbbreviation(company: string | undefined): string {
  * @param company 公司名称
  * @returns 颜色对象 { bg: string, text: string }
  */
-function getTagColor(company: string | undefined): { bg: string, text: string } {
+function getTagColor(company: string | undefined): { bg: string; text: string } {
   if (!company) {
-     return { bg: `rgba(107, 114, 128, 0.6)`, text: 'white' } // Gray
+    return { bg: `rgba(107, 114, 128, 0.6)`, text: 'white' } // Gray
   }
-  
+
   const c = company.toLowerCase()
   let colorHex = fleetColors['其他']
-  
+
   if (c.includes('上航') || c.includes('shanghai')) colorHex = fleetColors['上航局']
   else if (c.includes('天航') || c.includes('tianjin')) colorHex = fleetColors['天航局']
   else if (c.includes('广航') || c.includes('guangzhou')) colorHex = fleetColors['广航局']
@@ -905,12 +1005,12 @@ function getTagColor(company: string | undefined): { bg: string, text: string } 
   else if (c.includes('jan de nul') || c.includes('jandenul')) colorHex = fleetColors['JanDeNUL']
   else if (c.includes('nmdc')) colorHex = fleetColors['NMDC']
   else if (c.includes('van oord') || c.includes('vanoord')) colorHex = fleetColors['VanOORD']
-  
+
   // Convert hex to rgba
   const r = parseInt(colorHex.slice(1, 3), 16)
   const g = parseInt(colorHex.slice(3, 5), 16)
   const b = parseInt(colorHex.slice(5, 7), 16)
-  
+
   return { bg: `rgba(${r}, ${g}, ${b}, 0.6)`, text: 'white' }
 }
 
@@ -985,6 +1085,14 @@ function getTrackDays(mmsi: string): number {
 }
 
 /**
+ * 获取轨迹所有点（供进度条组件使用）
+ */
+function getTrackPoints(mmsi: string): TrackPoint[] {
+  const state = getTrackState(mmsi)
+  return state ? state.points : []
+}
+
+/**
  * 切换轨迹时间范围
  */
 async function onTrackDaysChange(mmsi: string, days: number) {
@@ -995,13 +1103,124 @@ async function onTrackDaysChange(mmsi: string, days: number) {
 }
 
 /**
+ * 进度条位置变化时，地图船舶跟随移动
+ */
+const trackMarkerMap = new Map<string, L.Marker>()
+const markerAnimationMap = new Map<string, { current: LatLng; target: LatLng; progress: number }>()
+let markerAnimationFrameId: number | null = null
+
+function onTrackPositionChange(mmsi: string, point: TrackPoint | null) {
+  if (!map || !point) return
+  if (point.lat == null || point.lng == null) return
+
+  const targetZoom = Math.max(currentZoom.value, 18)
+  const currentCenter = map.getCenter()
+  const distance = map.distance(currentCenter, [point.lat, point.lng])
+
+  if (distance > 50) {
+    map.setView([point.lat, point.lng], targetZoom, { animate: true, duration: 0.5 })
+  }
+
+  updateTrackMarkerTarget(mmsi, point)
+}
+
+function updateTrackMarkerTarget(mmsi: string, point: TrackPoint) {
+  const targetLatLng = L.latLng(point.lat, point.lng)
+
+  if (trackMarkerMap.has(mmsi)) {
+    const marker = trackMarkerMap.get(mmsi)!
+    const existing = markerAnimationMap.get(mmsi)
+    if (existing) {
+      existing.target = targetLatLng
+      existing.progress = 0
+    } else {
+      markerAnimationMap.set(mmsi, {
+        current: marker.getLatLng(),
+        target: targetLatLng,
+        progress: 0
+      })
+    }
+    startMarkerAnimation()
+    updateTrackMarkerIcon(mmsi, point.status || 'underway')
+  } else {
+    const icon = createTrackShipIcon(point.status || 'underway')
+    const marker = L.marker([point.lat, point.lng], { icon }).addTo(map!)
+    trackMarkerMap.set(mmsi, marker)
+    markerAnimationMap.set(mmsi, {
+      current: L.latLng(point.lat, point.lng),
+      target: L.latLng(point.lat, point.lng),
+      progress: 1
+    })
+  }
+}
+
+function startMarkerAnimation() {
+  if (markerAnimationFrameId) return
+
+  function animate() {
+    let hasActiveAnimations = false
+
+    markerAnimationMap.forEach((anim, mmsi) => {
+      if (anim.progress < 1) {
+        hasActiveAnimations = true
+        anim.progress = Math.min(anim.progress + 0.08, 1)
+        const lat = anim.current.lat + (anim.target.lat - anim.current.lat) * anim.progress
+        const lng = anim.current.lng + (anim.target.lng - anim.current.lng) * anim.progress
+
+        const marker = trackMarkerMap.get(mmsi)
+        if (marker) {
+          marker.setLatLng([lat, lng])
+        }
+      }
+    })
+
+    if (hasActiveAnimations) {
+      markerAnimationFrameId = requestAnimationFrame(animate)
+    } else {
+      markerAnimationFrameId = null
+    }
+  }
+
+  markerAnimationFrameId = requestAnimationFrame(animate)
+}
+
+function updateTrackMarkerIcon(mmsi: string, status: string) {
+  if (!trackMarkerMap.has(mmsi)) return
+  const marker = trackMarkerMap.get(mmsi)!
+  marker.setIcon(createTrackShipIcon(status))
+}
+
+function createTrackShipIcon(status: string) {
+  const color = status === 'dredging' ? '#3b82f6' : status === 'moored' ? '#ef4444' : '#22c55e'
+  const rotation = status === 'underway' ? 45 : status === 'dredging' ? 90 : 0
+  return L.divIcon({
+    className: 'track-ship-marker',
+    html: `<div style="transform: rotate(${rotation}deg); transition: transform 0.3s ease; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+      <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: ${color}; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <i class="fa-solid fa-ship text-white text-lg" style="transform: rotate(-45deg);"></i>
+      </div>
+    </div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  })
+}
+
+function clearTrackMarker(mmsi: string) {
+  if (trackMarkerMap.has(mmsi)) {
+    trackMarkerMap.get(mmsi)!.remove()
+    trackMarkerMap.delete(mmsi)
+    markerAnimationMap.delete(mmsi)
+  }
+}
+
+/**
  * 获取轨迹状态显示文本
  */
 function getTrackStatusText(status: 'dredging' | 'underway' | 'moored' | undefined): string {
   const statusMap: Record<string, string> = {
     dredging: '施工',
     underway: '航行',
-    moored: '停泊'
+    moored: '停泊',
   }
   return statusMap[status || ''] || '未知'
 }
@@ -1013,7 +1232,7 @@ function getTrackStatusClass(status: 'dredging' | 'underway' | 'moored' | undefi
   const classMap: Record<string, string> = {
     dredging: 'bg-blue-500/20 text-blue-300 border border-blue-400/30',
     underway: 'bg-green-500/20 text-green-300 border border-green-400/30',
-    moored: 'bg-red-500/20 text-red-300 border border-red-400/30'
+    moored: 'bg-red-500/20 text-red-300 border border-red-400/30',
   }
   return classMap[status || ''] || 'bg-gray-500/20 text-gray-300 border border-gray-400/30'
 }
@@ -1028,12 +1247,13 @@ function removeTrack(mmsi: string) {
     track.points.remove()
   }
   trackLayerMap.delete(mmsi)
-  trackOrder.value = trackOrder.value.filter(id => id !== mmsi)
+  trackOrder.value = trackOrder.value.filter((id) => id !== mmsi)
   if (trackStates.value[mmsi]) {
     const next = { ...trackStates.value }
     delete next[mmsi]
     trackStates.value = next
   }
+  clearTrackMarker(mmsi)
 }
 
 /**
@@ -1047,6 +1267,13 @@ function clearAllTracks() {
   trackLayerMap.clear()
   trackOrder.value = []
   trackStates.value = {}
+  trackMarkerMap.forEach((marker) => marker.remove())
+  trackMarkerMap.clear()
+  markerAnimationMap.clear()
+  if (markerAnimationFrameId) {
+    cancelAnimationFrame(markerAnimationFrameId)
+    markerAnimationFrameId = null
+  }
 }
 
 /**
@@ -1066,13 +1293,16 @@ function getTrackPointStatus(speed: number | undefined): 'dredging' | 'underway'
 /**
  * 显示船舶轨迹 (支持按状态分段显示)
  */
-async function showTrack(mmsi: string, options?: { animate?: boolean; includeLatLng?: L.LatLng | null; days?: number }) {
+async function showTrack(
+  mmsi: string,
+  options?: { animate?: boolean; includeLatLng?: L.LatLng | null; days?: number }
+) {
   if (!map || !trackLayerGroup) return
   const days = options?.days || 3
   try {
     const response = await fetch(`/api/ship_tracks?mmsi=${mmsi}&days=${days}`)
     const tracks = await response.json()
-    
+
     if (!tracks || tracks.length < 2) {
       message.info('暂无轨迹数据')
       return false
@@ -1089,18 +1319,19 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
 
     const color = trackColors[trackOrder.value.length % trackColors.length]
     const points = L.layerGroup().addTo(trackLayerGroup!)
-    
+
     // 为每个轨迹点添加状态
     const tracksWithStatus = tracks.map((t: any) => ({
       ...t,
-      status: getTrackPointStatus(t.speed)
+      status: getTrackPointStatus(t.speed),
     }))
-    
+
     // 按状态分段绘制轨迹
-    const segments: { latlngs: [number, number][]; status: 'dredging' | 'underway' | 'moored' }[] = []
+    const segments: { latlngs: [number, number][]; status: 'dredging' | 'underway' | 'moored' }[] =
+      []
     let currentSegment: [number, number][] = []
     let currentStatus: 'dredging' | 'underway' | 'moored' | null = null
-    
+
     tracksWithStatus.forEach((t: any, index: number) => {
       const status = t.status
       if (currentStatus === null || currentStatus !== status) {
@@ -1117,7 +1348,7 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
         segments.push({ latlngs: currentSegment, status: currentStatus! })
       }
     })
-    
+
     // 绘制分段轨迹
     const lineGroup = L.layerGroup().addTo(trackLayerGroup!)
     segments.forEach((segment) => {
@@ -1126,10 +1357,10 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
         color,
         weight: isDredging ? 5 : 3,
         opacity: 0.85,
-        dashArray: isDredging ? undefined : '5, 10'
+        dashArray: isDredging ? undefined : '5, 10',
       }).addTo(lineGroup)
     })
-    
+
     // 绘制轨迹点
     tracksWithStatus.forEach((t: any) => {
       const point = L.circleMarker([t.lat, t.lng], {
@@ -1137,12 +1368,17 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
         color,
         fillColor: '#fff',
         fillOpacity: 1,
-        weight: 1
+        weight: 1,
       }).addTo(points)
       const timeText = formatTrackTime(t.timestamp || t.created_at)
-      point.bindTooltip(timeText, { direction: 'top', className: 'map-tooltip', opacity: 0.9, offset: [0, -6] })
+      point.bindTooltip(timeText, {
+        direction: 'top',
+        className: 'map-tooltip',
+        opacity: 0.9,
+        offset: [0, -6],
+      })
     })
-    
+
     // 点击轨迹移除
     lineGroup.on('click', () => removeTrack(mmsi))
 
@@ -1157,15 +1393,15 @@ async function showTrack(mmsi: string, options?: { animate?: boolean; includeLat
           timestamp: t.timestamp,
           created_at: t.created_at,
           speed: t.speed,
-          status: t.status
+          status: t.status,
         })),
         pageIndex: 1,
         pageSize: 10,
-        days
-      }
+        days,
+      },
     }
 
-    const vessel = vessels.value.find(v => v.mmsi === mmsi)
+    const vessel = vessels.value.find((v) => v.mmsi === mmsi)
     if (vessel) {
       selectedVesselId.value = vessel.id
     }
@@ -1207,7 +1443,7 @@ function getTrackFitPadding() {
   const bottomPadding = Math.max(basePadding, listHeight + 20)
   return {
     paddingTopLeft: [basePadding, basePadding] as L.PointExpression,
-    paddingBottomRight: [basePadding, bottomPadding] as L.PointExpression
+    paddingBottomRight: [basePadding, bottomPadding] as L.PointExpression,
   }
 }
 
@@ -1219,18 +1455,18 @@ function getTrackFitPadding() {
  * @returns Leaflet DivIcon
  */
 function createCompanyTagIcon(
-  company: string, 
+  company: string,
   details: {
-    name: string,
-    isDetailed: boolean,
-    status?: string,
-    speed?: string,
-    location?: string,
+    name: string
+    isDetailed: boolean
+    status?: string
+    speed?: string
+    location?: string
     time?: string
   }
 ) {
   const color = getTagColor(company)
-  
+
   if (!details.isDetailed) {
     const text = getCompanyAbbreviation(company)
     const textWidth = text.length * 8 + 16
@@ -1253,7 +1489,7 @@ function createCompanyTagIcon(
         height: 20px;
       ">${text}</div>`,
       iconSize: [textWidth, 20],
-      iconAnchor: [-5, 10]
+      iconAnchor: [-5, 10],
     })
   }
 
@@ -1286,7 +1522,7 @@ function createCompanyTagIcon(
       white-space: nowrap;
     ">${content}</div>`,
     iconSize: [0, 0], // Let CSS handle size
-    iconAnchor: [-10, 20]
+    iconAnchor: [-10, 20],
   })
 }
 
@@ -1294,7 +1530,7 @@ const icons: Record<string, L.DivIcon> = {
   dredging: createIcon(statusColors.dredging),
   underway: createIcon(statusColors.underway),
   moored: createIcon(statusColors.moored),
-  offline: createIcon(statusColors.offline)
+  offline: createIcon(statusColors.offline),
 }
 
 /**
@@ -1312,9 +1548,9 @@ async function fetchVessels() {
     vessels.value = data.ships || []
     stats.value.total = data.total || 0
     stats.value.active = data.tracked || 0
-    
+
     const statusStats = { underway: 0, dredging: 0, moored: 0, offline: 0 }
-    vessels.value.forEach(v => {
+    vessels.value.forEach((v) => {
       if (isTrackedVessel(v)) {
         const key = getVesselStatusKey(v)
         if (key === 'underway') statusStats.underway++
@@ -1323,32 +1559,32 @@ async function fetchVessels() {
         else if (key === 'offline') statusStats.offline++
       }
     })
-    
+
     stats.value.underway = statusStats.underway
     stats.value.dredging = statusStats.dredging
     stats.value.moored = statusStats.moored
     stats.value.offline = statusStats.offline
     // stats.value.active is set from backend data.tracked
-    
+
     renderMarkers()
-    
+
     // Auto-fit bounds to all tracked vessels with padding
     if (map && vessels.value.length > 0) {
       const bounds = L.latLngBounds([])
       let hasPoints = false
-      vessels.value.forEach(v => {
+      vessels.value.forEach((v) => {
         if (v.lat != null && v.lng != null && isTrackedVessel(v)) {
           bounds.extend([v.lat, v.lng])
           hasPoints = true
         }
       })
-      
+
       if (hasPoints) {
         // Pad by 20% (0.2)
         map.fitBounds(bounds.pad(0.2))
       }
     }
-    
+
     // Do NOT expand all groups initially (User requirement: Default collapsed)
     // activeKeys.value = Object.keys(groupedVessels.value)
   } catch (error) {
@@ -1360,17 +1596,17 @@ async function fetchVessels() {
 
 function renderMarkers() {
   if (!map || !vesselLayerGroup || !tagLayerGroup) return
-  
+
   vesselLayerGroup.clearLayers()
   tagLayerGroup.clearLayers()
   vesselMarkerMap.clear()
-  
+
   const isCloseZoom = currentZoom.value >= 11
 
-  vessels.value.forEach(v => {
+  vessels.value.forEach((v) => {
     if (v.lat == null || v.lng == null) return
     if (!isTrackedVessel(v)) return
-    
+
     const iconKey = getVesselStatusKey(v)
     const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(vesselLayerGroup!)
     marker.on('click', () => handleVesselClick(v))
@@ -1378,10 +1614,10 @@ function renderMarkers() {
     if (v.mmsi) {
       vesselMarkerMap.set(v.mmsi, marker)
     }
-    
+
     // Tag Logic
     const companyName = v.company || '其他'
-    
+
     let timeStr = '未知'
     if (v.updated_at) {
       try {
@@ -1389,32 +1625,30 @@ function renderMarkers() {
         timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
       } catch (e) {}
     }
-    
+
     let locationStr = '未知'
     if (v.continent || v.country) {
       const continent = translateContinent(v.continent)
       const country = translateCountry(v.country)
       locationStr = `${continent || '-'} / ${country || '-'}`
     }
-    
+
     const statusCN = translateStatusByKey(getVesselStatusKey(v))
     const speedStr = v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'
-    
+
     const tagIcon = createCompanyTagIcon(companyName, {
       name: v.name,
       isDetailed: isCloseZoom,
       status: statusCN,
       speed: speedStr,
       location: locationStr,
-      time: timeStr
+      time: timeStr,
     })
-    
+
     const tagMarker = L.marker([v.lat, v.lng], { icon: tagIcon }).addTo(tagLayerGroup!)
     tagMarker.on('click', () => handleVesselClick(v))
   })
 }
-
-
 
 /**
  * 根据窗口宽度调整侧边栏显示
@@ -1438,7 +1672,7 @@ function changeMapSource(source: 'tianditu' | 'arcgis') {
   if (!map) return
 
   // Remove current layers
-  currentBaseLayers.forEach(layer => map!.removeLayer(layer))
+  currentBaseLayers.forEach((layer) => map!.removeLayer(layer))
   currentBaseLayers = []
 
   if (source === 'tianditu') {
@@ -1447,21 +1681,21 @@ function changeMapSource(source: 'tianditu' | 'arcgis') {
     const labelUrl = `https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
     const satUrl = `https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
     const satLabelUrl = `https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tiandituKey}`
-    
+
     // 0-7级: 天地图矢量底图
     const vec = L.tileLayer(baseUrl, {
       subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
       maxZoom: 7,
       minZoom: 0,
       keepBuffer: 3,
-      className: 'tianditu-vector-layer'
+      className: 'tianditu-vector-layer',
     })
     const cva = L.tileLayer(labelUrl, {
       subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
       maxZoom: 7,
       minZoom: 0,
       keepBuffer: 3,
-      className: 'tianditu-vector-layer'
+      className: 'tianditu-vector-layer',
     })
 
     // 8-18+级: 天地图卫星底图 (超过18级自动拉伸)
@@ -1471,7 +1705,7 @@ function changeMapSource(source: 'tianditu' | 'arcgis') {
       maxZoom: 22,
       minZoom: 8,
       keepBuffer: 3,
-      className: 'tianditu-satellite-layer'
+      className: 'tianditu-satellite-layer',
     })
     const cia = L.tileLayer(satLabelUrl, {
       subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
@@ -1479,26 +1713,32 @@ function changeMapSource(source: 'tianditu' | 'arcgis') {
       maxZoom: 22,
       minZoom: 8,
       keepBuffer: 3,
-      className: 'tianditu-satellite-layer'
+      className: 'tianditu-satellite-layer',
     })
-    
+
     currentBaseLayers = [vec, cva, img, cia]
   } else {
     // ArcGIS World Imagery + Hybrid Reference
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles &copy; Esri',
-      maxZoom: 19,
-      className: 'arcgis-satellite-layer'
-    })
-    const labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      className: 'arcgis-label-layer'
-    })
+    const sat = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19,
+        className: 'arcgis-satellite-layer',
+      }
+    )
+    const labels = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 19,
+        className: 'arcgis-label-layer',
+      }
+    )
     currentBaseLayers = [sat, labels]
   }
 
   // Add layers to map, making sure they are at the back
-  currentBaseLayers.forEach(layer => {
+  currentBaseLayers.forEach((layer) => {
     layer.addTo(map!)
     layer.bringToBack()
   })
@@ -1506,21 +1746,21 @@ function changeMapSource(source: 'tianditu' | 'arcgis') {
 
 onMounted(async () => {
   if (!mapContainer.value) return
-  
+
   map = L.map(mapContainer.value, {
     center: [30, 122],
     zoom: 8,
     minZoom: 2,
     maxZoom: 22,
     zoomControl: false,
-    attributionControl: false
+    attributionControl: false,
   })
-  
+
   vesselLayerGroup = L.layerGroup().addTo(map)
   tagLayerGroup = L.layerGroup().addTo(map)
   trackLayerGroup = L.layerGroup().addTo(map)
   measureLayerGroup = L.layerGroup().addTo(map)
-  
+
   map.on('click', onMapClick)
   map.on('contextmenu', onMapRightClick)
   map.on('mousemove', onMapMouseMove)
@@ -1536,7 +1776,7 @@ onMounted(async () => {
 
   await nextTick()
   map.invalidateSize()
-  
+
   // Initialize map source
   changeMapSource('arcgis')
 
@@ -1544,32 +1784,32 @@ onMounted(async () => {
   setTimeout(() => {
     map?.invalidateSize()
   }, 300)
-  
+
   try {
     console.log('Fetching continents.geojson...')
     const res = await fetch('/static/continents.geojson')
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
     const text = await res.text()
     try {
-        const data = JSON.parse(text)
-        L.geoJSON(data, {
-          style: {
-            color: '#475569',
-            weight: 1.5,
-            opacity: 0.8,
-            fillOpacity: 0
-          }
-        }).addTo(map)
-        console.log('Continents loaded successfully')
+      const data = JSON.parse(text)
+      L.geoJSON(data, {
+        style: {
+          color: '#475569',
+          weight: 1.5,
+          opacity: 0.8,
+          fillOpacity: 0,
+        },
+      }).addTo(map)
+      console.log('Continents loaded successfully')
     } catch (e) {
-        console.error('Failed to parse continents JSON:', e, text.substring(0, 100))
+      console.error('Failed to parse continents JSON:', e, text.substring(0, 100))
     }
   } catch (err) {
     console.error('Failed to load continents:', err)
   }
-  
+
   await fetchVessels()
-  
+
   // Auto-refresh every 5 minutes
   refreshTimer = window.setInterval(fetchVessels, 5 * 60 * 1000)
 })
@@ -1607,7 +1847,7 @@ onUnmounted(() => {
   background: rgba(30, 41, 59, 0.95);
   backdrop-filter: blur(8px);
   color: #fff;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 :deep(.leaflet-popup-tip) {
@@ -1636,7 +1876,7 @@ onUnmounted(() => {
 }
 
 :deep(.china-flag-marker) {
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.45));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 
 :deep(.china-flag-marker svg) {

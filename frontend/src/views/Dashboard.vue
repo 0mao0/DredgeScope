@@ -3,11 +3,13 @@
     <main class="w-full px-4 sm:px-6 lg:px-8 space-y-6 pb-6">
       <!-- Report Selector -->
       <div class="flex flex-col md:flex-row items-stretch gap-4">
-        <div class="flex-shrink-0 flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 w-full md:w-auto">
+        <div
+          class="flex-shrink-0 flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 w-full md:w-auto"
+        >
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-3">
-              <a-date-picker 
-                v-model:value="selectedDate" 
+              <a-date-picker
+                v-model:value="selectedDate"
                 :allow-clear="false"
                 class="bg-dark-card border-white/10 w-40"
               />
@@ -17,22 +19,26 @@
               {{ reportTimeRange }}
             </div>
           </div>
-          
+
           <div class="flex bg-black/20 p-1 rounded-xl border border-white/5 ml-4">
-            <button 
+            <button
               @click="handleReportTypeChange('morning')"
               :class="[
                 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-                reportType === 'morning' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+                reportType === 'morning'
+                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                  : 'text-gray-400 hover:text-gray-200',
               ]"
             >
               <i class="fa-solid fa-sun text-xs"></i> 早报
             </button>
-            <button 
+            <button
               @click="handleReportTypeChange('evening')"
               :class="[
                 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-                reportType === 'evening' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-gray-400 hover:text-gray-200'
+                reportType === 'evening'
+                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                  : 'text-gray-400 hover:text-gray-200',
               ]"
             >
               <i class="fa-solid fa-moon text-xs"></i> 晚报
@@ -45,7 +51,10 @@
           <div>
             <p class="text-sm font-medium text-gray-400">本次新闻</p>
             <div class="flex items-end gap-2 mt-1">
-              <span class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors">{{ previewItems.length }}</span>
+              <span
+                class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors"
+                >{{ previewItems.length }}</span
+              >
               <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
             </div>
           </div>
@@ -53,12 +62,19 @@
             <i class="fa-solid fa-bolt text-blue-400 text-xl"></i>
           </div>
         </div>
-        
-        <router-link to="/vessel-map" target="_blank" class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors">
+
+        <router-link
+          to="/vessel-map"
+          target="_blank"
+          class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors"
+        >
           <div>
             <p class="text-sm font-medium text-gray-400">跟踪船舶</p>
             <div class="flex items-end gap-2 mt-1">
-              <span class="text-3xl font-bold text-white group-hover:text-green-400 transition-colors">{{ vesselStore.trackedCount }}</span>
+              <span
+                class="text-3xl font-bold text-white group-hover:text-green-400 transition-colors"
+                >{{ vesselStore.trackedCount }}</span
+              >
               <span class="text-xs text-gray-500">/{{ vesselStore.totalCount }}</span>
             </div>
           </div>
@@ -83,20 +99,36 @@
                   <div class="h-4 bg-slate-700 rounded"></div>
                 </div>
               </div>
-              <div 
-                v-else 
-                v-for="item in quickSummary" 
+              <div
+                v-else
+                v-for="item in quickSummary"
                 :key="item.id"
                 @click="openDetail(item)"
                 class="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-brand-500/20 transition-colors cursor-pointer"
               >
                 <div class="flex items-start gap-2">
-                  <div :class="['w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', getCategoryMeta(item.category).bg]">
-                    <i :class="['fa-solid', getCategoryMeta(item.category).icon, getCategoryMeta(item.category).color, 'text-xs']"></i>
+                  <div
+                    :class="[
+                      'w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
+                      getCategoryMeta(item.category).bg,
+                    ]"
+                  >
+                    <i
+                      :class="[
+                        'fa-solid',
+                        getCategoryMeta(item.category).icon,
+                        getCategoryMeta(item.category).color,
+                        'text-xs',
+                      ]"
+                    ></i>
                   </div>
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">{{ item.title_cn || item.title }}</h4>
-                    <p class="text-xs text-gray-400 mt-1 line-clamp-1">{{ item.summary_cn || '暂无摘要' }}</p>
+                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">
+                      {{ item.title_cn || item.title }}
+                    </h4>
+                    <p class="text-xs text-gray-400 mt-1 line-clamp-1">
+                      {{ item.summary_cn || '暂无摘要' }}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -107,38 +139,58 @@
         <!-- Right Column: Categories Grid -->
         <div class="lg:col-span-4">
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div 
-              v-for="(meta, key) in categories" 
+            <div
+              v-for="(meta, key) in categories"
               :key="key"
-              :class="['glass-card rounded-xl flex flex-col md:h-[400px] min-h-[120px] overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2', getCategoryMeta(key).border.replace('border-', 'border-t-')]"
+              :class="[
+                'glass-card rounded-xl flex flex-col md:h-[400px] min-h-[120px] overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2',
+                getCategoryMeta(key).border.replace('border-', 'border-t-'),
+              ]"
             >
               <!-- Card Header -->
               <div class="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
                 <div class="flex items-center gap-2">
-                  <div :class="['w-8 h-8 rounded-lg', getCategoryMeta(key).bg, 'flex items-center justify-center']">
-                    <i :class="['fa-solid', getCategoryMeta(key).icon, getCategoryMeta(key).color]"></i>
+                  <div
+                    :class="[
+                      'w-8 h-8 rounded-lg',
+                      getCategoryMeta(key).bg,
+                      'flex items-center justify-center',
+                    ]"
+                  >
+                    <i
+                      :class="['fa-solid', getCategoryMeta(key).icon, getCategoryMeta(key).color]"
+                    ></i>
                   </div>
                   <h3 class="font-bold text-gray-200">{{ meta.name }}</h3>
                 </div>
-                <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{ getGroupedArticles(key).length }}</span>
+                <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{
+                  getGroupedArticles(key).length
+                }}</span>
               </div>
 
               <!-- Card Body -->
-              <div v-if="getGroupedArticles(key).length === 0" class="flex-1 flex items-center justify-center text-gray-500 text-sm">
+              <div
+                v-if="getGroupedArticles(key).length === 0"
+                class="flex-1 flex items-center justify-center text-gray-500 text-sm"
+              >
                 暂无数据
               </div>
               <div v-else class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-                <div 
-                  v-for="group in getGroupedArticlesPreview(key)" 
+                <div
+                  v-for="group in getGroupedArticlesPreview(key)"
                   :key="group.id || group.url"
                   @click="openDetail(group)"
                   class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
                 >
                   <div class="flex justify-between items-start">
-                    <h4 class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug">
+                    <h4
+                      class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug"
+                    >
                       {{ formatTitle(group, key) }}
                     </h4>
-                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{ formatTime(group.pub_date, group.created_at) }}</span>
+                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{
+                      formatTime(group.pub_date, group.created_at)
+                    }}</span>
                   </div>
                   <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
                     {{ group.summary_cn || group.title }}
@@ -163,13 +215,30 @@
       <div class="max-h-[70vh] overflow-y-auto custom-scrollbar">
         <!-- Tags -->
         <div class="flex flex-wrap gap-2 mb-4">
-          <span :class="['px-2 py-1 rounded-full text-xs', getCategoryMeta(currentArticle?.category).bg, getCategoryMeta(currentArticle?.category).color, 'border', getCategoryMeta(currentArticle?.category).border]">
+          <span
+            :class="[
+              'px-2 py-1 rounded-full text-xs',
+              getCategoryMeta(currentArticle?.category).bg,
+              getCategoryMeta(currentArticle?.category).color,
+              'border',
+              getCategoryMeta(currentArticle?.category).border,
+            ]"
+          >
             {{ getCategoryMeta(currentArticle?.category).name }}
           </span>
-          <span v-if="currentArticle?.source_name" class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10">
-            {{ currentArticle.source_name.length > 5 ? currentArticle.source_name.slice(0, 5) : currentArticle.source_name }}
+          <span
+            v-if="currentArticle?.source_name"
+            class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-300 border border-white/10"
+          >
+            {{
+              currentArticle.source_name.length > 5
+                ? currentArticle.source_name.slice(0, 5)
+                : currentArticle.source_name
+            }}
           </span>
-          <span class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1">
+          <span
+            class="px-2 py-1 rounded-full text-xs bg-white/5 text-gray-400 border border-white/10 flex items-center gap-1"
+          >
             <i class="fa-solid fa-clock"></i>
             发布时间: {{ currentArticle?.pub_date || '未知' }}
           </span>
@@ -184,7 +253,11 @@
 
         <!-- Image -->
         <div v-if="currentArticle?.screenshot_path" class="mt-6 group relative cursor-pointer">
-          <img :src="currentArticle.screenshot_path" alt="Screenshot" class="w-full rounded-lg border border-slate-700 shadow-lg">
+          <img
+            :src="currentArticle.screenshot_path"
+            alt="Screenshot"
+            class="w-full rounded-lg border border-slate-700 shadow-lg"
+          />
         </div>
 
         <!-- Translation -->
@@ -201,15 +274,25 @@
             <i class="fa-solid fa-robot"></i> AI 分析过程
           </h4>
           <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen2.5 纯文字解析：</span>
-            <p class="text-gray-200 text-sm leading-relaxed">{{ currentArticle?.summary_cn || '暂无摘要' }}</p>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+              >Qwen2.5 纯文字解析：</span
+            >
+            <p class="text-gray-200 text-sm leading-relaxed">
+              {{ currentArticle?.summary_cn || '暂无摘要' }}
+            </p>
           </div>
           <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Qwen3.5 多模态识别</span>
-            <p class="text-gray-300 text-sm leading-relaxed italic">{{ currentArticle?.vl_desc || '暂无描述' }}</p>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+              >Qwen3.5 多模态识别</span
+            >
+            <p class="text-gray-300 text-sm leading-relaxed italic">
+              {{ currentArticle?.vl_desc || '暂无描述' }}
+            </p>
           </div>
           <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2">关键字段提取：</span>
+            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2"
+              >关键字段提取：</span
+            >
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div v-if="currentArticle.details.project_name" class="flex gap-2">
                 <span class="text-gray-500">项目名称:</span>
@@ -229,7 +312,10 @@
               </div>
               <div v-if="currentArticle.details.amount" class="flex gap-2">
                 <span class="text-gray-500">金额:</span>
-                <span class="text-gray-300">{{ currentArticle.details.amount }} {{ currentArticle.details.currency || '' }}</span>
+                <span class="text-gray-300"
+                  >{{ currentArticle.details.amount }}
+                  {{ currentArticle.details.currency || '' }}</span
+                >
               </div>
               <div v-if="currentArticle.details.event_type" class="flex gap-2">
                 <span class="text-gray-500">事件类型:</span>
@@ -258,7 +344,11 @@
 
       <!-- Footer -->
       <div class="mt-4 flex justify-end gap-3">
-        <a :href="currentArticle?.url || '#'" target="_blank" class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2">
+        <a
+          :href="currentArticle?.url || '#'"
+          target="_blank"
+          class="inline-flex h-9 justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 transition-colors items-center gap-2"
+        >
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
         <a-button @click="modalVisible = false" class="h-9">
@@ -266,8 +356,6 @@
         </a-button>
       </div>
     </a-modal>
-
-
   </div>
 </template>
 
@@ -334,7 +422,9 @@ async function loadReportData() {
   try {
     const startStr = start.format('YYYY-MM-DDTHH:mm:ss')
     const endStr = end.format('YYYY-MM-DDTHH:mm:ss')
-    const response = await fetch(`/api/events?start=${encodeURIComponent(startStr)}&end=${encodeURIComponent(endStr)}`)
+    const response = await fetch(
+      `/api/events?start=${encodeURIComponent(startStr)}&end=${encodeURIComponent(endStr)}`
+    )
     const data = await response.json()
     previewItems.value = data.events || []
   } catch (error) {
@@ -346,18 +436,64 @@ async function loadReportData() {
 }
 
 // 监听日期和类型变化，自动加载数据
-watch([selectedDate, reportType], () => {
-  loadReportData()
-}, { immediate: true })
+watch(
+  [selectedDate, reportType],
+  () => {
+    loadReportData()
+  },
+  { immediate: true }
+)
 
 const categories = {
-  Market: { name: '市场动态', icon: 'fa-chart-line', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  Bid: { name: '中标信息', icon: 'fa-gavel', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  Project: { name: '项目信息', icon: 'fa-building', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-  Equipment: { name: '设备修造', icon: 'fa-gears', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  'R&D': { name: '科技研发', icon: 'fa-flask', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  Regulation: { name: '技术法规', icon: 'fa-scale-balanced', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-  Other: { name: '其他信息', icon: 'fa-circle-info', color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/20' }
+  Market: {
+    name: '市场动态',
+    icon: 'fa-chart-line',
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+  },
+  Bid: {
+    name: '中标信息',
+    icon: 'fa-gavel',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/10',
+    border: 'border-yellow-500/20',
+  },
+  Project: {
+    name: '项目信息',
+    icon: 'fa-building',
+    color: 'text-green-400',
+    bg: 'bg-green-500/10',
+    border: 'border-green-500/20',
+  },
+  Equipment: {
+    name: '设备修造',
+    icon: 'fa-gears',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10',
+    border: 'border-orange-500/20',
+  },
+  'R&D': {
+    name: '科技研发',
+    icon: 'fa-flask',
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/20',
+  },
+  Regulation: {
+    name: '技术法规',
+    icon: 'fa-scale-balanced',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/20',
+  },
+  Other: {
+    name: '其他信息',
+    icon: 'fa-circle-info',
+    color: 'text-gray-400',
+    bg: 'bg-gray-500/10',
+    border: 'border-gray-500/20',
+  },
 }
 
 const quickSummary = computed(() => {
@@ -405,13 +541,13 @@ function getGroupedArticlesPreview(category: string) {
 function formatTitle(item: NewsItem, category: string) {
   let title = item.title_cn || item.summary_cn || item.title || ''
   if (title.length > 50) title = title.substring(0, 50) + '...'
-  
+
   if (category === 'Bid' && item.contractor) {
     title = `[中标: ${item.contractor}] ${title}`
   } else if (category === 'Project' && item.location) {
     let locationDisplay = item.location
     if (item.location.includes(',')) {
-      const parts = item.location.split(',').map(p => p.trim())
+      const parts = item.location.split(',').map((p) => p.trim())
       locationDisplay = parts[parts.length - 1]
     }
     title = `[${locationDisplay}] ${title}`
@@ -435,18 +571,18 @@ function formatTime(pubDate: string | undefined, createdAt: string | undefined) 
 async function openDetail(item: NewsItem) {
   const prevId = lastOpenedId.value
   const currentId = item.id || null
-  
+
   if (prevId && currentId && prevId !== currentId) {
     const modalBody = document.querySelector('.ant-modal-body')
     if (modalBody) {
       scrollPositions.value[prevId] = modalBody.scrollTop
     }
   }
-  
+
   lastOpenedId.value = currentId
   currentArticle.value = item
   modalVisible.value = true
-  
+
   setTimeout(() => {
     const modalBody = document.querySelector('.ant-modal-body')
     if (modalBody && currentId) {
@@ -460,19 +596,16 @@ async function openDetail(item: NewsItem) {
 }
 
 onMounted(async () => {
-  await Promise.all([
-    newsStore.fetchNews(),
-    vesselStore.fetchVessels()
-  ])
+  await Promise.all([newsStore.fetchNews(), vesselStore.fetchVessels()])
   loading.value = false
 
   // Auto-refresh every 5 minutes
-  refreshTimer = window.setInterval(async () => {
-    await Promise.all([
-      newsStore.fetchNews(),
-      vesselStore.fetchVessels()
-    ])
-  }, 5 * 60 * 1000)
+  refreshTimer = window.setInterval(
+    async () => {
+      await Promise.all([newsStore.fetchNews(), vesselStore.fetchVessels()])
+    },
+    5 * 60 * 1000
+  )
 })
 
 onUnmounted(() => {

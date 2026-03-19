@@ -6,8 +6,8 @@
         <div class="flex flex-wrap items-center gap-3">
           <div class="flex items-center gap-2">
             <label class="text-xs text-gray-400">时间范围</label>
-            <a-range-picker 
-              v-model:value="dateRange" 
+            <a-range-picker
+              v-model:value="dateRange"
               class="bg-dark-card border border-dark-border"
               format="YYYY-MM-DD"
               @change="loadStats"
@@ -63,10 +63,7 @@ import type { Dayjs } from 'dayjs'
 
 Chart.register(...registerables)
 
-const dateRange = ref<[Dayjs, Dayjs]>([
-  dayjs().subtract(30, 'day'),
-  dayjs()
-])
+const dateRange = ref<[Dayjs, Dayjs]>([dayjs().subtract(30, 'day'), dayjs()])
 
 const categoryPieChartRef = ref<HTMLCanvasElement | null>(null)
 const trendLineChartRef = ref<HTMLCanvasElement | null>(null)
@@ -77,14 +74,22 @@ let trendLineChart: Chart | null = null
 let sourceBarChart: Chart | null = null
 
 const chartColors = [
-  '#0ea5e9', '#22c55e', '#eab308', '#f97316', '#ec4899', '#8b5cf6', 
-  '#6366f1', '#14b8a6', '#f43f5e', '#a855f7'
+  '#0ea5e9',
+  '#22c55e',
+  '#eab308',
+  '#f97316',
+  '#ec4899',
+  '#8b5cf6',
+  '#6366f1',
+  '#14b8a6',
+  '#f43f5e',
+  '#a855f7',
 ]
 
 async function loadStats() {
   const start = dateRange.value[0].format('YYYY-MM-DD')
   const end = dateRange.value[1].format('YYYY-MM-DD')
-  
+
   try {
     const response = await fetch(`/api/statistics?start=${start}&end=${end}`)
     if (!response.ok) {
@@ -92,7 +97,7 @@ async function loadStats() {
       return
     }
     const data = await response.json()
-    
+
     renderPieChart(data.category_stats)
     renderLineChart(data.trend_stats)
     renderBarChart(data.source_stats)
@@ -103,18 +108,20 @@ async function loadStats() {
 
 function renderPieChart(data: { labels: string[]; values: number[] }) {
   if (!categoryPieChartRef.value) return
-  
+
   if (categoryPieChart) categoryPieChart.destroy()
-  
+
   categoryPieChart = new Chart(categoryPieChartRef.value, {
     type: 'pie',
     data: {
       labels: data.labels || [],
-      datasets: [{
-        data: data.values || [],
-        backgroundColor: chartColors,
-        borderWidth: 0
-      }]
+      datasets: [
+        {
+          data: data.values || [],
+          backgroundColor: chartColors,
+          borderWidth: 0,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -122,37 +129,39 @@ function renderPieChart(data: { labels: string[]; values: number[] }) {
       plugins: {
         legend: {
           position: 'right',
-          labels: { color: '#cbd5e1' }
-        }
-      }
-    }
+          labels: { color: '#cbd5e1' },
+        },
+      },
+    },
   })
 }
 
 function renderLineChart(data: any) {
   if (!trendLineChartRef.value) return
-  
+
   if (trendLineChart) trendLineChart.destroy()
-  
+
   const categories = Array.isArray(data.categories) ? data.categories : []
   const dates = Array.isArray(data.dates) ? data.dates : []
   let datasets: any[] = []
-  
+
   if (Array.isArray(data.datasets) && data.datasets.length > 0) {
     datasets = data.datasets.map((dataset: any, index: number) => ({
       label: dataset.label || categories[index] || `系列${index + 1}`,
       data: Array.isArray(dataset.data) ? dataset.data : dates.map(() => 0),
       borderColor: chartColors[index % chartColors.length],
       tension: 0.4,
-      fill: false
+      fill: false,
     }))
   } else if (data.values) {
     datasets = categories.map((cat: string, index: number) => ({
       label: cat,
-      data: dates.map((date: string) => (data.values[cat] && data.values[cat][date]) ? data.values[cat][date] : 0),
+      data: dates.map((date: string) =>
+        data.values[cat] && data.values[cat][date] ? data.values[cat][date] : 0
+      ),
       borderColor: chartColors[index % chartColors.length],
       tension: 0.4,
-      fill: false
+      fill: false,
     }))
   } else {
     datasets = categories.map((cat: string, index: number) => ({
@@ -160,7 +169,7 @@ function renderLineChart(data: any) {
       data: dates.map(() => 0),
       borderColor: chartColors[index % chartColors.length],
       tension: 0.4,
-      fill: false
+      fill: false,
     }))
   }
 
@@ -168,7 +177,7 @@ function renderLineChart(data: any) {
     type: 'line',
     data: {
       labels: dates,
-      datasets: datasets
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -176,38 +185,40 @@ function renderLineChart(data: any) {
       plugins: {
         legend: {
           position: 'top',
-          labels: { color: '#cbd5e1' }
-        }
+          labels: { color: '#cbd5e1' },
+        },
       },
       scales: {
         x: {
           ticks: { color: '#94a3b8' },
-          grid: { color: 'rgba(255,255,255,0.05)' }
+          grid: { color: 'rgba(255,255,255,0.05)' },
         },
         y: {
           ticks: { color: '#94a3b8' },
-          grid: { color: 'rgba(255,255,255,0.05)' }
-        }
-      }
-    }
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+    },
   })
 }
 
 function renderBarChart(data: { labels: string[]; values: number[] }) {
   if (!sourceBarChartRef.value) return
-  
+
   if (sourceBarChart) sourceBarChart.destroy()
-  
+
   sourceBarChart = new Chart(sourceBarChartRef.value, {
     type: 'bar',
     data: {
       labels: data.labels || [],
-      datasets: [{
-        label: '有效新闻数',
-        data: data.values || [],
-        backgroundColor: chartColors,
-        borderWidth: 0
-      }]
+      datasets: [
+        {
+          label: '有效新闻数',
+          data: data.values || [],
+          backgroundColor: chartColors,
+          borderWidth: 0,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -215,20 +226,20 @@ function renderBarChart(data: { labels: string[]; values: number[] }) {
       indexAxis: 'y',
       plugins: {
         legend: {
-          display: false
-        }
+          display: false,
+        },
       },
       scales: {
         x: {
           ticks: { color: '#94a3b8' },
-          grid: { color: 'rgba(255,255,255,0.05)' }
+          grid: { color: 'rgba(255,255,255,0.05)' },
         },
         y: {
           ticks: { color: '#94a3b8' },
-          grid: { color: 'rgba(255,255,255,0.05)' }
-        }
-      }
-    }
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+    },
   })
 }
 

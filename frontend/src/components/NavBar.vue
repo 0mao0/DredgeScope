@@ -4,73 +4,73 @@
       <div class="flex items-center justify-between h-14 sm:h-16">
         <div class="flex items-center gap-2">
           <router-link to="/" class="flex items-center gap-2">
-            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+            <div
+              class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20"
+            >
               <i class="fa-solid fa-earth-americas text-white text-lg sm:text-xl"></i>
             </div>
             <div class="flex items-baseline gap-1">
-              <h1 class="text-base sm:text-xl font-bold text-white">
-                全球疏浚情报
-              </h1>
-              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v0.1.39</span>
+              <h1 class="text-base sm:text-xl font-bold text-white">全球疏浚情报</h1>
+              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v0.1.40</span>
             </div>
           </router-link>
         </div>
         <div class="flex items-center gap-1 sm:gap-2 md:gap-3">
-          <router-link 
-            to="/" 
+          <router-link
+            to="/"
             :class="[
               'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+              isActive('/')
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400'
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10',
             ]"
           >
             <i class="fa-solid fa-calendar-day text-sm"></i>
             <span class="hidden sm:inline ml-1.5">每日推送</span>
           </router-link>
-          <router-link 
-            to="/history" 
+          <router-link
+            to="/history"
             :class="[
               'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/history') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+              isActive('/history')
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400'
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10',
             ]"
           >
             <i class="fa-solid fa-clock-rotate-left text-sm"></i>
             <span class="hidden sm:inline ml-1.5">历史新闻</span>
           </router-link>
-          <router-link 
-            to="/statistics" 
+          <router-link
+            to="/statistics"
             :class="[
               'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/statistics') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+              isActive('/statistics')
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400'
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10',
             ]"
           >
             <i class="fa-solid fa-chart-pie text-sm"></i>
             <span class="hidden sm:inline ml-1.5">统计分析</span>
           </router-link>
-          <router-link 
-            to="/vessel-map" 
+          <router-link
+            to="/vessel-map"
             :class="[
               'flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/vessel-map') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+              isActive('/vessel-map')
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400'
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10',
             ]"
           >
             <i class="fa-solid fa-ship text-sm"></i>
             <span class="hidden sm:inline ml-1.5">船舶跟踪</span>
           </router-link>
-          <router-link 
-            to="/acquisition-process" 
+          <router-link
+            to="/acquisition-process"
             :class="[
               'hidden sm:flex items-center justify-center h-9 sm:h-10 w-9 sm:w-auto sm:min-w-24 md:min-w-28 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all',
-              isActive('/acquisition-process') 
-                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400' 
-                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10'
+              isActive('/acquisition-process')
+                ? 'bg-brand-500/20 border border-brand-500/30 text-brand-400'
+                : 'bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10',
             ]"
           >
             <i class="fa-solid fa-list-check text-sm"></i>
