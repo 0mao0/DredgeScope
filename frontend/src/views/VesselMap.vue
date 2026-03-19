@@ -426,12 +426,6 @@ interface TrackState {
 }
 
 const trackStates = ref<Record<string, TrackState>>({})
-const trackDaysOptions = [
-  { label: '1天', value: 1 },
-  { label: '3天', value: 3 },
-  { label: '5天', value: 5 },
-  { label: '10天', value: 10 },
-]
 const selectedTrackMmsi = computed(() => {
   if (!selectedVesselId.value) return null
   const vessel = vessels.value.find((v) => v.id === selectedVesselId.value)
@@ -729,14 +723,6 @@ function formatTrackTime(value?: string) {
   return text.length > 19 ? text.slice(0, 19) : text
 }
 
-/**
- * 格式化轨迹坐标
- */
-function formatTrackCoord(value: number) {
-  if (!Number.isFinite(value)) return '-'
-  return value.toFixed(4)
-}
-
 function createIcon(color: string) {
   return L.divIcon({
     className: 'custom-div-icon',
@@ -1023,60 +1009,6 @@ function getTrackState(mmsi: string | undefined): TrackState | null {
 }
 
 /**
- * 获取轨迹分页数据
- */
-function getTrackPage(mmsi: string): TrackPoint[] {
-  const state = getTrackState(mmsi)
-  if (!state) return []
-  const start = (state.pageIndex - 1) * state.pageSize
-  return state.points.slice(start, start + state.pageSize)
-}
-
-function getTrackRowIndex(mmsi: string, idx: number): number {
-  const state = getTrackState(mmsi)
-  if (!state) return idx + 1
-  return (state.pageIndex - 1) * state.pageSize + idx + 1
-}
-
-/**
- * 获取轨迹当前页码
- */
-function getTrackPageIndex(mmsi: string): number {
-  const state = getTrackState(mmsi)
-  return state ? state.pageIndex : 1
-}
-
-/**
- * 获取轨迹总页数
- */
-function getTrackTotalPages(mmsi: string): number {
-  const state = getTrackState(mmsi)
-  if (!state) return 1
-  return Math.max(1, Math.ceil(state.points.length / state.pageSize))
-}
-
-/**
- * 翻到上一页
- */
-function prevTrackPage(mmsi: string) {
-  const state = getTrackState(mmsi)
-  if (!state) return
-  state.pageIndex = Math.max(1, state.pageIndex - 1)
-  trackStates.value = { ...trackStates.value }
-}
-
-/**
- * 翻到下一页
- */
-function nextTrackPage(mmsi: string) {
-  const state = getTrackState(mmsi)
-  if (!state) return
-  const maxPage = getTrackTotalPages(mmsi)
-  state.pageIndex = Math.min(maxPage, state.pageIndex + 1)
-  trackStates.value = { ...trackStates.value }
-}
-
-/**
  * 获取轨迹天数
  */
 function getTrackDays(mmsi: string): number {
@@ -1211,30 +1143,6 @@ function clearTrackMarker(mmsi: string) {
     trackMarkerMap.delete(mmsi)
     markerAnimationMap.delete(mmsi)
   }
-}
-
-/**
- * 获取轨迹状态显示文本
- */
-function getTrackStatusText(status: 'dredging' | 'underway' | 'moored' | undefined): string {
-  const statusMap: Record<string, string> = {
-    dredging: '施工',
-    underway: '航行',
-    moored: '停泊',
-  }
-  return statusMap[status || ''] || '未知'
-}
-
-/**
- * 获取轨迹状态样式类
- */
-function getTrackStatusClass(status: 'dredging' | 'underway' | 'moored' | undefined): string {
-  const classMap: Record<string, string> = {
-    dredging: 'bg-blue-500/20 text-blue-300 border border-blue-400/30',
-    underway: 'bg-green-500/20 text-green-300 border border-green-400/30',
-    moored: 'bg-red-500/20 text-red-300 border border-red-400/30',
-  }
-  return classMap[status || ''] || 'bg-gray-500/20 text-gray-300 border border-gray-400/30'
 }
 
 /**

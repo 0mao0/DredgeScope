@@ -227,12 +227,6 @@ const currentPointTime = computed(() => {
   return point?.timestamp || ''
 })
 
-const currentPointSpeed = computed(() => {
-  if (!props.points || props.points.length === 0) return 0
-  const point = props.points[Math.min(playedIndex.value, props.points.length - 1)]
-  return point?.speed || 0
-})
-
 const currentStatus = computed(() => {
   if (!props.points || props.points.length === 0) return 'underway'
   const point = props.points[Math.min(playedIndex.value, props.points.length - 1)]
