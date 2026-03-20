@@ -574,13 +574,14 @@ def is_article_processed(url):
     return False
 
 def save_raw_articles(items):
-    """保存原始文章数据，跳过已存在的。返回 (处理总数, 新增文章ID列表)"""
+    """保存原始文章数据，跳过已存在的。返回 (处理总数, 新增文章ID列表, 新增文章link集合)"""
     if not items:
-        return 0, []
+        return 0, [], set()
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     count = 0
     new_ids = []
+    new_links = set()
     for item in items:
         try:
             # 检查是否存在
@@ -616,13 +617,14 @@ def save_raw_articles(items):
                     )
                 )
                 new_ids.append(c.lastrowid)
+                new_links.add(item['link'])
             count += 1
         except Exception as e:
             print(f"[DB] 插入文章失败 {item.get('link')}: {e}")
 
     conn.commit()
     conn.close()
-    return count, new_ids
+    return count, new_ids, new_links
 
 def get_items_for_enrichment(created_after=None, ids=None):
     """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图 或 RSS源) 且 5天内"""

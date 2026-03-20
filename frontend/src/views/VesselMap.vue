@@ -417,6 +417,7 @@ interface TrackPoint {
   timestamp?: string
   created_at?: string
   speed?: number
+  heading?: number
   status?: 'dredging' | 'underway' | 'moored'
 }
 
@@ -677,42 +678,215 @@ function translateCountry(en: string | undefined): string {
     'United States': '美国',
     US: '美国',
     USA: '美国',
-    Netherlands: '荷兰',
-    NL: '荷兰',
+    'United Kingdom': '英国',
+    UK: '英国',
+    GB: '英国',
+    'South Korea': '韩国',
+    Korea: '韩国',
+    KR: '韩国',
+    'North Korea': '朝鲜',
+    Japan: '日本',
+    JP: '日本',
+    'Hong Kong': '香港',
+    HK: '香港',
+    Taiwan: '台湾',
+    TW: '台湾',
+    'Macau': '澳门',
+    MO: '澳门',
     Singapore: '新加坡',
     SG: '新加坡',
     Malaysia: '马来西亚',
     MY: '马来西亚',
-    Japan: '日本',
-    JP: '日本',
-    Korea: '韩国',
-    KR: '韩国',
-    'South Korea': '韩国',
-    Australia: '澳大利亚',
-    AU: '澳大利亚',
-    'United Kingdom': '英国',
-    UK: '英国',
-    GB: '英国',
+    Indonesia: '印度尼西亚',
+    ID: '印度尼西亚',
+    Philippines: '菲律宾',
+    PH: '菲律宾',
+    Vietnam: '越南',
+    VN: '越南',
+    Thailand: '泰国',
+    TH: '泰国',
+    Myanmar: '缅甸',
+    MM: '缅甸',
+    India: '印度',
+    IN: '印度',
+    Pakistan: '巴基斯坦',
+    PK: '巴基斯坦',
+    Bangladesh: '孟加拉国',
+    BD: '孟加拉国',
+    'Sri Lanka': '斯里兰卡',
+    LK: '斯里兰卡',
+    Nepal: '尼泊尔',
+    NP: '尼泊尔',
+    'United Arab Emirates': '阿联酋',
+    AE: '阿联酋',
+    'Saudi Arabia': '沙特阿拉伯',
+    SA: '沙特阿拉伯',
+    Qatar: '卡塔尔',
+    QA: '卡塔尔',
+    Oman: '阿曼',
+    OM: '阿曼',
+    Kuwait: '科威特',
+    KW: '科威特',
+    Bahrain: '巴林',
+    BH: '巴林',
+    Iraq: '伊拉克',
+    IQ: '伊拉克',
+    Iran: '伊朗',
+    IR: '伊朗',
+    Turkey: '土耳其',
+    TR: '土耳其',
+    Egypt: '埃及',
+    EG: '埃及',
+    Nigeria: '尼日利亚',
+    NG: '尼日利亚',
+    Kenya: '肯尼亚',
+    KE: '肯尼亚',
+    'South Africa': '南非',
+    ZA: '南非',
+    Tanzania: '坦桑尼亚',
+    TZ: '坦桑尼亚',
+    Mozambique: '莫桑比克',
+    MZ: '莫桑比克',
+    Angola: '安哥拉',
+    AO: '安哥拉',
+    Ghana: '加纳',
+    GH: '加纳',
+    Cameroon: '喀麦隆',
+    CM: '喀麦隆',
+    Liberia: '利比里亚',
+    LR: '利比里亚',
+    'Sierra Leone': '塞拉利昂',
+    SL: '塞拉利昂',
+    'Equatorial Guinea': '赤道几内亚',
+    GQ: '赤道几内亚',
+    Gabon: '加蓬',
+    GA: '加蓬',
+    'Republic of the Congo': '刚果共和国',
+    CG: '刚果共和国',
+    'Democratic Republic of the Congo': '刚果民主共和国',
+    CD: '刚果民主共和国',
+    Senegal: '塞内加尔',
+    SN: '塞内加尔',
+    Mauritania: '毛里塔尼亚',
+    MR: '毛里塔尼亚',
+    Morocco: '摩洛哥',
+    MA: '摩洛哥',
+    Tunisia: '突尼斯',
+    TN: '突尼斯',
+    Algeria: '阿尔及利亚',
+    DZ: '阿尔及利亚',
+    Libya: '利比亚',
+    LY: '利比亚',
+    Sudan: '苏丹',
+    SD: '苏丹',
+    Russia: '俄罗斯',
+    RU: '俄罗斯',
+    Ukraine: '乌克兰',
+    UA: '乌克兰',
+    Poland: '波兰',
+    PL: '波兰',
     Germany: '德国',
     DE: '德国',
     France: '法国',
     FR: '法国',
-    Indonesia: '印度尼西亚',
-    ID: '印度尼西亚',
-    India: '印度',
-    IN: '印度',
-    Russia: '俄罗斯',
-    RU: '俄罗斯',
-    'Saudi Arabia': '沙特阿拉伯',
-    SA: '沙特阿拉伯',
-    'United Arab Emirates': '阿联酋',
-    AE: '阿联酋',
+    Italy: '意大利',
+    IT: '意大利',
+    Spain: '西班牙',
+    ES: '西班牙',
+    Portugal: '葡萄牙',
+    PT: '葡萄牙',
+    Greece: '希腊',
+    GR: '希腊',
+    Netherlands: '荷兰',
+    NL: '荷兰',
+    Belgium: '比利时',
+    BE: '比利时',
+    Sweden: '瑞典',
+    SE: '瑞典',
+    Norway: '挪威',
+    NO: '挪威',
+    Denmark: '丹麦',
+    DK: '丹麦',
+    Finland: '芬兰',
+    FI: '芬兰',
+    Austria: '奥地利',
+    AT: '奥地利',
+    Switzerland: '瑞士',
+    CH: '瑞士',
+    Czech: '捷克',
+    CZ: '捷克',
+    Hungary: '匈牙利',
+    HU: '匈牙利',
+    Romania: '罗马尼亚',
+    RO: '罗马尼亚',
+    Bulgaria: '保加利亚',
+    BG: '保加利亚',
+    Croatia: '克罗地亚',
+    HR: '克罗地亚',
+    Serbia: '塞尔维亚',
+    RS: '塞尔维亚',
+    Slovenia: '斯洛文尼亚',
+    SI: '斯洛文尼亚',
+    Slovakia: '斯洛伐克',
+    SK: '斯洛伐克',
+    Montenegro: '黑山',
+    ME: '黑山',
+    'Bosnia and Herzegovina': '波黑',
+    BA: '波黑',
+    Albania: '阿尔巴尼亚',
+    AL: '阿尔巴尼亚',
+    'North Macedonia': '北马其顿',
+    MK: '北马其顿',
+    Australia: '澳大利亚',
+    AU: '澳大利亚',
+    'New Zealand': '新西兰',
+    NZ: '新西兰',
+    'Papua New Guinea': '巴布亚新几内亚',
+    PG: '巴布亚新几内亚',
+    Fiji: '斐济',
+    FJ: '斐济',
+    Canada: '加拿大',
+    CA: '加拿大',
+    Mexico: '墨西哥',
+    MX: '墨西哥',
+    Panama: '巴拿马',
+    PA: '巴拿马',
+    'Costa Rica': '哥斯达黎加',
+    CR: '哥斯达黎加',
+    Cuba: '古巴',
+    CU: '古巴',
+    Jamaica: '牙买加',
+    JM: '牙买加',
+    Bahamas: '巴哈马',
+    BS: '巴哈马',
+    Haiti: '海地',
+    HT: '海地',
+    'Dominican Republic': '多米尼加共和国',
+    DO: '多米尼加共和国',
+    Colombia: '哥伦比亚',
+    CO: '哥伦比亚',
+    Venezuela: '委内瑞拉',
+    VE: '委内瑞拉',
+    Peru: '秘鲁',
+    PE: '秘鲁',
+    Ecuador: '厄瓜多尔',
+    EC: '厄瓜多尔',
+    Chile: '智利',
+    CL: '智利',
+    Argentina: '阿根廷',
+    AR: '阿根廷',
     Brazil: '巴西',
     BR: '巴西',
-    Vietnam: '越南',
-    VN: '越南',
-    Philippines: '菲律宾',
-    PH: '菲律宾',
+    Uruguay: '乌拉圭',
+    UY: '乌拉圭',
+    Paraguay: '巴拉圭',
+    PY: '巴拉圭',
+    Bolivia: '玻利维亚',
+    BO: '玻利维亚',
+    Guyana: '圭亚那',
+    GY: '圭亚那',
+    Suriname: '苏里南',
+    SR: '苏里南',
   }
   return map[en] || en
 }
@@ -726,13 +900,29 @@ function formatTrackTime(value?: string) {
   return text.length > 19 ? text.slice(0, 19) : text
 }
 
-function createIcon(color: string) {
+function createIcon(color: string, heading?: number, isMoving?: boolean) {
+  if (!isMoving) {
+    return L.divIcon({
+      className: 'custom-div-icon',
+      html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 12px ${color}; border: 2px solid white;"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      popupAnchor: [0, -6],
+    })
+  }
+
+  const rotation = heading !== undefined && heading !== null ? heading : 0
+  const svgPolygon = `
+    <svg width="16" height="28" viewBox="0 0 16 28" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));">
+      <polygon points="8,0 14,6 14,24 2,24 2,6" fill="${color}" stroke="white" stroke-width="1"/>
+    </svg>
+  `
   return L.divIcon({
-    className: 'custom-div-icon',
-    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 12px ${color}; border: 2px solid white;"></div>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
-    popupAnchor: [0, -6],
+    className: 'custom-ship-icon',
+    html: svgPolygon,
+    iconSize: [16, 28],
+    iconAnchor: [8, 14],
+    popupAnchor: [0, -14],
   })
 }
 
@@ -1098,9 +1288,9 @@ function updateTrackMarkerTarget(mmsi: string, point: TrackPoint) {
       progress: 0
     })
     startMarkerAnimation()
-    updateTrackMarkerIcon(mmsi, point.status || 'underway')
+    updateTrackMarkerIcon(mmsi, point.status || 'underway', point.heading)
   } else {
-    const icon = createTrackShipIcon(point.status || 'underway')
+    const icon = createTrackShipIcon(point.status || 'underway', point.heading)
     const marker = L.marker([point.lat, point.lng], { icon }).addTo(map!)
     trackMarkerMap.set(mmsi, marker)
     markerAnimationMap.set(mmsi, {
@@ -1141,24 +1331,25 @@ function startMarkerAnimation() {
   markerAnimationFrameId = requestAnimationFrame(animate)
 }
 
-function updateTrackMarkerIcon(mmsi: string, status: string) {
+function updateTrackMarkerIcon(mmsi: string, status: string, heading?: number) {
   if (!trackMarkerMap.has(mmsi)) return
   const marker = trackMarkerMap.get(mmsi)!
-  marker.setIcon(createTrackShipIcon(status))
+  marker.setIcon(createTrackShipIcon(status, heading))
 }
 
-function createTrackShipIcon(status: string) {
+function createTrackShipIcon(status: string, heading?: number) {
   const color = status === 'dredging' ? '#3b82f6' : status === 'moored' ? '#ef4444' : '#22c55e'
-  const rotation = status === 'underway' ? 45 : status === 'dredging' ? 90 : 0
+  const rotation = heading !== undefined && heading !== null ? heading : 0
+  const svgPolygon = `
+    <svg width="16" height="28" viewBox="0 0 16 28" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));">
+      <polygon points="8,0 14,6 14,24 2,24 2,6" fill="${color}" stroke="white" stroke-width="1"/>
+    </svg>
+  `
   return L.divIcon({
     className: 'track-ship-marker',
-    html: `<div style="transform: rotate(${rotation}deg); transition: transform 0.3s ease; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
-      <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: ${color}; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-        <i class="fa-solid fa-ship text-white text-lg" style="transform: rotate(-45deg);"></i>
-      </div>
-    </div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
+    html: svgPolygon,
+    iconSize: [16, 28],
+    iconAnchor: [8, 14]
   })
 }
 
@@ -1336,6 +1527,7 @@ async function showTrack(
           timestamp: t.timestamp,
           created_at: t.created_at,
           speed: t.speed,
+          heading: t.heading,
           status: t.status,
         })),
         pageIndex: 1,
@@ -1482,16 +1674,11 @@ function createCompanyTagIcon(
   })
 }
 
-const icons: Record<string, L.DivIcon> = {
-  dredging: createIcon(statusColors.dredging),
-  underway: createIcon(statusColors.underway),
-  moored: createIcon(statusColors.moored),
-  offline: createIcon(statusColors.offline),
+function createShipIcon(status: string, heading?: number, isMoving?: boolean) {
+  const color = statusColors[status] || statusColors.offline
+  return createIcon(color, heading, isMoving)
 }
 
-/**
- * 判断是否为已配置MMSI的船舶
- */
 function isTrackedVessel(vessel: Vessel): boolean {
   return Boolean(vessel.mmsi && vessel.mmsi.toString().trim())
 }
@@ -1564,15 +1751,11 @@ function renderMarkers() {
     if (!isTrackedVessel(v)) return
 
     const iconKey = getVesselStatusKey(v)
-    const marker = L.marker([v.lat, v.lng], { icon: icons[iconKey] }).addTo(vesselLayerGroup!)
+    const heading = v.heading !== undefined && v.heading !== null ? v.heading : 0
+    const isMoving = iconKey === 'underway' || iconKey === 'dredging'
+    const shipIcon = createShipIcon(iconKey, heading, isMoving)
+    const marker = L.marker([v.lat, v.lng], { icon: shipIcon }).addTo(vesselLayerGroup!)
     marker.on('click', () => handleVesselClick(v))
-
-    if (v.mmsi) {
-      vesselMarkerMap.set(v.mmsi, marker)
-    }
-
-    // Tag Logic
-    const companyName = v.company || '其他'
 
     let timeStr = '未知'
     if (v.updated_at) {
@@ -1582,15 +1765,40 @@ function renderMarkers() {
       } catch (e) {}
     }
 
+    const statusCN = translateStatusByKey(iconKey)
+    const speedStr = v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'
+    const headingStr = heading !== undefined ? `${heading}°` : '-'
+
+    const tooltipContent = `
+      <div style="font-weight: bold; margin-bottom: 4px; font-size: 12px;">${v.name}</div>
+      <div style="display: flex; gap: 12px; font-size: 11px;">
+        <span>状态: <strong>${statusCN}</strong></span>
+        <span>航速: <strong>${speedStr}</strong></span>
+      </div>
+      <div style="display: flex; gap: 12px; font-size: 11px;">
+        <span>航向: <strong>${headingStr}</strong></span>
+      </div>
+      <div style="font-size: 10px; opacity: 0.8; margin-top: 2px;">更新: ${timeStr}</div>
+    `
+    marker.bindTooltip(tooltipContent, {
+      direction: 'top',
+      className: 'ship-tooltip',
+      opacity: 0.95,
+      offset: [0, -18],
+    })
+
+    if (v.mmsi) {
+      vesselMarkerMap.set(v.mmsi, marker)
+    }
+
+    const companyName = v.company || '其他'
+
     let locationStr = '未知'
     if (v.continent || v.country) {
       const continent = translateContinent(v.continent)
       const country = translateCountry(v.country)
       locationStr = `${continent || '-'} / ${country || '-'}`
     }
-
-    const statusCN = translateStatusByKey(getVesselStatusKey(v))
-    const speedStr = v.speed !== null && v.speed !== undefined ? v.speed.toFixed(1) + ' 节' : '-'
 
     const tagIcon = createCompanyTagIcon(companyName, {
       name: v.name,
@@ -1825,6 +2033,35 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 2px 8px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+:deep(.ship-tooltip) {
+  background: rgba(15, 23, 42, 0.95);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  min-width: 160px;
+}
+
+:deep(.custom-ship-icon) {
+  background: transparent;
+  border: none;
+}
+
+:deep(.custom-ship-icon svg) {
+  display: block;
+}
+
+:deep(.track-ship-marker) {
+  background: transparent;
+  border: none;
+}
+
+:deep(.track-ship-marker svg) {
+  display: block;
 }
 
 :deep(.leaflet-container a.leaflet-popup-close-button) {

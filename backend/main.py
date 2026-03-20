@@ -282,18 +282,16 @@ async def main():
 
     # --- 改动：采集阶段立即入库 (不重复) ---
     print(f"正在保存原始数据到数据库...")
-    total_scanned, new_ids = database.save_raw_articles(raw_items)
+    total_scanned, new_ids, new_links_set = database.save_raw_articles(raw_items)
     new_inserted_count = len(new_ids)
     print(f"入库完成: 扫描 {total_scanned} 条, 实际新增 {new_inserted_count} 条")
     
     # 生成采集源统计报告
     source_stats = []
-    seen_links = set()  # 初始化 seen_links
     for name, stat in manager.stats.get('by_source', {}).items():
         # 计算该源实际入库数量
         source_fetched = stat.get('count', 0)
-        source_inserted = len([item for item in raw_items if item.get('source_name') == name and item.get('link') in new_ids])
-        source_valid = len([item for item in raw_items if item.get('source_name') == name and item.get('link') in seen_links])
+        source_inserted = len([item for item in raw_items if item.get('source_name') == name and item.get('link') in new_links_set])
         
         status = stat.get('status', 'unknown')
         error = stat.get('error', '')
@@ -311,7 +309,7 @@ async def main():
             'name': name,
             'fetched': source_fetched,
             'inserted': source_inserted,
-            'valid': source_valid,
+            'valid': 0,
             'status': status,
             'remark': remark
         })
@@ -327,6 +325,7 @@ async def main():
     audit_rows = []
     pending_map = {}
     pub_date_map = {}
+    seen_links = set()  # 本次任务内去重用
 
     for item in raw_items:
 
