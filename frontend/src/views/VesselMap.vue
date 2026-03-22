@@ -900,6 +900,18 @@ function formatTrackTime(value?: string) {
   return text.length > 19 ? text.slice(0, 19) : text
 }
 
+/**
+ * 判断航向值是否有效
+ * AIS 中 511 表示无效航向，0-360 为有效范围
+ */
+function isValidHeading(heading: number | undefined | null): boolean {
+  if (heading === undefined || heading === null) return false
+  if (Number.isNaN(heading)) return false
+  // AIS 标准: 511 表示航向不可用
+  if (heading >= 360 || heading < 0) return false
+  return true
+}
+
 function createIcon(color: string, heading?: number, isMoving?: boolean) {
   if (!isMoving) {
     return L.divIcon({
@@ -911,7 +923,8 @@ function createIcon(color: string, heading?: number, isMoving?: boolean) {
     })
   }
 
-  const rotation = heading !== undefined && heading !== null ? heading : 0
+  // 只有有效航向才旋转图标
+  const rotation = isValidHeading(heading) ? heading : 0
   const svgPolygon = `
     <svg width="16" height="28" viewBox="0 0 16 28" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));">
       <polygon points="8,0 14,6 14,24 2,24 2,6" fill="${color}" stroke="white" stroke-width="1"/>
@@ -1339,7 +1352,8 @@ function updateTrackMarkerIcon(mmsi: string, status: string, heading?: number) {
 
 function createTrackShipIcon(status: string, heading?: number) {
   const color = status === 'dredging' ? '#3b82f6' : status === 'moored' ? '#ef4444' : '#22c55e'
-  const rotation = heading !== undefined && heading !== null ? heading : 0
+  // 只有有效航向才旋转图标
+  const rotation = isValidHeading(heading) ? heading : 0
   const svgPolygon = `
     <svg width="16" height="28" viewBox="0 0 16 28" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));">
       <polygon points="8,0 14,6 14,24 2,24 2,6" fill="${color}" stroke="white" stroke-width="1"/>
@@ -1751,8 +1765,9 @@ function renderMarkers() {
     if (!isTrackedVessel(v)) return
 
     const iconKey = getVesselStatusKey(v)
-    const heading = v.heading !== undefined && v.heading !== null ? v.heading : 0
     const isMoving = iconKey === 'underway' || iconKey === 'dredging'
+    // 停泊状态下不显示航向，航行/施工状态下显示计算航向
+    const heading = isMoving && isValidHeading(v.heading) ? v.heading : undefined
     const shipIcon = createShipIcon(iconKey, heading, isMoving)
     const marker = L.marker([v.lat, v.lng], { icon: shipIcon }).addTo(vesselLayerGroup!)
     marker.on('click', () => handleVesselClick(v))

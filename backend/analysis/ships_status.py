@@ -86,6 +86,58 @@ def compute_speed_series(tracks: List[Dict]) -> List[float]:
     return speeds
 
 
+def compute_heading_from_tracks(tracks: List[Dict]) -> Optional[float]:
+    """
+    根据轨迹点计算船舶航向（从正北顺时针角度，0-360度）
+    
+    使用最近两个有效轨迹点计算航向，如果点太少或距离太近返回 None
+    """
+    # 收集有效轨迹点
+    points = []
+    for item in tracks:
+        lat = item.get("lat")
+        lng = item.get("lng")
+        ts = parse_timestamp(item.get("timestamp"))
+        if lat is None or lng is None or ts is None:
+            continue
+        points.append((ts, float(lat), float(lng)))
+    
+    if len(points) < 2:
+        return None
+    
+    # 按时间排序
+    points.sort(key=lambda x: x[0])
+    
+    # 找最近两个距离足够的点（至少移动了 10 米）
+    min_distance_meters = 10.0
+    for i in range(len(points) - 1, 0, -1):
+        t2, lat2, lng2 = points[i]
+        t1, lat1, lng1 = points[i - 1]
+        
+        # 计算两点距离
+        dist = haversine_meters(lat1, lng1, lat2, lng2)
+        if dist < min_distance_meters:
+            continue
+        
+        # 计算航向（从正北顺时针）
+        # 使用球面三角学计算初始方位角
+        lat1_rad = math.radians(lat1)
+        lat2_rad = math.radians(lat2)
+        dlon = math.radians(lng2 - lng1)
+        
+        x = math.sin(dlon) * math.cos(lat2_rad)
+        y = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(dlon)
+        
+        bearing_rad = math.atan2(x, y)
+        bearing_deg = math.degrees(bearing_rad)
+        
+        # 转换为 0-360 度
+        heading = (bearing_deg + 360) % 360
+        return heading
+    
+    return None
+
+
 def get_recent_points(tracks: List[Dict], latest_time: datetime, window_hours: int) -> List[Tuple[datetime, float, float]]:
     """获取最近窗口内的轨迹点（时间、纬度、经度）"""
     if window_hours <= 0:
@@ -193,11 +245,16 @@ def analyze_tracks(tracks: List[Dict], offline_hours: int) -> Tuple[str, Optiona
     if latest_time is None:
         return "offline", None, None, None, None
     if datetime.now() - latest_time > timedelta(hours=offline_hours):
-        return "offline", None, latest.get("heading"), None, latest_time.isoformat()
+        # 离线状态下，尝试自己计算航向，否则返回 None
+        computed_heading = compute_heading_from_tracks(tracks)
+        return "offline", None, computed_heading, None, latest_time.isoformat()
     location = None
     if latest.get("lat") is not None and latest.get("lng") is not None:
         location = f"{float(latest.get('lat')):.6f}, {float(latest.get('lng')):.6f}"
-    heading = latest.get("heading")
+    
+    # 自己计算航向，不使用 AIS 提供的 heading
+    heading = compute_heading_from_tracks(tracks)
+    
     if is_stationary(tracks, latest_time, window_hours=2, drift_meters=80.0, fallback_min_hours=2):
         return "moored", 0.0, heading, location, latest_time.isoformat()
     speed_series = compute_speed_series(tracks)

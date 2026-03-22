@@ -99,7 +99,7 @@ def update_ship_statuses():
                     continue
                     
                 speed = float(ship_info.get("speed", 0))
-                heading = float(ship_info.get("heading", 0))
+                # 不存储 AIS 提供的 heading，由分析模块根据轨迹自己计算
                 status_raw = ship_info.get("status", "Unknown")
                 update_time = ship_info.get("updatetime")
                 
@@ -130,6 +130,7 @@ def update_ship_statuses():
 
                 # 更新 ships 表
                 # We update status here to ensure frontend sees the latest status from Fleet API
+                # heading 设为 NULL，由分析模块根据轨迹自己计算
                 c.execute("""
                     UPDATE ship_infos 
                     SET location = ?, 
@@ -139,16 +140,17 @@ def update_ship_statuses():
                         province = ?,
                         city = ?,
                         speed = ?,
-                        heading = ?,
+                        heading = NULL,
                         status = ?
                     WHERE mmsi = ?
                 """, (f"{lat}, {lng}", datetime.now().isoformat(), 
-                      country_name, continent, province, city, speed, heading, status_raw, mmsi))
+                      country_name, continent, province, city, speed, status_raw, mmsi))
                 
+                # 轨迹表中也不存储 AIS heading，由分析模块自己计算
                 c.execute('''INSERT INTO ship_tracks 
                     (mmsi, lat, lng, speed, heading, status_raw, timestamp, created_at, vessel_name)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (mmsi, lat, lng, speed, heading, status_raw, update_time or datetime.now().isoformat(), datetime.now().isoformat(), vessel_name)
+                    VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)''',
+                    (mmsi, lat, lng, speed, status_raw, update_time or datetime.now().isoformat(), datetime.now().isoformat(), vessel_name)
                 )
                 c.execute('''
                     DELETE FROM ship_tracks 
