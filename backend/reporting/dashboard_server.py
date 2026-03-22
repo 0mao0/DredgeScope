@@ -398,6 +398,8 @@ async def get_articles(
         params.append(source_name)
 
     where_sql = " AND ".join(where) if where else "1=1"
+
+    # 获取总数
     count_query = f"""
         SELECT COUNT(a.id)
         FROM articles a
@@ -405,6 +407,23 @@ async def get_articles(
     """
     c.execute(count_query, params)
     total = c.fetchone()[0] or 0
+
+    # 获取有效/无效文章统计（基于当前筛选条件，但忽略 valid 筛选）
+    stats_where = [w for w in where if not w.startswith("a.valid =")]
+    stats_where_sql = " AND ".join(stats_where) if stats_where else "1=1"
+    stats_params = [p for i, p in enumerate(params) if i < len(params) - (1 if valid is not None else 0)]
+
+    valid_count_query = f"""
+        SELECT
+            SUM(CASE WHEN a.valid = 1 THEN 1 ELSE 0 END) as valid_count,
+            SUM(CASE WHEN a.valid = 0 THEN 1 ELSE 0 END) as invalid_count
+        FROM articles a
+        WHERE {stats_where_sql}
+    """
+    c.execute(valid_count_query, stats_params)
+    stats_row = c.fetchone()
+    valid_count = stats_row[0] or 0
+    invalid_count = stats_row[1] or 0
 
     offset = max(page - 1, 0) * page_size
     data_query = f"""
@@ -437,6 +456,8 @@ async def get_articles(
 
     return {
         "total": total,
+        "valid_count": valid_count,
+        "invalid_count": invalid_count,
         "page": page,
         "page_size": page_size,
         "items": items

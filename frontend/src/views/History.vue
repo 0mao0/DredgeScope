@@ -4,22 +4,6 @@
     <header
       class="p-4 flex items-center justify-between glass-card rounded-2xl flex-shrink-0 min-h-[64px]"
     >
-      <div class="flex items-center gap-4 flex-wrap">
-        <div class="flex items-center gap-3">
-          <div
-            class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center"
-          >
-            总文章数: <span class="text-white font-bold mx-1">{{ total }}</span>
-          </div>
-          <div
-            v-if="filters.valid !== null"
-            class="text-xs text-gray-400 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 flex items-center"
-          >
-            {{ filters.valid === 1 ? '有效' : '无效' }}文章
-          </div>
-        </div>
-      </div>
-
       <div class="flex items-center gap-3 flex-wrap">
         <!-- 搜索 -->
         <div class="relative w-64">
@@ -27,25 +11,48 @@
             v-model="filters.keyword"
             type="text"
             placeholder="搜索标题/摘要..."
-            class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:border-blue-500 transition-colors text-white placeholder-gray-500"
+            class="w-full bg-slate-800/50 border border-white/10 rounded-lg h-9 pl-3 pr-16 text-sm focus:outline-none focus:border-blue-500 transition-colors text-white placeholder-gray-500"
             @keyup.enter="handleSearch"
           />
+          <!-- 清空按钮 -->
+          <button
+            v-if="filters.keyword"
+            @click="filters.keyword = ''; handleSearch()"
+            class="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
           <i
-            class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-gray-500 text-xs cursor-pointer hover:text-blue-400 transition-colors"
+            class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs cursor-pointer hover:text-blue-400 transition-colors"
             @click="handleSearch"
           ></i>
         </div>
+      </div>
 
+      <div class="flex items-center gap-3 flex-wrap justify-end">
         <!-- 有效/无效筛选 -->
         <a-select
           v-model:value="filters.valid"
           placeholder="数据状态"
-          class="w-32 custom-select"
+          class="w-40 custom-select"
           @change="handleSearch"
         >
-          <a-select-option :value="null">全部文章</a-select-option>
-          <a-select-option :value="1">有效文章</a-select-option>
-          <a-select-option :value="0">无效文章</a-select-option>
+          <a-select-option :value="null">全部文章（{{ stats.total }}）</a-select-option>
+          <a-select-option :value="1">有效文章（{{ stats.valid }}）</a-select-option>
+          <a-select-option :value="0">无效文章（{{ stats.invalid }}）</a-select-option>
         </a-select>
 
         <!-- 时间维度 -->
@@ -348,6 +355,11 @@ import axios from 'axios'
 const loading = ref(false)
 const articleList = ref<NewsItem[]>([])
 const total = ref(0)
+const stats = reactive({
+  total: 0,
+  valid: 0,
+  invalid: 0
+})
 const filters = reactive({
   page: 1,
   page_size: 20,
@@ -469,6 +481,9 @@ const fetchArticles = async () => {
     const res = await axios.get('/api/articles', { params })
     articleList.value = res.data.items
     total.value = res.data.total
+    stats.total = res.data.total
+    stats.valid = res.data.valid_count || 0
+    stats.invalid = res.data.invalid_count || 0
   } catch (e) {
     console.error(e)
   } finally {

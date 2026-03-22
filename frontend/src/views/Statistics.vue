@@ -3,19 +3,14 @@
     <main class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
       <!-- Filter Bar -->
       <div class="glass-card rounded-2xl p-5">
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-2">
-            <label class="text-xs text-gray-400">时间范围</label>
-            <a-range-picker
-              v-model:value="dateRange"
-              class="bg-dark-card border border-dark-border"
-              format="YYYY-MM-DD"
-              @change="loadStats"
-            />
-          </div>
-          <div class="flex gap-2">
-            <a-button @click="resetFilter">重置</a-button>
-          </div>
+        <div class="flex flex-wrap items-center justify-end gap-3">
+          <a-range-picker
+            v-model:value="dateRange"
+            class="bg-dark-card border border-dark-border"
+            format="YYYY-MM-DD"
+            @change="loadStats"
+          />
+          <a-button @click="resetFilter">重置</a-button>
         </div>
       </div>
 
@@ -31,10 +26,10 @@
           </div>
         </div>
 
-        <!-- Line Chart: Trend -->
+        <!-- Stacked Bar Chart: Trend -->
         <div class="glass-card rounded-2xl p-6">
           <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <i class="fa-solid fa-chart-line text-green-400"></i> 情报数量趋势
+            <i class="fa-solid fa-chart-column text-green-400"></i> 情报数量趋势
           </h3>
           <div class="chart-container">
             <canvas ref="trendLineChartRef"></canvas>
@@ -149,9 +144,9 @@ function renderLineChart(data: any) {
     datasets = data.datasets.map((dataset: any, index: number) => ({
       label: dataset.label || categories[index] || `系列${index + 1}`,
       data: Array.isArray(dataset.data) ? dataset.data : dates.map(() => 0),
+      backgroundColor: chartColors[index % chartColors.length],
       borderColor: chartColors[index % chartColors.length],
-      tension: 0.4,
-      fill: false,
+      borderWidth: 1,
     }))
   } else if (data.values) {
     datasets = categories.map((cat: string, index: number) => ({
@@ -159,22 +154,22 @@ function renderLineChart(data: any) {
       data: dates.map((date: string) =>
         data.values[cat] && data.values[cat][date] ? data.values[cat][date] : 0
       ),
+      backgroundColor: chartColors[index % chartColors.length],
       borderColor: chartColors[index % chartColors.length],
-      tension: 0.4,
-      fill: false,
+      borderWidth: 1,
     }))
   } else {
     datasets = categories.map((cat: string, index: number) => ({
       label: cat,
       data: dates.map(() => 0),
+      backgroundColor: chartColors[index % chartColors.length],
       borderColor: chartColors[index % chartColors.length],
-      tension: 0.4,
-      fill: false,
+      borderWidth: 1,
     }))
   }
 
   trendLineChart = new Chart(trendLineChartRef.value, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: dates,
       datasets: datasets,
@@ -190,10 +185,12 @@ function renderLineChart(data: any) {
       },
       scales: {
         x: {
+          stacked: true,
           ticks: { color: '#94a3b8' },
           grid: { color: 'rgba(255,255,255,0.05)' },
         },
         y: {
+          stacked: true,
           ticks: { color: '#94a3b8' },
           grid: { color: 'rgba(255,255,255,0.05)' },
         },

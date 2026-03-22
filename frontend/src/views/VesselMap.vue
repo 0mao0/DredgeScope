@@ -35,11 +35,32 @@
               v-model="searchQuery"
               type="text"
               placeholder="搜索船舶名称/MMSI..."
-              class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-2 px-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+              class="w-full bg-slate-800/50 border border-white/10 rounded-lg py-2 pl-3 pr-16 text-sm focus:outline-none focus:border-blue-500 transition-colors"
             />
+            <!-- 清空按钮 -->
+            <button
+              v-if="searchQuery"
+              @click="searchQuery = ''"
+              class="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 absolute right-3 top-2.5 text-gray-500"
+              class="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -912,6 +933,31 @@ function isValidHeading(heading: number | undefined | null): boolean {
   return true
 }
 
+/**
+ * 根据两点坐标计算航向（从正北顺时针角度）
+ * @param fromLat 起始点纬度
+ * @param fromLng 起始点经度
+ * @param toLat 目标点纬度
+ * @param toLng 目标点经度
+ * @returns 航向角度 (0-360)
+ */
+function calculateHeading(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+  const toRad = (deg: number) => deg * (Math.PI / 180)
+  const toDeg = (rad: number) => rad * (180 / Math.PI)
+
+  const lat1 = toRad(fromLat)
+  const lat2 = toRad(toLat)
+  const dLng = toRad(toLng - fromLng)
+
+  const x = Math.sin(dLng) * Math.cos(lat2)
+  const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+
+  let bearing = toDeg(Math.atan2(x, y))
+  bearing = (bearing + 360) % 360
+
+  return bearing
+}
+
 function createIcon(color: string, heading?: number, isMoving?: boolean) {
   if (!isMoving) {
     return L.divIcon({
@@ -1286,11 +1332,30 @@ function onTrackPositionChange(mmsi: string, point: TrackPoint | null) {
     map.setView([point.lat, point.lng], targetZoom, { animate: true, duration: 0.5 })
   }
 
-  updateTrackMarkerTarget(mmsi, point)
+  // 根据当前点在轨迹数组中的位置，计算与下一个点之间的航向
+  let calculatedHeading: number | undefined
+  if (state && state.points.length > 1) {
+    const currentIndex = state.points.findIndex(
+      (p) => p.lat === point.lat && p.lng === point.lng && p.timestamp === point.timestamp
+    )
+    if (currentIndex >= 0 && currentIndex < state.points.length - 1) {
+      const nextPoint = state.points[currentIndex + 1]
+      calculatedHeading = calculateHeading(point.lat, point.lng, nextPoint.lat, nextPoint.lng)
+    } else if (currentIndex === state.points.length - 1 && currentIndex > 0) {
+      // 如果是最后一个点，使用前一个点到当前点的航向
+      const prevPoint = state.points[currentIndex - 1]
+      calculatedHeading = calculateHeading(prevPoint.lat, prevPoint.lng, point.lat, point.lng)
+    }
+  }
+
+  updateTrackMarkerTarget(mmsi, point, calculatedHeading)
 }
 
-function updateTrackMarkerTarget(mmsi: string, point: TrackPoint) {
+function updateTrackMarkerTarget(mmsi: string, point: TrackPoint, calculatedHeading?: number) {
   const targetLatLng = L.latLng(point.lat, point.lng)
+
+  // 优先使用计算出的航向，如果没有则使用原始航向
+  const heading = calculatedHeading !== undefined ? calculatedHeading : point.heading
 
   if (trackMarkerMap.has(mmsi)) {
     const marker = trackMarkerMap.get(mmsi)!
@@ -1301,9 +1366,9 @@ function updateTrackMarkerTarget(mmsi: string, point: TrackPoint) {
       progress: 0
     })
     startMarkerAnimation()
-    updateTrackMarkerIcon(mmsi, point.status || 'underway', point.heading)
+    updateTrackMarkerIcon(mmsi, point.status || 'underway', heading)
   } else {
-    const icon = createTrackShipIcon(point.status || 'underway', point.heading)
+    const icon = createTrackShipIcon(point.status || 'underway', heading)
     const marker = L.marker([point.lat, point.lng], { icon }).addTo(map!)
     trackMarkerMap.set(mmsi, marker)
     markerAnimationMap.set(mmsi, {
