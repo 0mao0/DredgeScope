@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 背景 -->
+  <rect width="100" height="100" rx="20" fill="#0f172a"/>
+  
+  <!-- 外圈 -->
+  <circle cx="50" cy="50" r="42" fill="none" stroke="#3b82f6" stroke-width="4"/>
+  
+  <!-- 船舶/疏浚船图标 -->
+  <g transform="translate(50, 50)">
+    <!-- 船体 -->
+    <path d="M-25 5 L-20 15 L20 15 L25 5 Z" fill="#3b82f6"/>
+    <!-- 上层建筑 -->
+    <rect x="-15" y="-10" width="20" height="15" fill="#60a5fa" rx="2"/>
+    <!-- 吊臂/疏浚臂 -->
+    <line x1="5" y1="-5" x2="25" y2="-20" stroke="#f97316" stroke-width="4" stroke-linecap="round"/>
+    <!-- 吊臂末端 -->
+    <circle cx="25" cy="-20" r="4" fill="#f97316"/>
+  </g>
+  
+  <!-- 水波纹 -->
+  <path d="M20 70 Q35 65 50 70 Q65 75 80 70" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M25 78 Q40 73 55 78 Q70 83 85 78" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+</svg>
