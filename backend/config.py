@@ -19,7 +19,7 @@ if ALIYUN_API_KEY:
 else:
     print("[Config] ALIYUN_API_KEY is None!")
 ALIYUN_API_BASE = os.getenv("Public_ALIYUN_API_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-ALIYUN_MODEL = os.getenv("Public_ALIYUN_MODEL2", "Qwen3.5-35B-A3B-FP8")
+ALIYUN_MODEL = os.getenv("Public_ALIYUN_MODEL2", "Qwen3.6-35B-A3B-FP8")
 
 # TEXT LLM 配置（优先阿里云，备选 SiliconFlow）
 TEXT_LLM_API_KEY = ALIYUN_API_KEY or os.getenv("TEXT_LLM_API_KEY")
