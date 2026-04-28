@@ -43,11 +43,11 @@
       </div>
 
       <div class="flex items-center gap-3 flex-wrap justify-end">
-        <!-- 有效/无效筛选 -->
+        <!-- 有效/无效筛选（手机端隐藏） -->
         <a-select
           v-model:value="filters.valid"
           placeholder="数据状态"
-          class="w-40 custom-select"
+          class="w-40 custom-select hidden sm:block"
           @change="handleSearch"
         >
           <a-select-option :value="null">全部文章（{{ stats.total }}）</a-select-option>
@@ -55,10 +55,10 @@
           <a-select-option :value="0">无效文章（{{ stats.invalid }}）</a-select-option>
         </a-select>
 
-        <!-- 时间维度 -->
+        <!-- 时间维度（手机端隐藏） -->
         <a-range-picker
           v-model:value="dateRange"
-          class="w-64 custom-picker"
+          class="w-64 custom-picker hidden sm:block"
           format="YYYY-MM-DD"
           @change="handleSearch"
         />

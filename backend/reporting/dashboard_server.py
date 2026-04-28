@@ -357,45 +357,48 @@ async def get_articles(
         "(a.is_hidden = 0 OR a.is_hidden IS NULL)"
     ]
     params = []
+    # 统计查询参数（不含 valid 筛选），用于计算 valid/invalid 数量
+    stats_params = []
 
     if valid is not None:
         where.append("a.valid = ?")
         params.append(valid)
-    else:
-        # Default behavior: show valid articles if not specified
-        # But for History page, we might want to see everything or respect the default
-        # Actually, the user asked for a filter, so we should allow showing everything if valid is None
-        # But usually we want to exclude junk by default unless explicitly asked.
-        # Let's stick to the filter logic.
-        pass
+        # stats_params 不包含 valid 参数
 
     if is_retained is not None:
         where.append("a.is_retained = ?")
         params.append(is_retained)
+        stats_params.append(is_retained)
 
     if category:
         where.append("a.category = ?")
         params.append(category)
+        stats_params.append(category)
 
     if date:
         where.append("date(substr(a.created_at, 1, 10)) = date(?)")
         params.append(date)
+        stats_params.append(date)
     elif start and end:
         where.append("date(substr(a.created_at, 1, 10)) BETWEEN date(?) AND date(?)")
         params.extend([start, end])
+        stats_params.extend([start, end])
 
     if keyword:
         like = f"%{keyword}%"
         where.append("(a.title LIKE ? OR a.title_cn LIKE ? OR a.summary_cn LIKE ?)")
         params.extend([like, like, like])
+        stats_params.extend([like, like, like])
 
     if source_type:
         where.append("a.source_type = ?")
         params.append(source_type)
+        stats_params.append(source_type)
 
     if source_name:
         where.append("a.source_name = ?")
         params.append(source_name)
+        stats_params.append(source_name)
 
     where_sql = " AND ".join(where) if where else "1=1"
 
@@ -409,13 +412,13 @@ async def get_articles(
     total = c.fetchone()[0] or 0
 
     # 获取有效/无效文章统计（基于当前筛选条件，但忽略 valid 筛选）
+    # valid IS NULL 视为有效，与前端 article.valid !== 0 逻辑一致
     stats_where = [w for w in where if not w.startswith("a.valid =")]
     stats_where_sql = " AND ".join(stats_where) if stats_where else "1=1"
-    stats_params = [p for i, p in enumerate(params) if i < len(params) - (1 if valid is not None else 0)]
 
     valid_count_query = f"""
         SELECT
-            SUM(CASE WHEN a.valid = 1 THEN 1 ELSE 0 END) as valid_count,
+            SUM(CASE WHEN a.valid = 1 OR a.valid IS NULL THEN 1 ELSE 0 END) as valid_count,
             SUM(CASE WHEN a.valid = 0 THEN 1 ELSE 0 END) as invalid_count
         FROM articles a
         WHERE {stats_where_sql}
