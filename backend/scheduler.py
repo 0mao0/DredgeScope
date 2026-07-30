@@ -12,6 +12,11 @@ import reporting.wecom_push as wecom_push
 import schedule
 
 LOG_FILE = os.path.join(config.DATA_DIR, "scheduler.log")
+HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "scheduler.heartbeat")
+
+# 看门狗：主循环心跳检测
+_last_heartbeat = time.time()
+_WATCHDOG_TIMEOUT = 180  # 主循环超过 180 秒无心跳则强制退出
 
 
 def write_log(message: str) -> None:
@@ -24,6 +29,27 @@ def write_log(message: str) -> None:
             f.write(log_msg)
     except Exception as e:
         print(f"写入日志失败: {e}")
+
+
+def watchdog_monitor() -> None:
+    """看门狗线程：主循环连续 180 秒无响应则强制退出"""
+    while True:
+        time.sleep(60)
+        elapsed = time.time() - _last_heartbeat
+        if elapsed > _WATCHDOG_TIMEOUT:
+            write_log(f"看门狗触发：主循环已无响应 {elapsed:.0f} 秒，强制退出")
+            os._exit(1)
+
+
+def touch_heartbeat() -> None:
+    """更新心跳（主循环每轮调用）"""
+    global _last_heartbeat
+    _last_heartbeat = time.time()
+    try:
+        with open(HEARTBEAT_FILE, "w") as f:
+            f.write(str(_last_heartbeat))
+    except Exception:
+        pass
 
 
 def run_threaded(job_func):
@@ -84,8 +110,16 @@ def setup_schedule() -> None:
 
 
 def main_entry() -> None:
-    """启动调度器主循环"""
+    """启动调度器主循环（含看门狗）"""
     setup_schedule()
+
+    # 启动看门狗线程，主循环卡死 3 分钟后自动退出
+    watchdog = threading.Thread(target=watchdog_monitor, daemon=True)
+    watchdog.start()
+
+    # 初始心跳
+    touch_heartbeat()
+
     print("=== 疏浚情报定时任务系统启动 ===")
     print("计划任务:")
     print("- 采集: 00:00, 04:00, 07:30, 0:00, 12:00, 16:00, 20:00")
@@ -95,6 +129,7 @@ def main_entry() -> None:
     print("系统正在运行中 (Ctrl+C 停止)...")
     while True:
         schedule.run_pending()
+        touch_heartbeat()
         time.sleep(60)
 
 

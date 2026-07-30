@@ -48,12 +48,18 @@ services:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
     command: ["python", "-m", "scheduler"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, time; hb = float(open('/app/backend/data/scheduler.heartbeat').read()); age = time.time() - hb; assert age < 180, f'heartbeat {age:.0f}s old'"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 60s
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
         reservations:
-          memory: 128M
+          memory: 256M
 
   watchtower:
     image: containrrr/watchtower

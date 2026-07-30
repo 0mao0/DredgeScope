@@ -6,6 +6,7 @@
 
 import asyncio
 import json
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -169,38 +170,56 @@ class SourceManager:
         sem = asyncio.Semaphore(3)
         results = []
 
+        completed = 0
+        total = len(items)
+        start_ts = time.time()
+
         async def enrich_item(item: Dict[str, Any]) -> Dict[str, Any]:
+            nonlocal completed
             async with sem:
                 source_name = item.get('source_name', '')
                 link = item.get('link', '')
                 source_type = item.get('source_type', '').lower()
 
-                # 检查是否已有内容
-                has_content = item.get('content') and len(item.get('content', '').strip()) > 100
-                has_screenshot = item.get('screenshot_path') and len(item.get('screenshot_path', '')) > 0
-
                 try:
                     if source_type == 'rss':
-                        # RSS源：始终进行完整网页抓取，获取完整内容、截图和准确时间
-                        # 因为RSS通常只提供摘要，需要访问网页获取完整内容
                         await self._fetch_web_content(context, item, is_rss=True)
                     elif source_type == 'web':
-                        # Web源：完整抓取
                         await self._fetch_web_content(context, item, is_rss=False)
                     elif source_type == 'wechat':
-                        # 微信公众号：需要完整抓取内容和截图
-                        print(f"[Enrich] 采集公众号文章: {item.get('title', '')[:40]}...")
                         await self._fetch_wechat_content(context, item)
 
                 except Exception as e:
                     print(f"[Enrich] 失败 {link}: {e}")
 
+                completed += 1
+                elapsed = time.time() - start_ts
+                avg = elapsed / completed
+                remain = avg * (total - completed)
+                print(f"[Enrich] 进度 {completed}/{total}，已用 {elapsed:.0f}s，预计剩余 {remain:.0f}s")
                 return item
 
-        tasks = [enrich_item(item) for item in items]
+        ENRICH_TIMEOUT = 120  # 单条补充采集最多 120 秒，超时跳过
+
+        async def enrich_with_timeout(item: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                return await asyncio.wait_for(enrich_item(item), timeout=ENRICH_TIMEOUT)
+            except asyncio.TimeoutError:
+                link = item.get('link', '')
+                print(f"[Enrich] 超时 {link}: 超过 {ENRICH_TIMEOUT}s 未完成，跳过")
+                completed += 1
+                return item
+            except Exception as e:
+                link = item.get('link', '')
+                print(f"[Enrich] 异常 {link}: {e}")
+                completed += 1
+                return item
+
+        tasks = [enrich_with_timeout(item) for item in items]
         results = await asyncio.gather(*tasks)
 
-        print(f"[Enrich] 补充采集完成\n")
+        elapsed = time.time() - start_ts
+        print(f"[Enrich] 补充采集完成，共 {total} 条，耗时 {elapsed:.0f}s\n")
         return results
 
     async def _fetch_rss_screenshot(self, context, item: Dict[str, Any], page=None):
@@ -219,7 +238,9 @@ class SourceManager:
                 await asyncio.sleep(1)
                 page = new_page
 
-            screenshot_bytes = await page.screenshot(type='jpeg', quality=60, full_page=True)
+            screenshot_bytes = await asyncio.wait_for(
+                page.screenshot(type='jpeg', quality=60, full_page=True), timeout=30
+            )
 
             # 保存截图
             import os
