@@ -11,7 +11,7 @@
             </div>
             <div class="flex items-baseline gap-1">
               <h1 class="text-base sm:text-xl font-bold text-white">全球疏浚情报</h1>
-              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v0.1.44</span>
+              <span class="text-[10px] sm:text-xs text-gray-400 font-normal">v{{ appVersion }}</span>
             </div>
           </router-link>
         </div>
@@ -84,8 +84,10 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import pkg from '../../package.json'
 
 const route = useRoute()
+const appVersion = pkg.version
 
 const isActive = (path: string) => {
   return route.path === path

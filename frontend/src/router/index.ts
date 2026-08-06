@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import pkg from '../../package.json'
+
+const APP_VERSION = pkg.version
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
-    meta: { title: '全球疏浚情报 v0.1.29' },
+    meta: { title: `全球疏浚情报 v${APP_VERSION}` },
   },
   {
     path: '/history',

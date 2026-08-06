@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import config
 from static.constants import (
     DEFAULT_CATEGORY,
@@ -627,13 +627,10 @@ def save_raw_articles(items):
     return count, new_ids, new_links
 
 def get_items_for_enrichment(created_after=None, ids=None):
-    """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图 或 RSS源) 且 5天内"""
-    from datetime import timedelta
+    """获取需要补充采集的条目: valid=1 且 (无内容 或 无截图 或 RSS源)"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    # 计算5天前的日期
-    cutoff = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
     
     # 修改逻辑：
     # 1. 无内容 或 无截图 的文章需要补充采集
@@ -641,14 +638,13 @@ def get_items_for_enrichment(created_after=None, ids=None):
     query = '''
         SELECT * FROM articles 
         WHERE valid = 1 
-        AND (pub_date >= ? OR pub_date IS NULL OR pub_date = '')
         AND (
             content IS NULL OR content = '' 
             OR screenshot_path IS NULL OR screenshot_path = ''
             OR source_type = 'rss'
         )
     '''
-    params = [cutoff]
+    params = []
     
     if created_after:
         query += " AND created_at >= ?"
@@ -988,3 +984,97 @@ def get_source_health_history(source_name: str = None, days: int = 7, limit: int
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def get_articles_for_analysis(start_date: str = None, end_date: str = None) -> list:
+    """获取用于分析的文章数据（全部有效文章）。日期边界含结束日期当天。
+
+    Args:
+        start_date: 起始日期 YYYY-MM-DD
+        end_date: 结束日期 YYYY-MM-DD
+
+    Returns:
+        文章字典列表
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    query = '''
+        SELECT id, url, title, title_cn, pub_date, source_type, source_name,
+               summary_cn, full_text_cn, category, valid, created_at
+        FROM articles
+        WHERE valid = 1
+    '''
+    params = []
+    if start_date:
+        query += " AND created_at >= ?"
+        params.append(f"{start_date}T00:00:00")
+    if end_date:
+        query += " AND created_at <= ?"
+        params.append(f"{end_date}T23:59:59")
+
+    query += " ORDER BY pub_date DESC"
+    c.execute(query, tuple(params))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_source_health_statistics(days: int = 30) -> dict:
+    """获取数据源健康统计（含每日趋势与全库有效文章数）
+
+    Args:
+        days: 统计最近几天
+
+    Returns:
+        source_stats: 各源汇总, daily_stats: 每日趋势, total_valid: 全库有效文章数
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+    # 各源汇总（与 get_source_health_summary 一致的字段）
+    c.execute('''
+        SELECT
+            source_name,
+            source_type,
+            COUNT(*) as total_fetches,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+            SUM(items_fetched) as total_items,
+            SUM(items_new) as total_new,
+            AVG(response_time_ms) as avg_response_time,
+            MAX(fetch_time) as last_fetch_time
+        FROM source_health
+        WHERE created_at > ?
+        GROUP BY source_name, source_type
+        ORDER BY total_fetches DESC
+    ''', (cutoff,))
+    source_stats = [dict(row) for row in c.fetchall()]
+
+    # 每日统计
+    c.execute('''
+        SELECT DATE(fetch_time) as date,
+               SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,
+               SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+               SUM(items_fetched) as fetched,
+               SUM(items_new) as new_items
+        FROM source_health
+        WHERE created_at > ?
+        GROUP BY DATE(fetch_time)
+        ORDER BY date
+    ''', (cutoff,))
+    daily_stats = [dict(row) for row in c.fetchall()]
+
+    # 全库有效文章数
+    c.execute("SELECT COUNT(*) as cnt FROM articles WHERE valid = 1")
+    total_valid = c.fetchone()['cnt']
+
+    conn.close()
+    return {
+        'source_stats': source_stats,
+        'daily_stats': daily_stats,
+        'total_valid': total_valid,
+        'period_days': days,
+    }

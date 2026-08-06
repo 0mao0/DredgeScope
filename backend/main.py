@@ -421,35 +421,17 @@ async def main():
             })
             continue
 
-        # 5. 发布时间拦截（5天）
+        # 5. 发布时间检查（仅拦截缺失时间的非Web源）
         pub_dt = parse_pub_datetime(item.get("pub_date"))
         
         # 对于Web/Official源，如果缺少时间，允许通过（等待后续enrich补充）
         # 对于RSS/WeChat，通常已有时间，若缺则直接丢弃
         allow_missing_date = item.get("source_type") in ["web", "official", "rsshub"]
         
-        if not pub_dt:
-            if not allow_missing_date:
-                outdated_count += 1
-                db_update["valid"] = 0
-                db_update["remark"] = "发布时间缺失"
-                database.save_article(db_update)
-                
-                audit_rows.append({
-                    "site": item.get("source_name", ""),
-                    "title": item.get("title", ""),
-                    "link": item.get("link", ""),
-                    "pub_date": item.get("pub_date"),
-                    "source_type": item.get("source_type"),
-                    "keep": False,
-                    "remark": "发布时间缺失"
-                })
-                continue
-            # else: pass through, valid remains 1 (default)
-        elif datetime.now() - pub_dt > timedelta(days=5):
+        if not pub_dt and not allow_missing_date:
             outdated_count += 1
             db_update["valid"] = 0
-            db_update["remark"] = "发布时间早于5天(已入库)"
+            db_update["remark"] = "发布时间缺失"
             database.save_article(db_update)
             
             audit_rows.append({
@@ -459,7 +441,7 @@ async def main():
                 "pub_date": item.get("pub_date"),
                 "source_type": item.get("source_type"),
                 "keep": False,
-                "remark": "发布时间早于5天(已入库)"
+                "remark": "发布时间缺失"
             })
             continue
 
@@ -526,20 +508,15 @@ async def main():
                 await manager.enrich_items(items_to_enrich, context)
                 await browser.close()
                 
-                # 补充采集后，更新回数据库，并再次检查时间
+                # 补充采集后，更新回数据库
                 for item in items_to_enrich:
-                    # 检查时间：如果之前没时间，现在有了，需要检查是否过期
                     # 注意：enrich_web_items 会修改 item["pub_date"]
                     pub_dt = parse_pub_datetime(item.get("pub_date"))
                     
-                    # 再次检查：如果没有时间，不再自动补充为当前时间！(响应用户需求)
+                    # 如果仍然没有时间，标记为无效
                     if not pub_dt:
-                        # 仍然无时间，标记为无效
                         item["valid"] = 0
                         item["remark"] = (item.get("remark") or "") + " (补充采集仍无时间)"
-                    elif datetime.now() - pub_dt > timedelta(days=5):
-                        item["valid"] = 0
-                        item["remark"] = "补充采集后判定过期"
                     
                     # 保存更新 (content, screenshot, pub_date, valid, remark)
                     database.save_article(item)
@@ -657,7 +634,29 @@ async def main():
     except Exception:
         pass
     write_scheduler_log(f"分析完成: 文章{len(kept_results)}")
-    
+
+    # --- 爬取完成后刷新统计分析AI缓存（每4小时一次）---
+    # AI报告：全量重新生成；项目实体映射：增量更新（只处理新增文章）
+    try:
+        from analysis.industry_trends import get_ai_trend_report
+        from analysis.company_analysis import analyze_articles, get_project_entities_cached
+        _articles = database.get_articles_for_analysis()
+        _projects = analyze_articles(_articles)
+
+        async def _refresh_ai_caches():
+            """后台刷新AI报告与项目实体映射"""
+            await get_ai_trend_report(force=True)
+            await get_project_entities_cached(_projects, force=False)
+
+        _ai_task = asyncio.ensure_future(_refresh_ai_caches())
+        try:
+            await asyncio.wait_for(_ai_task, timeout=90)
+            print(">>> 统计AI缓存已刷新（AI报告全量，实体映射增量）")
+        except asyncio.TimeoutError:
+            print(">>> 统计AI缓存刷新超时（下次访问时自动补齐）")
+    except Exception as e:
+        print(f">>> 刷新统计AI缓存失败: {e}")
+
     end_time = time.time()
     
     # --- 生成最终分析报告 ---

@@ -13,6 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import database
 import config
 
+from analysis.company_analysis import analyze_articles, get_company_statistics
+from analysis.industry_trends import (
+    analyze_trends, get_ship_type_analysis, get_scale_distribution, get_tech_trends, get_ai_trend_report,
+)
+
 app = FastAPI()
 
 # Mount assets
@@ -195,25 +200,48 @@ async def get_statistics(
             "data": data_points
         })
     
-    # 3. Source Bar Chart
+    # 3. Source Bar Chart (有效/无效堆叠)
     sources = []
+    valid_sources = []
+    invalid_sources = []
     for a in articles:
         s = a.get('source_name')
         if not s or s == 'None':
             # Fallback to source_type if name missing
             s = a.get('source_type', 'Unknown')
         sources.append(s)
-        
+        if a.get('valid') == 0:
+            invalid_sources.append(s)
+        else:
+            valid_sources.append(s)
+
     source_counts = Counter(sources)
+    valid_counts = Counter(valid_sources)
+    invalid_counts = Counter(invalid_sources)
     # Sort by count desc
     sorted_sources = source_counts.most_common(20) # Top 20
     bar_labels = [s[0] for s in sorted_sources]
-    bar_values = [s[1] for s in sorted_sources]
+    bar_valid_values = [valid_counts.get(s[0], 0) for s in sorted_sources]
+    bar_invalid_values = [invalid_counts.get(s[0], 0) for s in sorted_sources]
+
+    # 4. 全库有效文章分类分布（不受时间范围影响，供分类占比图使用）
+    all_cat_counts = Counter()
+    for a in database.get_articles_for_analysis():
+        cat = a.get('category')
+        if not cat or cat == 'None':
+            cat = 'Unknown'
+        all_cat_counts[cat] += 1
+    all_pie_labels = [CATEGORY_CN_MAP.get(k, k) for k in all_cat_counts.keys()]
+    all_pie_values = list(all_cat_counts.values())
     
     return {
         "category_stats": {
             "labels": pie_labels,
             "values": pie_values
+        },
+        "category_stats_all": {
+            "labels": all_pie_labels,
+            "values": all_pie_values
         },
         "trend_stats": {
             "categories": sorted_categories_cn, # Use Chinese names
@@ -222,7 +250,9 @@ async def get_statistics(
         },
         "source_stats": {
             "labels": bar_labels,
-            "values": bar_values
+            "valid_values": bar_valid_values,
+            "invalid_values": bar_invalid_values,
+            "values": bar_valid_values # 兼容旧前端
         }
     }
 
@@ -622,6 +652,52 @@ async def get_scheduler_run_detail(filename: str):
                     continue
 
     return {"content": content, "source_stats": source_stats}
+
+@app.get("/api/source-health")
+async def get_source_health(days: int = Query(30, description="统计最近几天")):
+    """数据源健康统计API - 供来源分析Tab概览卡使用"""
+    return database.get_source_health_statistics(days)
+
+@app.get("/api/company-operations")
+async def get_company_operations():
+    """公司运营分析API - 实时聚合计算，LLM项目实体去重（24h缓存）"""
+    from analysis.company_analysis import (
+        analyze_articles, get_company_statistics, apply_entity_dedup, get_project_entities_cached,
+    )
+
+    articles = database.get_articles_for_analysis()
+    company_projects = analyze_articles(articles)
+
+    # LLM实体识别去重（24h缓存，失败自动回退指纹去重结果）
+    entities = await get_project_entities_cached(company_projects)
+    company_projects = apply_entity_dedup(company_projects, entities)
+
+    company_stats = get_company_statistics(company_projects)
+
+    return {
+        "companies": company_stats,
+        "summary": {
+            "total_companies": len(company_stats),
+            "total_projects": sum(s['project_count'] for s in company_stats),
+            "total_new_contracts": sum(s['new_contract_count'] for s in company_stats),
+            "total_ongoing": sum(s['ongoing_count'] for s in company_stats),
+            "total_amount": sum(s['total_amount'] for s in company_stats),
+            "total_volume": sum(s['total_volume'] for s in company_stats),
+        },
+    }
+
+@app.get("/api/industry-trends")
+async def get_industry_trends():
+    """行业趋势分析API - 统计实时计算，AI报告带24h缓存"""
+    articles = database.get_articles_for_analysis()
+
+    return {
+        "trends": analyze_trends(articles, 'monthly'),
+        "ship_types": get_ship_type_analysis(articles),
+        "scale_distribution": get_scale_distribution(articles),
+        "tech_trends": get_tech_trends(articles),
+        "ai_report": await get_ai_trend_report(),
+    }
 
 if __name__ == "__main__":
     # 允许外部访问
