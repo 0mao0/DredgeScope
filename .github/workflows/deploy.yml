@@ -1,0 +1,61 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted]
+
+    steps:
+      - name: Pull latest code
+        run: |
+          cd /home/runner/DredgeScope
+          git pull origin master
+
+      - name: Check .env exists
+        run: |
+          if [ ! -f /home/runner/DredgeScope/.env ]; then
+            echo "ERROR: /home/runner/DredgeScope/.env not found"
+            exit 1
+          fi
+
+      - name: Build images
+        run: |
+          cd /home/runner/DredgeScope
+          docker compose build --build-arg USE_CHINA_MIRROR=true
+
+      - name: Restart services
+        run: |
+          cd /home/runner/DredgeScope
+          docker compose up -d --force-recreate dredge scheduler
+
+      - name: Cleanup old images
+        run: docker image prune -f
+
+      - name: Health check
+        id: health
+        run: |
+          echo "Waiting for services..."
+          sleep 15
+          FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || echo "000")
+          API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/articles?page_size=1 || echo "000")
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || echo "000")
+          echo "Frontend: $FRONTEND"
+          echo "API: $API"
+          echo "Health: $HEALTH"
+          cd /home/runner/DredgeScope && docker compose ps
+          echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
+          echo "api=$API" >> $GITHUB_OUTPUT
+          echo "health=$HEALTH" >> $GITHUB_OUTPUT
+
+      - name: Notify WeCom group
+        env:
+          WEBHOOK: ${{ secrets.WECOM_WEBHOOK_URL }}
+          FE: ${{ steps.health.outputs.frontend }}
+          API: ${{ steps.health.outputs.api }}
+          HEALTH: ${{ steps.health.outputs.health }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 /home/runner/DredgeScope/.github/scripts/webhook_notify.py
