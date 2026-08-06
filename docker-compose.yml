@@ -11,9 +11,6 @@ services:
       - ./backend/data:/app/backend/data
       - ./.env:/app/.env:ro
     restart: always
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - com.centurylinklabs.watchtower.scope=dredgescope
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
@@ -34,25 +31,7 @@ services:
       - ./backend/data:/app/backend/data
       - ./.env:/app/.env:ro
     restart: always
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - com.centurylinklabs.watchtower.scope=dredgescope
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
     command: ["python", "-m", "scheduler"]
-
-  watchtower:
-    image: containrrr/watchtower
-    container_name: dredge_watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_POLL_INTERVAL=300
-      - WATCHTOWER_INCLUDE_RESTARTING=true
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_NOTIFICATIONS=shoutrrr
-      - WATCHTOWER_NOTIFICATION_URL=${WATCHTOWER_NOTIFICATION_URL:-}
-      - WATCHTOWER_LABELS=com.centurylinklabs.watchtower.enable=true
-      - WATCHTOWER_SCOPE=dredgescope
-    restart: always
