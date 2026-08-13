@@ -145,53 +145,31 @@ def rank_articles_for_push(articles, max_items=5):
 
     return sorted(articles, key=sort_key, reverse=True)[:max_items]
 
-def build_news_payload(articles, base_url, total_count, label, category_line):
-    """构造单条重要新闻消息（news 图文消息），汇总作为第一张，末尾追加查看全部条目"""
-    article_items = []
-    for article in articles:
-        article_id = article.get("id")
-        if article_id is None:
-            continue
-        title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
-        description = truncate_for_wecom(article.get("summary_cn") or title, 160)
-        article_items.append({
-            "title": title or "未命名新闻",
-            "description": description,
-            "url": f"{base_url.rstrip('/')}/?id={article_id}",
-        })
-    if not article_items:
-        return None
-    news_articles = [{
-        "title": truncate_for_wecom(f"{label} · 更新 {total_count} 条", 40),
-        "description": category_line or f"本次更新 {total_count} 条",
-        "url": f"{base_url.rstrip('/')}/?mode=recent",
-    }]
-    news_articles.extend(article_items)
-    news_articles.append({
-        "title": f"查看全部 {total_count} 条 →",
-        "description": "进入系统查看完整列表",
-        "url": f"{base_url.rstrip('/')}/?mode=recent",
-    })
-    return {"msgtype": "news", "news": {"articles": news_articles}}
-
-def build_markdown_fallback(label, total_count, category_line, articles, base_url):
-    """构造 news 发送失败时的 markdown 降级消息"""
+def build_markdown_payload(label, total_count, category_line, articles, base_url):
+    """构造单条 markdown 推送消息（无图片占位，含汇总与逐条链接）"""
     lines = [f"【全球疏浚情报 {label}】", f"本次更新: {total_count} 条", category_line, ""]
-    for article in articles:
+    for index, article in enumerate(articles, start=1):
         article_id = article.get("id")
         if article_id is None:
             continue
         title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
-        lines.append(f"[{title}]({base_url.rstrip('/')}/?id={article_id})")
+        lines.append(f"{index}. [{title}]({base_url.rstrip('/')}/?id={article_id})")
     lines.append(f"[查看全部 {total_count} 条 →]({base_url.rstrip('/')}/?mode=recent)")
     return {"msgtype": "markdown", "markdown": {"content": "\n".join(lines)}}
 
+
+def build_text_fallback(label, total_count, category_line, base_url):
+    """构造 markdown 发送失败时的纯文本降级消息"""
+    content = f"【全球疏浚情报 {label}】\n本次更新: {total_count} 条\n{category_line}\n详情请访问: {base_url.rstrip('/')}/?mode=recent"
+    return {"msgtype": "text", "text": {"content": content}}
+
+
 def build_push_messages(articles, label, total_count, category_line, base_url):
-    """构造本次推送的全部消息（单条 news 列表、降级文本）"""
+    """构造本次推送的全部消息（单条 markdown、纯文本降级）"""
     top_articles = rank_articles_for_push(articles, max_items=5)
     return {
-        "news": build_news_payload(top_articles, base_url, total_count, label, category_line),
-        "markdown": build_markdown_fallback(label, total_count, category_line, top_articles, base_url),
+        "markdown": build_markdown_payload(label, total_count, category_line, top_articles, base_url),
+        "text": build_text_fallback(label, total_count, category_line, base_url),
     }
 
 def parse_event_datetime(value):
@@ -280,7 +258,7 @@ def build_category_counts(articles):
     return {k: len(v) for k, v in buckets.items()}
 
 def push_daily_report():
-    """推送日报到企业微信：单条重要新闻消息（汇总作为第一张）"""
+    """推送日报到企业微信：单条 markdown 消息（无图片占位）"""
     now = datetime.now()
     start_dt, end_dt, label = get_push_window(now)
     start_time = start_dt.isoformat()
@@ -326,15 +304,13 @@ def push_daily_report():
     base_url = config.PUSH_BASE_URL
     messages = build_push_messages(articles, label, total_count, category_line, base_url)
 
-    # 单条重要新闻消息；失败时降级为 markdown 链接
-    news_payload = messages["news"]
-    if news_payload:
-        resp_json = post_wecom_webhook(news_payload, label)
-        if resp_json.get("errcode") != 0:
-            print("News 推送失败，尝试降级为 Markdown 消息...")
-            fallback_resp = post_wecom_webhook(messages["markdown"], label)
-            if fallback_resp.get("errcode") != 0:
-                print(f"[Push] 降级 Markdown 推送失败: {fallback_resp}")
+    # 单条 markdown 消息（无图片占位）；失败时降级为纯文本
+    resp_json = post_wecom_webhook(messages["markdown"], label)
+    if resp_json.get("errcode") != 0:
+        print("Markdown 推送失败，尝试降级为 Text 消息...")
+        fallback_resp = post_wecom_webhook(messages["text"], label)
+        if fallback_resp.get("errcode") != 0:
+            print(f"[Push] 降级文本推送失败: {fallback_resp}")
 
 if __name__ == "__main__":
     push_daily_report()
