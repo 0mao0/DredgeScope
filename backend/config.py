@@ -48,6 +48,8 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 # Webhook & Server
 WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
 BACKEND_URL = os.getenv("WISEFLOW_BACKEND_URL", "http://127.0.0.1:8000")
+# Webhook 推送跳转链接的公共地址（后续接 HTTPS 域名时只需改这里）
+PUSH_BASE_URL = os.getenv("PUSH_BASE_URL") or BACKEND_URL
 RSSHUB_BASES = [
     v.strip()
     for v in os.getenv("RSSHUB_BASES", os.getenv("RSSHUB_BASE", "https://rsshub.app")).split(",")

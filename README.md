@@ -127,6 +127,7 @@ dredgescope/
    Public_ALIYUN_API_KEY=your_key
    TEXT_LLM_API_KEY=your_key
    WECOM_WEBHOOK_URL=your_webhook
+   PUSH_BASE_URL=https://your-domain.com   # 可选：推送消息里的跳转链接地址，默认取 WISEFLOW_BACKEND_URL
    ```
 
 3. **启动项目**:
