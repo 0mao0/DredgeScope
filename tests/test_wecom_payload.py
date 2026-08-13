@@ -11,7 +11,6 @@ from reporting.wecom_push import (
     build_markdown_fallback,
     build_news_payload,
     build_push_messages,
-    build_summary_card_payload,
     rank_articles_for_push,
     truncate_for_wecom,
 )
@@ -60,20 +59,23 @@ def test_rank_limits_to_max_items():
 
 
 def test_build_news_payload_structure():
-    """news 消息含新闻条目与查看全部，不含图片字段"""
+    """news 消息以汇总为第一张，含新闻条目与查看全部，不含图片字段"""
     articles = [make_article(1), make_article(2)]
-    payload = build_news_payload(articles, "https://example.com", total_count=2)
+    payload = build_news_payload(articles, "https://example.com", total_count=2, label="8月14日早报", category_line="中标 1 | 项目 1")
     assert payload["msgtype"] == "news"
     items = payload["news"]["articles"]
-    assert len(items) == 3
-    assert items[0]["url"] == "https://example.com/?id=1"
-    assert "picurl" not in items[0]
+    assert len(items) == 4
+    assert items[0]["title"] == "8月14日早报 · 更新 2 条"
+    assert items[0]["description"] == "中标 1 | 项目 1"
+    assert items[0]["url"] == "https://example.com/?mode=recent"
+    assert items[1]["url"] == "https://example.com/?id=1"
+    assert "picurl" not in items[1]
     assert items[-1]["title"] == "查看全部 2 条 →"
 
 
 def test_build_news_payload_empty_returns_none():
     """没有可推送文章时返回 None"""
-    assert build_news_payload([], "https://example.com", total_count=0) is None
+    assert build_news_payload([], "https://example.com", total_count=0, label="8月14日早报", category_line="") is None
 
 
 def test_truncate_for_wecom():
@@ -82,16 +84,6 @@ def test_truncate_for_wecom():
     long_text = "中" * 50
     assert len(truncate_for_wecom(long_text, 40)) == 40
     assert truncate_for_wecom(long_text, 40).endswith("…")
-
-
-def test_build_summary_card_payload_has_no_image():
-    """汇总卡片无图片，logo 为 🚢 文本，跳转总览"""
-    payload = build_summary_card_payload("8月13日早报", 12, "中标 2 | 项目 3", "https://example.com")
-    card = payload["template_card"]
-    assert "card_image" not in card
-    assert card["source"]["desc"] == "🚢 全球疏浚情报"
-    assert card["main_title"]["title"] == "8月13日早报"
-    assert card["card_action"]["url"] == "https://example.com/?mode=recent"
 
 
 def test_build_markdown_fallback_contains_links():
@@ -104,10 +96,10 @@ def test_build_markdown_fallback_contains_links():
 
 
 def test_build_push_messages_structure():
-    """一次推送的消息集合包含卡片、新闻列表与降级文本"""
+    """一次推送的消息集合包含单条 news 列表与降级文本"""
     articles = [make_article(1), make_article(2)]
     messages = build_push_messages(articles, "8月13日早报", 2, "中标 2", "https://example.com")
-    assert messages["card"]["msgtype"] == "template_card"
+    assert "card" not in messages
     assert messages["news"]["msgtype"] == "news"
-    assert len(messages["news"]["news"]["articles"]) == 3
+    assert len(messages["news"]["news"]["articles"]) == 4
     assert messages["markdown"]["msgtype"] == "markdown"

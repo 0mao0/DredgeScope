@@ -35,7 +35,7 @@
 acquisition（不变）
   → analysis：现有 LLM 分析新增 significance 打分
   → database：写入 is_significant（列已存在，无需迁移）
-  → reporting：推送两条消息（汇总卡片 + 重要新闻列表）
+  → reporting：推送单条消息（汇总 + 重要新闻列表）
   → frontend：/?id=N 直达详情弹窗
 ```
 
@@ -92,31 +92,22 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 
 ## 5. 推送改造（`backend/reporting/wecom_push.py`）
 
-推送窗口、`get_push_window`、无情报文本消息保持现状。有情报时改为发送两条消息：
+推送窗口、`get_push_window`、无情报文本消息保持现状。有情报时发送**一条** `news` 图文消息：
 
-### 5.1 消息一：汇总卡片（template_card）
-
-在现有 `template_card` 基础上：
-
-- 删除 `card_image`（不再加载截图/图片）；
-- `source` 只保留 `desc: "🚢 全球疏浚情报"`，不配置 `icon_url`（避免图片加载问题，🚢 即 logo）；
-- 保留 `main_title`（日期标签 + "本次更新 N 条"）和 `vertical_content_list`（分类分布）；
-- `card_action.url` 指向 `{PUSH_BASE_URL}/?mode=recent`（维持现状，前端目前忽略 mode 参数，无需改动）。
-
-### 5.2 消息二：重要新闻列表（news）
-
-构造 `msgtype: news`：
+### 5.1 单条重要新闻消息（news）
 
 - 取当前窗口内 `is_retained=1` 的文章；
 - 排序：`significance` 降序（None 排最后）→ 分类优先级（Bid > Project > Equipment > Regulation > R&D > Market）→ `created_at` 降序；
 - 取前 3~5 条（有 1 条就发 1 条，最多 5 条）；
-- 每条 article：
+- 消息结构：
+  - **第一张卡片 = 汇总**：标题为"{label} · 更新 N 条"，描述为分类分布，点击进入系统总览（`{PUSH_BASE_URL}/?mode=recent`）；
+  - **中间卡片 = 重要新闻**，每条 article：
   - `title`：`title_cn` 或 `title`，截断到 40 个字符（约 120 字节，企业微信限制 128 字节）；
   - `description`：`summary_cn`，截断到 160 个字符（约 480 字节，企业微信限制 512 字节）；无摘要时用标题；
   - `url`：`{PUSH_BASE_URL}/?id={article_id}`；
   - 不设置 `picurl`。
-- 末尾追加一条"查看全部 N 条 →"，`url` 指向 `{PUSH_BASE_URL}/?mode=recent`；
-- 列表总条数 ≤ 6（5 条新闻 + 1 条查看全部），在企业微信 8 条上限内。
+  - **最后一张卡片 = "查看全部 N 条 →"**，`url` 指向 `{PUSH_BASE_URL}/?mode=recent`；
+  - 总条数 ≤ 7（1 条汇总 + 5 条新闻 + 1 条查看全部），在企业微信 8 条上限内。
 
 ### 5.3 PUSH_BASE_URL 配置
 
@@ -130,9 +121,8 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 
 ### 5.5 失败降级
 
-- 汇总卡片发送失败：沿用现有文本降级（分类分布 + 总览链接）；
-- 新闻列表发送失败：降级为一条 markdown 文本，内容为汇总信息 + 每条新闻 `[标题](url)` 链接；
-- 两条消息都失败：写调度日志，不重复重试。
+- 单条 news 消息发送失败：降级为一条 markdown 文本，内容为汇总信息 + 每条新闻 `[标题](url)` 链接；
+- 降级也失败：写调度日志，不重复重试。
 
 ## 6. 前端直达（`frontend/src/views/Dashboard.vue`）
 
@@ -165,8 +155,8 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 
 手动验证：
 
-1. 后端脚本 dry-run 打印两条消息 payload；
-2. 向测试群发送真实推送，确认卡片无图、列表 3~5 条、每条可跳转；
+1. 后端脚本 dry-run 打印单条消息 payload；
+2. 向测试群发送真实推送，确认第一条为汇总、中间 3~5 条新闻、每条可跳转；
 3. 点击新闻条目确认打开对应详情弹窗；无效 id 不弹窗。
 
 ## 9. 验证清单

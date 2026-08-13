@@ -145,35 +145,28 @@ def rank_articles_for_push(articles, max_items=5):
 
     return sorted(articles, key=sort_key, reverse=True)[:max_items]
 
-def build_summary_card_payload(label, total_count, category_line, base_url):
-    """构造汇总模板卡片（无图片，logo 用 🚢 文本）"""
-    return {
-        "msgtype": "template_card",
-        "template_card": {
-            "card_type": "news_notice",
-            "source": {"desc": "🚢 全球疏浚情报", "desc_color": 0},
-            "main_title": {"title": label, "desc": f"本次更新: {total_count} 条"},
-            "vertical_content_list": [{"title": "分类分布", "desc": category_line}],
-            "card_action": {"type": 1, "url": f"{base_url.rstrip('/')}/?mode=recent"},
-        },
-    }
-
-def build_news_payload(articles, base_url, total_count):
-    """构造重要新闻列表（news 图文消息），末尾追加查看全部条目"""
-    news_articles = []
+def build_news_payload(articles, base_url, total_count, label, category_line):
+    """构造单条重要新闻消息（news 图文消息），汇总作为第一张，末尾追加查看全部条目"""
+    article_items = []
     for article in articles:
         article_id = article.get("id")
         if article_id is None:
             continue
         title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
         description = truncate_for_wecom(article.get("summary_cn") or title, 160)
-        news_articles.append({
+        article_items.append({
             "title": title or "未命名新闻",
             "description": description,
             "url": f"{base_url.rstrip('/')}/?id={article_id}",
         })
-    if not news_articles:
+    if not article_items:
         return None
+    news_articles = [{
+        "title": truncate_for_wecom(f"{label} · 更新 {total_count} 条", 40),
+        "description": category_line or f"本次更新 {total_count} 条",
+        "url": f"{base_url.rstrip('/')}/?mode=recent",
+    }]
+    news_articles.extend(article_items)
     news_articles.append({
         "title": f"查看全部 {total_count} 条 →",
         "description": "进入系统查看完整列表",
@@ -194,11 +187,10 @@ def build_markdown_fallback(label, total_count, category_line, articles, base_ur
     return {"msgtype": "markdown", "markdown": {"content": "\n".join(lines)}}
 
 def build_push_messages(articles, label, total_count, category_line, base_url):
-    """构造本次推送的全部消息（汇总卡片、新闻列表、降级文本）"""
+    """构造本次推送的全部消息（单条 news 列表、降级文本）"""
     top_articles = rank_articles_for_push(articles, max_items=5)
     return {
-        "card": build_summary_card_payload(label, total_count, category_line, base_url),
-        "news": build_news_payload(top_articles, base_url, total_count),
+        "news": build_news_payload(top_articles, base_url, total_count, label, category_line),
         "markdown": build_markdown_fallback(label, total_count, category_line, top_articles, base_url),
     }
 
@@ -288,7 +280,7 @@ def build_category_counts(articles):
     return {k: len(v) for k, v in buckets.items()}
 
 def push_daily_report():
-    """推送日报到企业微信：汇总卡片 + 重要新闻列表"""
+    """推送日报到企业微信：单条重要新闻消息（汇总作为第一张）"""
     now = datetime.now()
     start_dt, end_dt, label = get_push_window(now)
     start_time = start_dt.isoformat()
@@ -334,25 +326,7 @@ def push_daily_report():
     base_url = config.PUSH_BASE_URL
     messages = build_push_messages(articles, label, total_count, category_line, base_url)
 
-    # 消息一：汇总卡片；失败时降级为文本
-    resp_json = post_wecom_webhook(messages["card"], label)
-    if resp_json.get("errcode") != 0:
-        print("Template Card 推送失败，尝试降级为 Text 消息...")
-        text_content = f"【全球疏浚情报 {label}】\n"
-        text_content += f"本次更新: {total_count} 条\n\n"
-        text_content += f"{category_line}\n"
-        text_content += f"\n详情请访问: {base_url.rstrip('/')}/?mode=recent"
-        text_payload = {
-            "msgtype": "text",
-            "text": {
-                "content": text_content
-            }
-        }
-        fallback_resp = post_wecom_webhook(text_payload, label)
-        if fallback_resp.get("errcode") != 0:
-            print(f"[Push] 降级文本推送失败: {fallback_resp}")
-
-    # 消息二：重要新闻列表；失败时降级为 markdown 链接
+    # 单条重要新闻消息；失败时降级为 markdown 链接
     news_payload = messages["news"]
     if news_payload:
         resp_json = post_wecom_webhook(news_payload, label)
