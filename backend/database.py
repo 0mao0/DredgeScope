@@ -783,7 +783,7 @@ def get_articles_by_time_range_strict(start_time, end_time, is_retained=None):
         SELECT 
             a.id, a.title, a.title_cn, a.url, a.pub_date, a.summary_cn, a.full_text_cn, a.content, 
             a.screenshot_path, a.vl_desc, a.created_at, a.source_type, a.source_name, a.valid,
-            a.category, a.is_retained
+            a.category, a.is_retained, a.is_significant
         FROM articles a
         WHERE 
           a.created_at >= ? AND a.created_at <= ?
@@ -806,6 +806,7 @@ def get_articles_by_time_range_strict(start_time, end_time, is_retained=None):
         item = dict(row)
         category = item.get("category")
         item["categories"] = [category] if category else []
+        item["significance"] = item.get("is_significant")
         results.append(item)
     return results
 
