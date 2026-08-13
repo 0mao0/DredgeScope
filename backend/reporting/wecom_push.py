@@ -23,6 +23,8 @@ CATEGORIES_MAP = {
     "Regulation": "⚖️ 技术法规"
 }
 
+CATEGORY_PRIORITY = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market"]
+
 def pick_primary_category(categories):
     order = ["Bid", "Project", "Equipment", "Regulation", "R&D", "Market"]
     for key in order:
@@ -54,9 +56,9 @@ def post_wecom_webhook(payload, label):
         config.WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
         
         if config.WECOM_WEBHOOK_URL:
-             print(f"[Config] 重新加载成功，Webhook URL 已更新")
+             print("[Config] 重新加载成功，Webhook URL 已更新")
         else:
-             print(f"[Config] 重新加载失败，Webhook URL 仍为空")
+             print("[Config] 重新加载失败，Webhook URL 仍为空")
 
     if not config.WECOM_WEBHOOK_URL:
         write_scheduler_log(f"推送统计: 窗口{label} Webhook未配置")
@@ -123,6 +125,84 @@ def build_hot_news_titles(articles, max_items=4, title_max_len=10):
     if has_more:
         titles.append("...")
     return titles
+
+def truncate_for_wecom(text, max_chars=40):
+    """按字符数截断文本，超出长度时以省略号结尾"""
+    if not text:
+        return ""
+    text = str(text).strip().replace("\n", " ").replace("\r", " ")
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+def rank_articles_for_push(articles, max_items=5):
+    """按重要度分数降序、分类优先级、入库时间倒序排序并截取"""
+    def sort_key(article):
+        significance = article.get("significance")
+        score = significance if isinstance(significance, int) and not isinstance(significance, bool) else -1
+        category = article.get("category") or DEFAULT_CATEGORY
+        priority = CATEGORY_PRIORITY.index(category) if category in CATEGORY_PRIORITY else len(CATEGORY_PRIORITY)
+        created_at = article.get("created_at") or ""
+        return (score, -priority, created_at)
+
+    return sorted(articles, key=sort_key, reverse=True)[:max_items]
+
+def build_summary_card_payload(label, total_count, category_line, base_url):
+    """构造汇总模板卡片（无图片，logo 用 🚢 文本）"""
+    return {
+        "msgtype": "template_card",
+        "template_card": {
+            "card_type": "news_notice",
+            "source": {"desc": "🚢 全球疏浚情报", "desc_color": 0},
+            "main_title": {"title": label, "desc": f"本次更新: {total_count} 条"},
+            "vertical_content_list": [{"title": "分类分布", "desc": category_line}],
+            "card_action": {"type": 1, "url": f"{base_url.rstrip('/')}/?mode=recent"},
+        },
+    }
+
+def build_news_payload(articles, base_url, total_count):
+    """构造重要新闻列表（news 图文消息），末尾追加查看全部条目"""
+    news_articles = []
+    for article in articles:
+        article_id = article.get("id")
+        if article_id is None:
+            continue
+        title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
+        description = truncate_for_wecom(article.get("summary_cn") or title, 160)
+        news_articles.append({
+            "title": title or "未命名新闻",
+            "description": description,
+            "url": f"{base_url.rstrip('/')}/?id={article_id}",
+        })
+    if not news_articles:
+        return None
+    news_articles.append({
+        "title": f"查看全部 {total_count} 条 →",
+        "description": "进入系统查看完整列表",
+        "url": f"{base_url.rstrip('/')}/?mode=recent",
+    })
+    return {"msgtype": "news", "news": {"articles": news_articles}}
+
+def build_markdown_fallback(label, total_count, category_line, articles, base_url):
+    """构造 news 发送失败时的 markdown 降级消息"""
+    lines = [f"【全球疏浚情报 {label}】", f"本次更新: {total_count} 条", category_line, ""]
+    for article in articles:
+        article_id = article.get("id")
+        if article_id is None:
+            continue
+        title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
+        lines.append(f"[{title}]({base_url.rstrip('/')}/?id={article_id})")
+    lines.append(f"[查看全部 {total_count} 条 →]({base_url.rstrip('/')}/?mode=recent)")
+    return {"msgtype": "markdown", "markdown": {"content": "\n".join(lines)}}
+
+def build_push_messages(articles, label, total_count, category_line, base_url):
+    """构造本次推送的全部消息（汇总卡片、新闻列表、降级文本）"""
+    top_articles = rank_articles_for_push(articles, max_items=5)
+    return {
+        "card": build_summary_card_payload(label, total_count, category_line, base_url),
+        "news": build_news_payload(top_articles, base_url, total_count),
+        "markdown": build_markdown_fallback(label, total_count, category_line, top_articles, base_url),
+    }
 
 def parse_event_datetime(value):
     if not value:
