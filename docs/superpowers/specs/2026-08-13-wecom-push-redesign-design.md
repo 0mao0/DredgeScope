@@ -92,19 +92,22 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 
 ## 5. 推送改造（`backend/reporting/wecom_push.py`）
 
-推送窗口、`get_push_window`、无情报文本消息保持现状。有情报时发送**一条** `markdown` 消息（`news` 图文消息不带 `picurl` 时右侧会出现企业微信默认占位图且无法隐藏，因此改用 markdown）：
+推送窗口、`get_push_window`、无情报文本消息保持现状。有情报时发送**一条** `news` 图文消息：
 
-### 5.1 单条 markdown 消息
+### 5.1 单条重要新闻消息（news）
 
 - 取当前窗口内 `is_retained=1` 的文章；
 - 排序：`significance` 降序（None 排最后）→ 分类优先级（Bid > Project > Equipment > Regulation > R&D > Market）→ `created_at` 降序；
 - 取前 3~5 条（有 1 条就发 1 条，最多 5 条）；
 - 消息结构：
-  - 头部两行：`【全球疏浚情报 {label}】` + `本次更新: N 条`；
-  - 分类分布行；
-  - 每条重要新闻一行：`序号. [标题]({PUSH_BASE_URL}/?id={article_id})`，标题截断到 40 个字符；
-  - 末尾一行：`[查看全部 N 条 →]({PUSH_BASE_URL}/?mode=recent)`；
-  - 不包含任何图片，无占位图。
+  - **第一张卡片 = 汇总**：标题为"{label} · 更新 N 条"，描述为分类分布，点击进入系统总览（`{PUSH_BASE_URL}/?mode=recent`）；
+  - **中间卡片 = 重要新闻**，每条 article：
+  - `title`：`title_cn` 或 `title`，截断到 40 个字符（约 120 字节，企业微信限制 128 字节）；
+  - `description`：`summary_cn`，截断到 160 个字符（约 480 字节，企业微信限制 512 字节）；无摘要时用标题；
+  - `url`：`{PUSH_BASE_URL}/?id={article_id}`；
+  - 不设置 `picurl`。
+  - **最后一张卡片 = "查看全部 N 条 →"**，`url` 指向 `{PUSH_BASE_URL}/?mode=recent`；
+  - 总条数 ≤ 7（1 条汇总 + 5 条新闻 + 1 条查看全部），在企业微信 8 条上限内。
 
 ### 5.3 PUSH_BASE_URL 配置
 
@@ -118,7 +121,7 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 
 ### 5.5 失败降级
 
-- 单条 markdown 消息发送失败：降级为一条纯文本消息（汇总信息 + 总览链接）；
+- 单条 news 消息发送失败：降级为一条 markdown 文本，内容为汇总信息 + 每条新闻 `[标题](url)` 链接；
 - 降级也失败：写调度日志，不重复重试。
 
 ## 6. 前端直达（`frontend/src/views/Dashboard.vue`）
@@ -137,8 +140,9 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 | significance 非法（非整数/越界） | clamp 到 0-10，解析失败置空 |
 | 窗口内无文章 | 发送"暂无更新"文本 |
 | 窗口内只有 1-2 篇文章 | 有多少发多少 |
-| markdown 消息发送失败 | 纯文本降级 |
-| 文章无摘要 | 链接文字用标题 |
+| 汇总卡片发送失败 | 文本降级 |
+| 新闻列表发送失败 | markdown 链接降级 |
+| 文章无摘要 | description 用标题 |
 | Webhook 未配置 | 写调度日志并返回，不发送 |
 
 ## 8. 测试计划
@@ -146,13 +150,13 @@ VL 输出目前是 6 行自然语言，新增第 7 行：
 测试文件放在 `tests/`：
 
 - `test_significance.py`：VL 第 7 行解析、文本 JSON 解析、clamp/归一化；
-- `test_wecom_payload.py`：新闻列表排序与兜底、标题截断、markdown payload 结构、查看全部条目、失败降级逻辑；
+- `test_wecom_payload.py`：新闻列表排序与兜底、标题/摘要截断、news payload 结构、查看全部条目、空列表行为、失败降级逻辑；
 - `test_frontend_deeplink` 不单独建前端测试，通过手动验证 + `pnpm run lint` 覆盖。
 
 手动验证：
 
 1. 后端脚本 dry-run 打印单条消息 payload；
-2. 向测试群发送真实推送，确认消息为单条、无图片占位、包含汇总与 3~5 条新闻链接、每条可跳转；
+2. 向测试群发送真实推送，确认第一条为汇总、中间 3~5 条新闻、每条可跳转；
 3. 点击新闻条目确认打开对应详情弹窗；无效 id 不弹窗。
 
 ## 9. 验证清单
