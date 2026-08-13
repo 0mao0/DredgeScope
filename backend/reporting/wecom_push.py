@@ -1,8 +1,6 @@
 import requests
-import json
 import os
 import sys
-import urllib.parse
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -290,12 +288,12 @@ def build_category_counts(articles):
     return {k: len(v) for k, v in buckets.items()}
 
 def push_daily_report():
-    """推送日报到企业微信"""
+    """推送日报到企业微信：汇总卡片 + 重要新闻列表"""
     now = datetime.now()
     start_dt, end_dt, label = get_push_window(now)
     start_time = start_dt.isoformat()
     end_time = end_dt.isoformat()
-    
+
     articles = database.get_articles_by_time_range_strict(start_time, end_time, is_retained=1)
     raw_event_count = len(articles)
 
@@ -315,22 +313,9 @@ def push_daily_report():
             print(f"[Push] 无情报通知发送失败: {resp_json}")
         return
 
-    cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/draghead.png"
-    
-    found_cover = False
     for e in articles:
         e["category"] = pick_primary_category(e.get("categories") or [])
-        if not found_cover and e.get('screenshot_path'):
-            if "127.0.0.1" in config.BACKEND_URL or "localhost" in config.BACKEND_URL:
-                pass
-            else:
-                filename = os.path.basename(e['screenshot_path'])
-                encoded_filename = urllib.parse.quote(filename)
-                cover_image_url = f"{config.BACKEND_URL.rstrip('/')}/assets/{encoded_filename}"
-                found_cover = True
 
-    # 2. 构造 Template Card
-    date_str = label
     total_count = len(articles)
     category_counts = build_category_counts(articles)
     category_labels = {
@@ -346,64 +331,36 @@ def push_daily_report():
         f"推送统计: 窗口{label} 原始记录{raw_event_count} 推送{total_count}"
     )
 
+    base_url = config.PUSH_BASE_URL
+    messages = build_push_messages(articles, label, total_count, category_line, base_url)
 
-    # 构造跳转链接 (如果没有配置公网 IP，使用 localhost 也没用，但可以作为占位)
-    # 使用 mode=recent 参数，确保用户点击后看到的是推送统计的“最近24小时”数据，而不是自然日数据
-    jump_url = f"{config.BACKEND_URL.rstrip('/')}/?mode=recent"
-    if "127.0.0.1" in jump_url:
-        # 提示用户在本地
-        pass
-
-    payload = {
-        "msgtype": "template_card",
-        "template_card": {
-            "card_type": "news_notice",
-            "source": {
-                "icon_url": "https://cdn-icons-png.flaticon.com/512/2942/2942544.png",
-                "desc": "全球疏浚情报",
-                "desc_color": 0
-            },
-            "main_title": {
-                "title": f"{date_str}",
-                "desc": f"本次更新: {total_count} 条"
-            },
-            "card_image": {
-                "url": cover_image_url,
-                "aspect_ratio": 1.3
-            },
-            "vertical_content_list": [
-                {
-                    "title": "分类分布",
-                    "desc": category_line
-                }
-            ],
-            "card_action": {
-                "type": 1,
-                "url": jump_url,
-                "appid": "APPID",
-                "pagepath": "PAGEPATH"
-            }
-        }
-    }
-
-    # 3. 发送
-    print(f"Pushing to: {config.WECOM_WEBHOOK_URL}")
-    resp_json = post_wecom_webhook(payload, date_str)
+    # 消息一：汇总卡片；失败时降级为文本
+    resp_json = post_wecom_webhook(messages["card"], label)
     if resp_json.get("errcode") != 0:
         print("Template Card 推送失败，尝试降级为 Text 消息...")
-        text_content = f"【全球疏浚情报 {date_str}】\n"
+        text_content = f"【全球疏浚情报 {label}】\n"
         text_content += f"本次更新: {total_count} 条\n\n"
         text_content += f"{category_line}\n"
-        text_content += f"\n详情请访问: {jump_url}"
+        text_content += f"\n详情请访问: {base_url.rstrip('/')}/?mode=recent"
         text_payload = {
             "msgtype": "text",
             "text": {
                 "content": text_content
             }
         }
-        fallback_resp = post_wecom_webhook(text_payload, date_str)
+        fallback_resp = post_wecom_webhook(text_payload, label)
         if fallback_resp.get("errcode") != 0:
             print(f"[Push] 降级文本推送失败: {fallback_resp}")
+
+    # 消息二：重要新闻列表；失败时降级为 markdown 链接
+    news_payload = messages["news"]
+    if news_payload:
+        resp_json = post_wecom_webhook(news_payload, label)
+        if resp_json.get("errcode") != 0:
+            print("News 推送失败，尝试降级为 Markdown 消息...")
+            fallback_resp = post_wecom_webhook(messages["markdown"], label)
+            if fallback_resp.get("errcode") != 0:
+                print(f"[Push] 降级 Markdown 推送失败: {fallback_resp}")
 
 if __name__ == "__main__":
     push_daily_report()
