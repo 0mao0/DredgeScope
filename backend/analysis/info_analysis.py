@@ -90,6 +90,16 @@ def normalize_significance(value):
         return None
     return max(0, min(10, score))
 
+def parse_vl_significance(content):
+    """从 VL 自然语言输出中解析第 7 行重要度分数（0-10 整数）"""
+    if not content:
+        return None
+    import re
+    match = re.search(r'^7\.\s*(?:[^\n]*?)(\d{1,2})\s*$', content, re.MULTILINE)
+    if not match:
+        return None
+    return normalize_significance(match.group(1))
+
 async def analyze_with_vl(client, item, b64_img):
     """
     使用视觉模型进行首要分析
@@ -97,17 +107,18 @@ async def analyze_with_vl(client, item, b64_img):
     print(f"[VL] 正在进行视觉分析: {item['title']}")
     
     # Qwen3.5 是推理模型，无法直接输出 JSON，使用自然语言提示
-    vl_prompt = f"""分析这张网页截图，提取疏浚行业新闻信息。
+    vl_prompt = """分析这张网页截图，提取疏浚行业新闻信息。
 
 【重要】请只输出最终答案，不要输出任何分析过程、思考步骤或结构化标记（如"**标题**"、"正文内容"等）。
 
-请输出以下6行：
+请输出以下7行：
 1. 是否是404/登录页/无关内容？只回答一个字：是 或 否
 2. 属于哪类：只回答类别名：Project/Equipment/Bid/Regulation/R&D/Market
 3. 中文标题：谁+在哪里+做了什么（不超过30字）
 4. 中文摘要：概括文章核心内容（不超过100字）
 5. 发布日期：YYYY-MM-DD格式（从页面中寻找，找不到则留空）
 6. 截图内容描述：用一段话描述截图中显示的网页主要内容（不超过150字，纯描述，不要分析）
+7. 重要度打分：只输出 0-10 的整数，数字越大越重要
 
 【格式示例】
 1. 否
@@ -115,7 +126,8 @@ async def analyze_with_vl(client, item, b64_img):
 3. 美国陆军工程兵团在缅因州推进航道疏浚项目
 4. 美国陆军工程兵团新英格兰区表示，位于缅因州的纳拉瓜古斯河联邦航道项目进展顺利，预计将于2026年4月完工，将疏浚约15.4万立方码沙子。
 5. 2026-03-12
-6. 网页截图显示DredgingToday.com的新闻详情页，标题为Narraguagus River Federal Navigation Project moves ahead，正文介绍美国陆军工程兵团的疏浚项目进展，配有一张挖泥船作业图片。"""
+6. 网页截图显示DredgingToday.com的新闻详情页，标题为Narraguagus River Federal Navigation Project moves ahead，正文介绍美国陆军工程兵团的疏浚项目进展，配有一张挖泥船作业图片。
+7. 8"""
     
     try:
         resp_vl = await client.chat.completions.create(
@@ -147,7 +159,7 @@ async def analyze_with_vl(client, item, b64_img):
             if hasattr(message, 'reasoning') and message.reasoning:
                 content = message.reasoning
             else:
-                print(f"[VL] 警告: 无法从响应中获取内容")
+                print("[VL] 警告: 无法从响应中获取内容")
                 return None
         
         import re
@@ -158,7 +170,8 @@ async def analyze_with_vl(client, item, b64_img):
             "title_cn": "",
             "summary_cn": "",
             "publish_time": "",
-            "image_desc": ""
+            "image_desc": "",
+            "significant": None
         }
         
         # 提取 is_junk - 查找"1."开头的行，提取"是"或"否"
@@ -211,6 +224,9 @@ async def analyze_with_vl(client, item, b64_img):
             # 清理结构化标记，保留纯描述内容
             image_desc = _clean_vl_description(image_desc)
             result["image_desc"] = image_desc
+
+        # 提取 significant - 查找"7."开头的行
+        result["significant"] = parse_vl_significance(content)
         
         return result
         

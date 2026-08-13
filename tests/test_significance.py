@@ -43,3 +43,21 @@ def test_normalize_llm_result_missing_significance():
         {"title": "Test", "pub_date": "2026-08-13"},
     )
     assert result["significant"] is None
+
+
+from analysis.info_analysis import parse_vl_significance
+
+
+def test_parse_vl_significance_plain():
+    """标准输出行 '7. 8' 解析为 8"""
+    assert parse_vl_significance("7. 8") == 8
+
+
+def test_parse_vl_significance_labeled():
+    """带标签输出 '7. 重要度打分：7' 解析为 7"""
+    assert parse_vl_significance("7. 重要度打分：7") == 7
+
+
+def test_parse_vl_significance_missing():
+    """没有第 7 行时返回 None"""
+    assert parse_vl_significance("6. 页面截图描述：新闻页面") is None
