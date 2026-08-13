@@ -10,7 +10,6 @@ from openai import AsyncOpenAI
 import config
 from static.constants import (
     DEFAULT_CATEGORY,
-    ALLOWED_CATEGORIES,
     normalize_category
 )
 
@@ -80,6 +79,16 @@ def _clean_vl_description(text):
     text = re.sub(r'\s+', ' ', text).strip()
     
     return text
+
+def normalize_significance(value):
+    """将 LLM 返回的重要度分数归一化为 0-10 整数，缺失或非法返回 None"""
+    if value is None:
+        return None
+    try:
+        score = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(10, score))
 
 async def analyze_with_vl(client, item, b64_img):
     """
@@ -269,6 +278,12 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
    【重要】summary_cn 和 full_text_cn 必须是不同的内容：
    - summary_cn 是简短摘要（2-3句话）
    - full_text_cn 是完整正文翻译（包含所有细节）
+5. 【重要度打分】(significance) - 基于以下标准输出 0-10 的整数，数字越大越重要：
+   - 与疏浚、港口、航道、海洋工程的直接相关度（相关度越高分越高）；
+   - 商业价值：中标、合同、金额、大型企业动态（金额越大、企业越知名分越高）；
+   - 影响范围：国家级/区域级项目、法规政策变化、重大事故或里程碑；
+   - 时效性：新发布、正在进行的重大事件优先。
+   只输出整数，不要输出小数或理由。
 
 返回 JSON:
 {{
@@ -277,7 +292,8 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
   "title_cn": "...",
   "summary_cn": "...",
   "full_text_cn": "...",
-  "publish_time": "YYYY-MM-DD"
+  "publish_time": "YYYY-MM-DD",
+  "significance": 8
 }}
 """
     try:
@@ -390,32 +406,22 @@ def is_obvious_junk(title):
     return False
 
 def _normalize_llm_result(result, item):
-    # 防御性检查：如果 result 为 None 或不是字典/列表，返回默认结构
-    if result is None:
-        return {
-            "is_junk": False,
-            "category": "Market",
-            "title_cn": item.get("title"),
-            "summary_cn": "",
-            "full_text_cn": "",
-            "publish_time": str(item.get("pub_date") or ""),
-            "image_desc": ""
-        }
-    
+    """归一化 LLM 分析结果，保证必填字段与重要度分数类型一致"""
     if isinstance(result, list):
         if len(result) == 1 and isinstance(result[0], dict):
-            return result[0]
-        return {
-            "is_junk": False,
-            "category": "Market",
-            "title_cn": item.get("title"),
-            "summary_cn": "",
-            "full_text_cn": "",
-            "publish_time": str(item.get("pub_date") or ""),
-            "image_desc": ""
-        }
-    
-    # 如果是字典，确保有必要的字段
+            result = result[0]
+        else:
+            return {
+                "is_junk": False,
+                "category": "Market",
+                "title_cn": item.get("title"),
+                "summary_cn": "",
+                "full_text_cn": "",
+                "publish_time": str(item.get("pub_date") or ""),
+                "image_desc": "",
+                "significant": None,
+            }
+
     if isinstance(result, dict):
         return {
             "is_junk": result.get("is_junk", False),
@@ -424,10 +430,10 @@ def _normalize_llm_result(result, item):
             "summary_cn": result.get("summary_cn", ""),
             "full_text_cn": result.get("full_text_cn", ""),
             "publish_time": result.get("publish_time", str(item.get("pub_date") or "")),
-            "image_desc": result.get("image_desc", "")
+            "image_desc": result.get("image_desc", ""),
+            "significant": normalize_significance(result.get("significance")),
         }
-    
-    # 其他类型，返回默认结构
+
     return {
         "is_junk": False,
         "category": "Market",
@@ -435,7 +441,8 @@ def _normalize_llm_result(result, item):
         "summary_cn": "",
         "full_text_cn": "",
         "publish_time": str(item.get("pub_date") or ""),
-        "image_desc": ""
+        "image_desc": "",
+        "significant": None,
     }
 
 def _resolve_screenshot_path(screenshot_path, screenshot_filename):
@@ -468,6 +475,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
             "source_name": item.get("source_name", ""),
+            "significant": 0,
             "id": item.get("id")
         }
 
@@ -526,6 +534,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
             "analysis_log": analysis_log,
             "source_type": item.get("source_type", "unknown"),
             "source_name": item.get("source_name", ""),
+            "significant": 0,
             "id": item.get("id")
         }
 
@@ -571,7 +580,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
                         pub_date = str(item.get('pub_date', ''))
                 else:
                     pub_date = str(item.get('pub_date', ''))
-        except Exception as e:
+        except Exception:
             # 日期解析失败，回退到原始时间
             pub_date = str(item.get('pub_date', ''))
     else:
@@ -594,6 +603,7 @@ def _build_final_result(item, url, text_content, screenshot_path, screenshot_fil
         "analysis_log": analysis_log,
         "source_type": item.get("source_type", "unknown"),
         "source_name": item.get("source_name", ""),
+        "significant": final_result.get("significant"),
         "id": item.get("id")
     }
 
