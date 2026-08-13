@@ -35,6 +35,8 @@ ships.csv
 # Local config
 local_config.py
 
+# Brainstorm visual companion
+.superpowers/
+
 #tests
 tests/
-
