@@ -361,11 +361,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useNewsStore, useVesselStore, type NewsItem } from '@/stores'
 import dayjs from 'dayjs'
 
 const newsStore = useNewsStore()
 const vesselStore = useVesselStore()
+const route = useRoute()
 
 const loading = ref(true)
 const modalVisible = ref(false)
@@ -595,6 +597,19 @@ async function openDetail(item: NewsItem) {
   }, 100)
 }
 
+async function openArticleFromQuery(id: string) {
+  try {
+    const response = await fetch(`/api/article/${encodeURIComponent(id)}`)
+    const data = await response.json()
+    const article = data?.article
+    if (!article) return
+    currentArticle.value = { ...article, id: String(article.id) }
+    modalVisible.value = true
+  } catch (error) {
+    console.error('打开推送直达文章失败', error)
+  }
+}
+
 onMounted(async () => {
   await Promise.all([newsStore.fetchNews(), vesselStore.fetchVessels()])
   loading.value = false
@@ -606,6 +621,12 @@ onMounted(async () => {
     },
     5 * 60 * 1000
   )
+
+  // 企业微信推送直达：/?id=123 自动打开对应详情弹窗
+  const queryId = route.query.id
+  if (queryId && typeof queryId === 'string') {
+    await openArticleFromQuery(queryId)
+  }
 })
 
 onUnmounted(() => {
