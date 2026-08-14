@@ -239,75 +239,92 @@
 
         <!-- AI Analysis -->
         <div class="mt-6 bg-slate-800/50 rounded-xl p-4 border border-brand-500/20">
-          <h4 class="text-sm font-bold text-brand-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-robot"></i> AI 分析过程
-          </h4>
-          <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
-              >Qwen2.5 纯文字解析：</span
-            >
-            <p class="text-gray-200 text-sm leading-relaxed">
-              {{ currentArticle?.summary_cn || '暂无摘要' }}
-            </p>
-          </div>
-          <div class="mb-4">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
-              >Qwen3.5 多模态识别</span
-            >
-            <p class="text-gray-300 text-sm leading-relaxed italic">
-              {{ currentArticle?.vl_desc || '暂无描述' }}
-            </p>
-          </div>
-          <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">
-            <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2"
-              >关键字段提取：</span
-            >
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <div v-if="currentArticle.details.project_name" class="flex gap-2">
-                <span class="text-gray-500">项目名称:</span>
-                <span class="text-gray-300">{{ currentArticle.details.project_name }}</span>
-              </div>
-              <div v-if="currentArticle.details.location" class="flex gap-2">
-                <span class="text-gray-500">位置:</span>
-                <span class="text-gray-300">{{ currentArticle.details.location }}</span>
-              </div>
-              <div v-if="currentArticle.details.contractor" class="flex gap-2">
-                <span class="text-gray-500">承包商:</span>
-                <span class="text-gray-300">{{ currentArticle.details.contractor }}</span>
-              </div>
-              <div v-if="currentArticle.details.client" class="flex gap-2">
-                <span class="text-gray-500">客户:</span>
-                <span class="text-gray-300">{{ currentArticle.details.client }}</span>
-              </div>
-              <div v-if="currentArticle.details.amount" class="flex gap-2">
-                <span class="text-gray-500">金额:</span>
-                <span class="text-gray-300"
-                  >{{ currentArticle.details.amount }}
-                  {{ currentArticle.details.currency || '' }}</span
+          <button
+            type="button"
+            :aria-expanded="aiAnalysisExpanded"
+            class="w-full flex items-center justify-between gap-2 mb-3 cursor-pointer text-left"
+            @click="aiAnalysisExpanded = !aiAnalysisExpanded"
+          >
+            <h4 class="text-sm font-bold text-brand-400 flex items-center gap-2">
+              <i class="fa-solid fa-robot"></i> AI 分析过程
+            </h4>
+            <i
+              :class="[
+                'fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-300',
+                aiAnalysisExpanded ? 'rotate-180' : '',
+              ]"
+            ></i>
+          </button>
+          <Transition name="collapse">
+            <div v-if="aiAnalysisExpanded">
+              <div class="mb-4">
+                <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+                  >Qwen2.5 纯文字解析：</span
                 >
+                <p class="text-gray-200 text-sm leading-relaxed">
+                  {{ currentArticle?.summary_cn || '暂无摘要' }}
+                </p>
               </div>
-              <div v-if="currentArticle.details.event_type" class="flex gap-2">
-                <span class="text-gray-500">事件类型:</span>
-                <span class="text-gray-300">{{ currentArticle.details.event_type }}</span>
+              <div class="mb-4">
+                <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
+                  >Qwen3.5 多模态识别</span
+                >
+                <p class="text-gray-300 text-sm leading-relaxed italic">
+                  {{ currentArticle?.vl_desc || '暂无描述' }}
+                </p>
               </div>
-              <div v-if="currentArticle.details.type" class="flex gap-2">
-                <span class="text-gray-500">类型:</span>
-                <span class="text-gray-300">{{ currentArticle.details.type }}</span>
-              </div>
-              <div v-if="currentArticle.details.vessel_name" class="flex gap-2">
-                <span class="text-gray-500">船舶名称:</span>
-                <span class="text-gray-300">{{ currentArticle.details.vessel_name }}</span>
-              </div>
-              <div v-if="currentArticle.details.company" class="flex gap-2">
-                <span class="text-gray-500">公司:</span>
-                <span class="text-gray-300">{{ currentArticle.details.company }}</span>
-              </div>
-              <div v-if="currentArticle.details.institution" class="flex gap-2">
-                <span class="text-gray-500">机构:</span>
-                <span class="text-gray-300">{{ currentArticle.details.institution }}</span>
+              <div v-if="currentArticle?.details" class="pt-3 border-t border-white/10">
+                <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-2"
+                  >关键字段提取：</span
+                >
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div v-if="currentArticle.details.project_name" class="flex gap-2">
+                    <span class="text-gray-500">项目名称:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.project_name }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.location" class="flex gap-2">
+                    <span class="text-gray-500">位置:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.location }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.contractor" class="flex gap-2">
+                    <span class="text-gray-500">承包商:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.contractor }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.client" class="flex gap-2">
+                    <span class="text-gray-500">客户:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.client }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.amount" class="flex gap-2">
+                    <span class="text-gray-500">金额:</span>
+                    <span class="text-gray-300"
+                      >{{ currentArticle.details.amount }}
+                      {{ currentArticle.details.currency || '' }}</span
+                    >
+                  </div>
+                  <div v-if="currentArticle.details.event_type" class="flex gap-2">
+                    <span class="text-gray-500">事件类型:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.event_type }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.type" class="flex gap-2">
+                    <span class="text-gray-500">类型:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.type }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.vessel_name" class="flex gap-2">
+                    <span class="text-gray-500">船舶名称:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.vessel_name }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.company" class="flex gap-2">
+                    <span class="text-gray-500">公司:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.company }}</span>
+                  </div>
+                  <div v-if="currentArticle.details.institution" class="flex gap-2">
+                    <span class="text-gray-500">机构:</span>
+                    <span class="text-gray-300">{{ currentArticle.details.institution }}</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </Transition>
         </div>
       </div>
 
@@ -339,6 +356,8 @@ const vesselStore = useVesselStore()
 const route = useRoute()
 
 const modalVisible = ref(false)
+// AI 分析过程默认折叠，点击标题展开
+const aiAnalysisExpanded = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
