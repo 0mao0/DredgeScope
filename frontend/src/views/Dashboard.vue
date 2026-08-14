@@ -1,223 +1,172 @@
 <template>
   <div class="h-full flex flex-col overflow-hidden p-4">
     <main class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
-      <!-- Report Selector -->
-      <div class="flex flex-col md:flex-row items-stretch gap-4">
-        <div
-          class="flex-shrink-0 flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 w-full md:w-auto"
-        >
-          <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-3">
-              <a-date-picker
-                v-model:value="selectedDate"
-                :allow-clear="false"
-                class="bg-dark-card border-white/10 w-40"
-              />
-            </div>
-            <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
-              <i class="fa-solid fa-clock text-[9px]"></i>
-              {{ reportTimeRange }}
-            </div>
-          </div>
-
-          <div class="flex bg-black/20 p-1 rounded-xl border border-white/5 ml-4">
-            <button
-              :class="[
-                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-                reportType === 'morning'
-                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
-                  : 'text-gray-400 hover:text-gray-200',
-              ]"
-              @click="handleReportTypeChange('morning')"
-            >
-              <i class="fa-solid fa-sun text-xs"></i> 早报
-            </button>
-            <button
-              :class="[
-                'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
-                reportType === 'evening'
-                  ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
-                  : 'text-gray-400 hover:text-gray-200',
-              ]"
-              @click="handleReportTypeChange('evening')"
-            >
-              <i class="fa-solid fa-moon text-xs"></i> 晚报
-            </button>
-          </div>
-        </div>
-
-        <!-- Stats Overview -->
-        <div class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group">
-          <div>
-            <p class="text-sm font-medium text-gray-400">本次新闻</p>
-            <div class="flex items-end gap-2 mt-1">
-              <span
-                class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors"
-                >{{ previewItems.length }}</span
-              >
-              <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
-            </div>
-          </div>
-          <div class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-            <i class="fa-solid fa-bolt text-blue-400 text-xl"></i>
-          </div>
-        </div>
-
-        <router-link
-          to="/vessel-map"
-          target="_blank"
-          class="flex-1 glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors"
-        >
-          <div>
-            <p class="text-sm font-medium text-gray-400">跟踪船舶</p>
-            <div class="flex items-end gap-2 mt-1">
-              <span
-                class="text-3xl font-bold text-white group-hover:text-green-400 transition-colors"
-                >{{ vesselStore.trackedCount }}</span
-              >
-              <span class="text-xs text-gray-500">/{{ vesselStore.totalCount }}</span>
-            </div>
-          </div>
-          <div class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-            <i class="fa-solid fa-ship text-green-400 text-xl"></i>
-          </div>
-        </router-link>
-      </div>
-
-      <!-- Main Content Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <!-- Left Column: Quick Summary -->
-        <div v-show="false" class="lg:col-span-1 space-y-6">
-          <div class="glass-card rounded-2xl p-6 h-full">
-            <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <i class="fa-solid fa-bolt text-yellow-400"></i> 今日速览
-            </h3>
-            <div class="space-y-3">
-              <div v-if="loading" class="animate-pulse flex space-x-4">
-                <div class="flex-1 space-y-4 py-1">
-                  <div class="h-4 bg-slate-700 rounded w-3/4"></div>
-                  <div class="h-4 bg-slate-700 rounded"></div>
-                </div>
+      <!-- 左右布局：左侧早晚报/统计，右侧新闻分类 -->
+      <div class="flex flex-col lg:flex-row items-start gap-6">
+        <!-- Left Column: Report Selector + Stats -->
+        <div class="w-full lg:w-[360px] lg:flex-shrink-0 flex flex-col gap-4">
+          <!-- Report Selector -->
+          <div
+            class="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 w-full"
+          >
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-3">
+                <a-date-picker
+                  v-model:value="selectedDate"
+                  :allow-clear="false"
+                  class="bg-dark-card border-white/10 w-40"
+                />
               </div>
-              <div
-                v-for="item in quickSummary"
-                v-else
-                :key="item.id"
-                class="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-brand-500/20 transition-colors cursor-pointer"
-                @click="openDetail(item)"
+              <div class="text-[10px] text-gray-500 flex items-center gap-1 px-1">
+                <i class="fa-solid fa-clock text-[9px]"></i>
+                {{ reportTimeRange }}
+              </div>
+            </div>
+
+            <div class="flex bg-black/20 p-1 rounded-xl border border-white/5 ml-4">
+              <button
+                :class="[
+                  'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                  reportType === 'morning'
+                    ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                    : 'text-gray-400 hover:text-gray-200',
+                ]"
+                @click="handleReportTypeChange('morning')"
               >
-                <div class="flex items-start gap-2">
+                <i class="fa-solid fa-sun text-xs"></i> 早报
+              </button>
+              <button
+                :class="[
+                  'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                  reportType === 'evening'
+                    ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                    : 'text-gray-400 hover:text-gray-200',
+                ]"
+                @click="handleReportTypeChange('evening')"
+              >
+                <i class="fa-solid fa-moon text-xs"></i> 晚报
+              </button>
+            </div>
+          </div>
+
+          <!-- Stats Overview -->
+          <div class="glass-card rounded-2xl p-5 flex items-center justify-between group w-full">
+            <div>
+              <p class="text-sm font-medium text-gray-400">本次新闻</p>
+              <div class="flex items-end gap-2 mt-1">
+                <span
+                  class="text-3xl font-bold text-white group-hover:text-brand-400 transition-colors"
+                  >{{ previewItems.length }}</span
+                >
+                <span class="text-xs text-gray-500">/{{ newsStore.historyTotal }}</span>
+              </div>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <i class="fa-solid fa-bolt text-blue-400 text-xl"></i>
+            </div>
+          </div>
+
+          <router-link
+            to="/vessel-map"
+            target="_blank"
+            class="glass-card rounded-2xl p-5 flex items-center justify-between group hover:border-white/20 transition-colors w-full"
+          >
+            <div>
+              <p class="text-sm font-medium text-gray-400">跟踪船舶</p>
+              <div class="flex items-end gap-2 mt-1">
+                <span
+                  class="text-3xl font-bold text-white group-hover:text-green-400 transition-colors"
+                  >{{ vesselStore.trackedCount }}</span
+                >
+                <span class="text-xs text-gray-500">/{{ vesselStore.totalCount }}</span>
+              </div>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+              <i class="fa-solid fa-ship text-green-400 text-xl"></i>
+            </div>
+          </router-link>
+        </div>
+
+        <!-- Right Column: Categories Cards -->
+        <div class="flex-1 min-w-0 flex flex-col gap-4">
+          <div
+            v-for="(meta, key) in categories"
+            :key="key"
+            :class="[
+              'glass-card rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2',
+              getCategoryMeta(key).border.replace('border-', 'border-t-'),
+            ]"
+          >
+            <!-- Card Header -->
+            <button
+              type="button"
+              :aria-expanded="isExpanded(key)"
+              class="w-full p-4 border-b border-white/5 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-left"
+              @click="toggleCategory(key)"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  :class="[
+                    'w-8 h-8 rounded-lg',
+                    getCategoryMeta(key).bg,
+                    'flex items-center justify-center',
+                  ]"
+                >
+                  <i
+                    :class="['fa-solid', getCategoryMeta(key).icon, getCategoryMeta(key).color]"
+                  ></i>
+                </div>
+                <h3 class="font-bold text-gray-200">{{ meta.name }}</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{
+                  getGroupedArticles(key).length
+                }}</span>
+                <i
+                  :class="[
+                    'fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-300',
+                    isExpanded(key) ? 'rotate-180' : '',
+                  ]"
+                ></i>
+              </div>
+            </button>
+
+            <!-- Card Body -->
+            <Transition name="collapse">
+              <div
+                v-if="isExpanded(key)"
+                class="flex flex-col max-h-[420px] overflow-y-auto custom-scrollbar"
+              >
+                <div
+                  v-if="getGroupedArticles(key).length === 0"
+                  class="flex items-center justify-center text-gray-500 text-sm py-10"
+                >
+                  暂无数据
+                </div>
+                <div v-else class="p-2 space-y-1">
                   <div
-                    :class="[
-                      'w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
-                      getCategoryMeta(item.category).bg,
-                    ]"
+                    v-for="group in getGroupedArticlesPreview(key)"
+                    :key="group.id || group.url"
+                    class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
+                    @click="openDetail(group)"
                   >
-                    <i
-                      :class="[
-                        'fa-solid',
-                        getCategoryMeta(item.category).icon,
-                        getCategoryMeta(item.category).color,
-                        'text-xs',
-                      ]"
-                    ></i>
-                  </div>
-                  <div class="flex-1">
-                    <h4 class="text-sm font-medium text-gray-200 line-clamp-1">
-                      {{ item.title_cn || item.title }}
-                    </h4>
-                    <p class="text-xs text-gray-400 mt-1 line-clamp-1">
-                      {{ item.summary_cn || '暂无摘要' }}
+                    <div class="flex justify-between items-start">
+                      <h4
+                        class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug"
+                      >
+                        {{ formatTitle(group, key) }}
+                      </h4>
+                      <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{
+                        formatTime(group.pub_date, group.created_at)
+                      }}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
+                      {{ group.summary_cn || group.title }}
                     </p>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Column: Categories Cards -->
-        <div class="lg:col-span-4">
-          <div class="flex flex-col gap-4">
-            <div
-              v-for="(meta, key) in categories"
-              :key="key"
-              :class="[
-                'glass-card rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2',
-                getCategoryMeta(key).border.replace('border-', 'border-t-'),
-              ]"
-            >
-              <!-- Card Header -->
-              <button
-                type="button"
-                :aria-expanded="isExpanded(key)"
-                class="w-full p-4 border-b border-white/5 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-left"
-                @click="toggleCategory(key)"
-              >
-                <div class="flex items-center gap-2">
-                  <div
-                    :class="[
-                      'w-8 h-8 rounded-lg',
-                      getCategoryMeta(key).bg,
-                      'flex items-center justify-center',
-                    ]"
-                  >
-                    <i
-                      :class="['fa-solid', getCategoryMeta(key).icon, getCategoryMeta(key).color]"
-                    ></i>
-                  </div>
-                  <h3 class="font-bold text-gray-200">{{ meta.name }}</h3>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{
-                    getGroupedArticles(key).length
-                  }}</span>
-                  <i
-                    :class="[
-                      'fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-300',
-                      isExpanded(key) ? 'rotate-180' : '',
-                    ]"
-                  ></i>
-                </div>
-              </button>
-
-              <!-- Card Body -->
-              <Transition name="collapse">
-                <div
-                  v-if="isExpanded(key)"
-                  class="flex flex-col max-h-[420px] overflow-y-auto custom-scrollbar"
-                >
-                  <div
-                    v-if="getGroupedArticles(key).length === 0"
-                    class="flex items-center justify-center text-gray-500 text-sm py-10"
-                  >
-                    暂无数据
-                  </div>
-                  <div v-else class="p-2 space-y-1">
-                    <div
-                      v-for="group in getGroupedArticlesPreview(key)"
-                      :key="group.id || group.url"
-                      class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
-                      @click="openDetail(group)"
-                    >
-                      <div class="flex justify-between items-start">
-                        <h4
-                          class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug"
-                        >
-                          {{ formatTitle(group, key) }}
-                        </h4>
-                        <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{
-                          formatTime(group.pub_date, group.created_at)
-                        }}</span>
-                      </div>
-                      <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
-                        {{ group.summary_cn || group.title }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </Transition>
-            </div>
+            </Transition>
           </div>
         </div>
       </div>
@@ -389,7 +338,6 @@ const newsStore = useNewsStore()
 const vesselStore = useVesselStore()
 const route = useRoute()
 
-const loading = ref(true)
 const modalVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
@@ -523,19 +471,6 @@ const categories = {
   },
 }
 
-const quickSummary = computed(() => {
-  const seenTitles = new Set()
-  const unique: NewsItem[] = []
-  for (const e of previewItems.value) {
-    const title = e.title_cn || e.title
-    if (!seenTitles.has(title)) {
-      seenTitles.add(title)
-      unique.push(e)
-    }
-  }
-  return unique.slice(0, 5)
-})
-
 function getCategoryMeta(category: string | undefined) {
   const cat = category || 'Project'
   return categories[cat as keyof typeof categories] || categories.Project
@@ -651,7 +586,6 @@ async function openArticleFromQuery(id: string) {
 
 onMounted(async () => {
   await Promise.all([newsStore.fetchNews(), vesselStore.fetchVessels()])
-  loading.value = false
 
   // Auto-refresh every 5 minutes
   refreshTimer = window.setInterval(
