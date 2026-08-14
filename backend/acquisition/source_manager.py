@@ -7,7 +7,7 @@
 import asyncio
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -152,7 +152,12 @@ class SourceManager:
 
         return all_items
 
-    async def enrich_items(self, items: List[Dict[str, Any]], context) -> List[Dict[str, Any]]:
+    async def enrich_items(
+        self,
+        items: List[Dict[str, Any]],
+        context,
+        on_item_done: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         补充采集网页内容
 
@@ -196,6 +201,11 @@ class SourceManager:
                 elapsed = time.time() - start_ts
                 avg = elapsed / completed
                 remain = avg * (total - completed)
+                if on_item_done:
+                    try:
+                        on_item_done(item)
+                    except Exception as e:
+                        print(f"[Enrich] 回写数据库失败 {link}: {e}")
                 print(f"[Enrich] 进度 {completed}/{total}，已用 {elapsed:.0f}s，预计剩余 {remain:.0f}s")
                 return item
 
@@ -206,11 +216,21 @@ class SourceManager:
                 return await asyncio.wait_for(enrich_item(item), timeout=ENRICH_TIMEOUT)
             except asyncio.TimeoutError:
                 link = item.get('link', '')
+                if on_item_done:
+                    try:
+                        on_item_done(item)
+                    except Exception as e:
+                        print(f"[Enrich] 回写数据库失败 {link}: {e}")
                 print(f"[Enrich] 超时 {link}: 超过 {ENRICH_TIMEOUT}s 未完成，跳过")
                 completed += 1
                 return item
             except Exception as e:
                 link = item.get('link', '')
+                if on_item_done:
+                    try:
+                        on_item_done(item)
+                    except Exception as e:
+                        print(f"[Enrich] 回写数据库失败 {link}: {e}")
                 print(f"[Enrich] 异常 {link}: {e}")
                 completed += 1
                 return item

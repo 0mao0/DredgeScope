@@ -61,6 +61,16 @@ def run_threaded(job_func):
 def job_fetch() -> None:
     """执行信息抓取任务"""
     write_log("启动抓取任务...")
+    # 抓取/补充采集可能耗时数分钟，期间持续上报心跳，避免看门狗误杀
+    stop_flag = threading.Event()
+
+    def keep_heartbeat() -> None:
+        while not stop_flag.is_set():
+            touch_heartbeat()
+            time.sleep(30)
+
+    heartbeat_thread = threading.Thread(target=keep_heartbeat, daemon=True)
+    heartbeat_thread.start()
     try:
         # 使用 asyncio.run 运行异步主函数
         # 注意：在线程中直接调用 asyncio.run 是安全的，因为它会创建一个新的事件循环
@@ -68,6 +78,8 @@ def job_fetch() -> None:
         write_log("抓取任务完成")
     except Exception as e:
         write_log(f"抓取任务出错: {e}")
+    finally:
+        stop_flag.set()
 
 
 def job_push() -> None:

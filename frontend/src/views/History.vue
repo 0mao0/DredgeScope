@@ -242,6 +242,7 @@
             :src="currentArticle.screenshot_path"
             alt="Screenshot"
             class="w-full rounded-lg border border-slate-700 shadow-lg"
+            @error="hideBrokenImage"
           />
         </div>
 
@@ -376,6 +377,12 @@ const dateRange = ref<[Dayjs, Dayjs]>()
 // 详情弹框
 const detailVisible = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
+
+// 截图文件加载失败时隐藏图片，避免显示破图
+function hideBrokenImage(event: Event) {
+  const target = event.target as HTMLImageElement
+  target.style.display = 'none'
+}
 
 // --- 计算属性 ---
 const maxPage = computed(() => Math.ceil(total.value / filters.page_size))

@@ -30,6 +30,12 @@ print(f"[Dashboard] Mounting /static to {STATIC_DIR}")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# 清理历史误写入的 __NO_CHANGE__ 哨兵字符串（与 main.py 保持一致）
+try:
+    database.clean_no_change_sentinels()
+except Exception as e:
+    print(f"[Dashboard] 哨兵清理失败: {e}")
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     with open(os.path.join(config.TEMPLATES_DIR, "dashboard.html"), "r", encoding="utf-8") as f:

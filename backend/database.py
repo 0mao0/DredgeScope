@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import re
+import hashlib
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import config
@@ -682,6 +683,65 @@ def clean_no_change_sentinels() -> int:
     if rows:
         print(f"[DB] 哨兵清理: 清理 {rows} 条 '__NO_CHANGE__' 脏数据")
     return rows
+
+
+def _expected_screenshot_filename(url: str) -> str:
+    """
+    根据文章 URL 计算默认截图文件名（与采集模块命名规则保持一致）
+
+    Args:
+        url: 文章 URL
+
+    Returns:
+        assets/ 相对路径；URL 为空时返回空字符串
+    """
+    if not url:
+        return ''
+    base = "".join([c for c in url if c.isalnum()])[:40]
+    digest = hashlib.md5(url.encode()).hexdigest()[:8]
+    return f"assets/{base}_{digest}.jpg"
+
+
+def repair_screenshot_paths() -> int:
+    """
+    修复 articles 表中失效的截图路径
+
+    规则：
+    1. 当前路径对应的文件存在 -> 保留
+    2. 否则按 URL 推导的默认文件名存在 -> 修正为该路径
+    3. 否则清空路径，避免前端请求不存在的文件（历史脏路径/缺失文件）
+
+    Returns:
+        实际修复（修改）的记录数
+    """
+    disk_files = set(os.listdir(config.ASSETS_DIR)) if os.path.isdir(config.ASSETS_DIR) else set()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    rows = c.execute("SELECT id, url, screenshot_path FROM articles").fetchall()
+    fixed = 0
+    for article_id, url, current in rows:
+        current = current or ''
+        candidates = []
+        if current.startswith('assets/') and current != '__NO_CHANGE__':
+            candidates.append(current)
+        expected = _expected_screenshot_filename(url or '')
+        if expected and expected not in candidates:
+            candidates.append(expected)
+
+        new_path = ''
+        for candidate in candidates:
+            if os.path.basename(candidate) in disk_files:
+                new_path = candidate
+                break
+
+        if new_path != current:
+            c.execute("UPDATE articles SET screenshot_path = ? WHERE id = ?", (new_path, article_id))
+            fixed += 1
+
+    conn.commit()
+    conn.close()
+    print(f"[DB] 截图路径修复: 检查 {len(rows)} 条，修改 {fixed} 条")
+    return fixed
 
 
 def save_raw_articles(items):

@@ -226,6 +226,7 @@
             :src="currentArticle.screenshot_path"
             alt="Screenshot"
             class="w-full rounded-lg border border-slate-700 shadow-lg"
+            @error="hideBrokenImage"
           />
         </div>
 
@@ -362,6 +363,12 @@ const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
 let refreshTimer: number | null = null
+
+// 截图文件加载失败时隐藏图片，避免显示破图
+function hideBrokenImage(event: Event) {
+  const target = event.target as HTMLImageElement
+  target.style.display = 'none'
+}
 
 // 分类卡片折叠状态：默认按数量决定，手动切换后以手动状态为准
 const expandedCategories = ref<Record<string, boolean>>({})

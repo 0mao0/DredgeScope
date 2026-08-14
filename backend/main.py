@@ -517,7 +517,8 @@ async def main():
                     ignore_https_errors=True
                 )
                 # 使用新的管理器进行补充采集
-                await manager.enrich_items(items_to_enrich, context)
+                # 逐条回写数据库：即使进程中途中断，已完成的截图/内容也不会丢失
+                await manager.enrich_items(items_to_enrich, context, on_item_done=database.save_article)
                 await browser.close()
                 
                 # 补充采集后，更新回数据库
