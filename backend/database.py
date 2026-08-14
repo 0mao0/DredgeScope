@@ -1,6 +1,8 @@
 import sqlite3
 import os
+import re
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 import config
 from static.constants import (
     DEFAULT_CATEGORY,
@@ -424,9 +426,17 @@ def save_article(article_data):
                     summary_cn = COALESCE(NULLIF(?, ''), summary_cn),
                     full_text_cn = COALESCE(NULLIF(?, ''), full_text_cn),
                     content = COALESCE(NULLIF(?, ''), content),
-                screenshot_path = CASE WHEN ? = '__CLEAR__' THEN '' ELSE COALESCE(NULLIF(?, ''), screenshot_path) END,
+                screenshot_path = CASE
+                    WHEN ? = '__CLEAR__' THEN ''
+                    WHEN ? = '__NO_CHANGE__' THEN screenshot_path
+                    ELSE COALESCE(NULLIF(?, ''), screenshot_path)
+                END,
                 is_significant = COALESCE(?, is_significant),
-                vl_desc = CASE WHEN ? = '__CLEAR__' THEN '' ELSE COALESCE(NULLIF(?, ''), vl_desc) END,
+                vl_desc = CASE
+                    WHEN ? = '__CLEAR__' THEN ''
+                    WHEN ? = '__NO_CHANGE__' THEN vl_desc
+                    ELSE COALESCE(NULLIF(?, ''), vl_desc)
+                END,
                 category = COALESCE(NULLIF(?, ''), category),
                 valid = COALESCE(?, valid),
                 is_hidden = COALESCE(?, is_hidden),
@@ -446,8 +456,10 @@ def save_article(article_data):
                 # screenshot_path 特殊处理：'__CLEAR__' 表示清除，None表示不修改，空字符串/其他值表示更新
                 '__NO_CHANGE__' if article_data.get('screenshot_path') is None else article_data.get('screenshot_path'),
                 '__NO_CHANGE__' if article_data.get('screenshot_path') is None else article_data.get('screenshot_path'),
+                '__NO_CHANGE__' if article_data.get('screenshot_path') is None else article_data.get('screenshot_path'),
                 article_data.get('significant', None),
                 # vl_desc 特殊处理：'__CLEAR__' 表示清除，None表示不修改，空字符串/其他值表示更新
+                '__NO_CHANGE__' if article_data.get('image_desc') is None else article_data.get('image_desc'),
                 '__NO_CHANGE__' if article_data.get('image_desc') is None else article_data.get('image_desc'),
                 '__NO_CHANGE__' if article_data.get('image_desc') is None else article_data.get('image_desc'),
                 primary_category or '',
@@ -573,6 +585,105 @@ def is_article_processed(url):
         
     return False
 
+# 需要转换为换行的 HTML 块级元素（保证段落结构可读）
+_BLOCK_TAGS = [
+    'p', 'div', 'br', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'table', 'ul', 'ol', 'blockquote', 'section', 'article', 'header', 'footer'
+]
+
+
+def html_to_text(raw):
+    """
+    将HTML字符串转换为纯文本，去除标签并保留段落结构
+
+    Args:
+        raw: 可能包含HTML标签的原始内容
+
+    Returns:
+        纯文本字符串；非字符串输入或解析失败时返回原样（或空字符串）
+    """
+    if raw is None:
+        return ''
+    text = str(raw)
+    # 不含标签则直接返回，避免无谓解析
+    if '<' not in text:
+        return text.strip()
+    try:
+        soup = BeautifulSoup(text, 'html.parser')
+        # 块级元素后追加换行，保留段落结构
+        for tag in soup.find_all(_BLOCK_TAGS):
+            tag.append('\n')
+        text = soup.get_text()
+        # 规范化空白：合并行内多余空格，去除空行
+        lines = [re.sub(r'\s+', ' ', line).strip() for line in text.split('\n')]
+        lines = [line for line in lines if line]
+        return '\n'.join(lines)
+    except Exception:
+        # 解析失败时原样返回，保证采集流程不中断
+        return text
+
+
+def clean_legacy_html_content(limit: int = 200) -> int:
+    """
+    清理数据库中历史文章 content 字段中的 HTML 标签
+
+    用于修复早期版本将 RSS 原始 HTML 摘要直接入库的历史数据。
+
+    Args:
+        limit: 单次最多清理的文章数
+
+    Returns:
+        实际清理的文章数量
+    """
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    # 只处理疑似含 HTML 标签的记录（content 中带 '<'）
+    rows = c.execute(
+        "SELECT id, content FROM articles WHERE content LIKE '%<%' ORDER BY id DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    cleaned = 0
+    for article_id, content in rows:
+        plain = html_to_text(content)
+        if plain != content:
+            c.execute("UPDATE articles SET content = ? WHERE id = ?", (plain, article_id))
+            cleaned += 1
+    conn.commit()
+    conn.close()
+    print(f"[DB] 历史HTML清理: 处理 {len(rows)} 条，更新 {cleaned} 条")
+    return cleaned
+
+
+def clean_no_change_sentinels() -> int:
+    """
+    清理历史数据中被误写入的 '__NO_CHANGE__' 哨兵字符串
+
+    早期版本 save_article 的哨兵逻辑缺陷会把该字符串写入
+    vl_desc / screenshot_path 字段，这里将其还原为空值，
+    使前端显示"未进行视觉分析"而不是裸的哨兵文本。
+
+    Returns:
+        清理的记录数
+    """
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    # 统计包含哨兵值的记录数（vl_desc 或 screenshot_path）
+    rows = c.execute(
+        "SELECT COUNT(*) FROM articles WHERE vl_desc = '__NO_CHANGE__' OR screenshot_path = '__NO_CHANGE__'"
+    ).fetchone()[0]
+    c.execute(
+        "UPDATE articles SET vl_desc = '' WHERE vl_desc = '__NO_CHANGE__'"
+    )
+    c.execute(
+        "UPDATE articles SET screenshot_path = '' WHERE screenshot_path = '__NO_CHANGE__'"
+    )
+    conn.commit()
+    conn.close()
+    if rows:
+        print(f"[DB] 哨兵清理: 清理 {rows} 条 '__NO_CHANGE__' 脏数据")
+    return rows
+
+
 def save_raw_articles(items):
     """保存原始文章数据，跳过已存在的。返回 (处理总数, 新增文章ID列表, 新增文章link集合)"""
     if not items:
@@ -599,6 +710,9 @@ def save_raw_articles(items):
                 content = item.get('content', '')
                 if not content and item.get('source_type') == 'rss':
                     content = item.get('summary_raw', '')
+
+                # 入库前将HTML标签转为纯文本，避免展示/分析时出现大量 </p></a> 标签
+                content = html_to_text(content)
 
                 c.execute('''INSERT INTO articles
                     (url, title, pub_date, source_type, source_name, valid, is_hidden, remark, content, created_at)

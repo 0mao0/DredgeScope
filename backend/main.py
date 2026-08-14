@@ -247,6 +247,18 @@ async def main():
     # 初始化数据库
     database.init_db()
 
+    # 清理历史入库的HTML标签脏数据（早期版本将RSS原始HTML摘要直接入库）
+    try:
+        database.clean_legacy_html_content(limit=500)
+    except Exception as e:
+        print(f"[DB] 历史HTML清理失败: {e}")
+
+    # 清理历史误写入的 __NO_CHANGE__ 哨兵字符串（save_article 哨兵逻辑缺陷）
+    try:
+        database.clean_no_change_sentinels()
+    except Exception as e:
+        print(f"[DB] 哨兵清理失败: {e}")
+
     start_time = time.time()
     print(f"=== 疏浚情报极简系统启动 ===")
     print(f"文本模型: {config.TEXT_MODEL}")
