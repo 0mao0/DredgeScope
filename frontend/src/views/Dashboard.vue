@@ -22,24 +22,24 @@
 
           <div class="flex bg-black/20 p-1 rounded-xl border border-white/5 ml-4">
             <button
-              @click="handleReportTypeChange('morning')"
               :class="[
                 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
                 reportType === 'morning'
                   ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
                   : 'text-gray-400 hover:text-gray-200',
               ]"
+              @click="handleReportTypeChange('morning')"
             >
               <i class="fa-solid fa-sun text-xs"></i> 早报
             </button>
             <button
-              @click="handleReportTypeChange('evening')"
               :class="[
                 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
                 reportType === 'evening'
                   ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
                   : 'text-gray-400 hover:text-gray-200',
               ]"
+              @click="handleReportTypeChange('evening')"
             >
               <i class="fa-solid fa-moon text-xs"></i> 晚报
             </button>
@@ -100,11 +100,11 @@
                 </div>
               </div>
               <div
-                v-else
                 v-for="item in quickSummary"
+                v-else
                 :key="item.id"
-                @click="openDetail(item)"
                 class="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-brand-500/20 transition-colors cursor-pointer"
+                @click="openDetail(item)"
               >
                 <div class="flex items-start gap-2">
                   <div
@@ -136,19 +136,24 @@
           </div>
         </div>
 
-        <!-- Right Column: Categories Grid -->
+        <!-- Right Column: Categories Cards -->
         <div class="lg:col-span-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="flex flex-col gap-4">
             <div
               v-for="(meta, key) in categories"
               :key="key"
               :class="[
-                'glass-card rounded-xl flex flex-col md:h-[400px] min-h-[120px] overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2',
+                'glass-card rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg border-t-2',
                 getCategoryMeta(key).border.replace('border-', 'border-t-'),
               ]"
             >
               <!-- Card Header -->
-              <div class="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
+              <button
+                type="button"
+                :aria-expanded="isExpanded(key)"
+                class="w-full p-4 border-b border-white/5 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-left"
+                @click="toggleCategory(key)"
+              >
                 <div class="flex items-center gap-2">
                   <div
                     :class="[
@@ -163,40 +168,55 @@
                   </div>
                   <h3 class="font-bold text-gray-200">{{ meta.name }}</h3>
                 </div>
-                <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{
-                  getGroupedArticles(key).length
-                }}</span>
-              </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-gray-400">{{
+                    getGroupedArticles(key).length
+                  }}</span>
+                  <i
+                    :class="[
+                      'fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-300',
+                      isExpanded(key) ? 'rotate-180' : '',
+                    ]"
+                  ></i>
+                </div>
+              </button>
 
               <!-- Card Body -->
-              <div
-                v-if="getGroupedArticles(key).length === 0"
-                class="flex-1 flex items-center justify-center text-gray-500 text-sm"
-              >
-                暂无数据
-              </div>
-              <div v-else class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+              <Transition name="collapse">
                 <div
-                  v-for="group in getGroupedArticlesPreview(key)"
-                  :key="group.id || group.url"
-                  @click="openDetail(group)"
-                  class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
+                  v-if="isExpanded(key)"
+                  class="flex flex-col max-h-[420px] overflow-y-auto custom-scrollbar"
                 >
-                  <div class="flex justify-between items-start">
-                    <h4
-                      class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug"
-                    >
-                      {{ formatTitle(group, key) }}
-                    </h4>
-                    <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{
-                      formatTime(group.pub_date, group.created_at)
-                    }}</span>
+                  <div
+                    v-if="getGroupedArticles(key).length === 0"
+                    class="flex items-center justify-center text-gray-500 text-sm py-10"
+                  >
+                    暂无数据
                   </div>
-                  <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
-                    {{ group.summary_cn || group.title }}
-                  </p>
+                  <div v-else class="p-2 space-y-1">
+                    <div
+                      v-for="group in getGroupedArticlesPreview(key)"
+                      :key="group.id || group.url"
+                      class="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group border border-transparent hover:border-white/5"
+                      @click="openDetail(group)"
+                    >
+                      <div class="flex justify-between items-start">
+                        <h4
+                          class="text-sm font-medium text-gray-300 group-hover:text-white line-clamp-2 leading-snug"
+                        >
+                          {{ formatTitle(group, key) }}
+                        </h4>
+                        <span class="text-[10px] text-gray-500 whitespace-nowrap ml-2 mt-0.5">{{
+                          formatTime(group.pub_date, group.created_at)
+                        }}</span>
+                      </div>
+                      <p class="text-xs text-gray-500 mt-1 line-clamp-1 group-hover:text-gray-400">
+                        {{ group.summary_cn || group.title }}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Transition>
             </div>
           </div>
         </div>
@@ -351,7 +371,7 @@
         >
           <i class="fa-solid fa-external-link-alt"></i> 原文链接
         </a>
-        <a-button @click="modalVisible = false" class="h-9">
+        <a-button class="h-9" @click="modalVisible = false">
           <i class="fa-solid fa-xmark mr-1"></i> 关闭
         </a-button>
       </div>
@@ -375,6 +395,9 @@ const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
 let refreshTimer: number | null = null
+
+// 分类卡片折叠状态：默认按数量决定，手动切换后以手动状态为准
+const expandedCategories = ref<Record<string, boolean>>({})
 
 // Report filtering state
 const currentHour = dayjs().hour()
@@ -433,6 +456,8 @@ async function loadReportData() {
     console.error('加载早晚报数据失败', error)
     previewItems.value = []
   } finally {
+    // 数据变化后重置折叠状态，重新按“数量>0 展开、数量=0 折叠”应用默认规则
+    expandedCategories.value = {}
     previewLoading.value = false
   }
 }
@@ -531,6 +556,20 @@ function getGroupedArticles(category: string) {
     unique.push(item)
   }
   return unique
+}
+
+/**
+ * 分类卡片是否展开：默认数量 > 0 展开、数量 = 0 折叠，手动切换后以手动状态为准
+ */
+function isExpanded(category: string) {
+  return expandedCategories.value[category] ?? getGroupedArticles(category).length > 0
+}
+
+/**
+ * 切换分类卡片的展开/折叠状态
+ */
+function toggleCategory(category: string) {
+  expandedCategories.value[category] = !isExpanded(category)
 }
 
 /**
@@ -671,6 +710,19 @@ watch(modalVisible, (isOpen) => {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* 分类卡片展开/收起过渡 */
+.collapse-enter-active,
+.collapse-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.collapse-enter-from,
+.collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 :deep(.ant-modal-content) {
