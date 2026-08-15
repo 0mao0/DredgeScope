@@ -22,33 +22,20 @@ RUN if [ "$USE_CHINA_MIRROR" = "true" ]; then \
     fi
 
 # 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    gnupg \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    fonts-liberation \
-    fonts-noto-color-emoji \
-    fonts-arphic-uming \
-    lsb-release \
-    xdg-utils \
-    nginx \
-    && rm -rf /var/lib/apt/lists/*
+# 安装系统依赖（镜像源失败时自动回退官方源重试）
+RUN set -eux; \
+    APT_PKGS="curl gnupg libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libglib2.0-0 libgtk-3-0 fonts-liberation fonts-noto-color-emoji fonts-arphic-uming lsb-release xdg-utils nginx"; \
+    if ! (apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 install -y --no-install-recommends $APT_PKGS); then \
+        if [ "$USE_CHINA_MIRROR" = "true" ]; then \
+            echo "[Docker] 国内镜像源安装失败，回退官方 Debian 源重试"; \
+            sed -i 's/mirrors.tuna.tsinghua.edu.cn/deb.debian.org/g' /etc/apt/sources.list.d/debian.sources; \
+            apt-get -o Acquire::Retries=5 update; \
+            apt-get -o Acquire::Retries=5 install -y --no-install-recommends $APT_PKGS; \
+        else \
+            exit 1; \
+        fi; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 # 复制 Python 依赖
 COPY backend/requirements.txt /app/backend/requirements.txt

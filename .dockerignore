@@ -28,6 +28,17 @@ __pycache__
 test/
 tests/
 
+# 本地数据与临时产物（构建不需要）
+backend/data/
+.pytest_cache/
+.ruff_cache/
+.superpowers/
+pytest_tmp/
+mt_*/
+dredge_*/
+ships.csv
+*.pdf
+
 # 文档
 *.md
 docs/
