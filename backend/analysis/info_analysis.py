@@ -389,6 +389,52 @@ def clean_article_text(text_content):
         cleaned.append(line)
     return "\n".join(cleaned)
 
+CLEAN_PROMPT = """你是新闻网页正文清洗助手。下面是从新闻网页抓取到的完整文本，可能包含导航、页眉、标签、相关新闻、订阅提示、页脚等冗余内容。
+
+请只输出【这篇新闻的主体正文】：
+1. 从报道正文第一段开始，到最后一个正文段落为止；
+2. 保留作者/日期行之外的正文内容，图片说明（如“（照片由…提供）”）可以保留在对应段落位置；
+3. 必须去掉标题重复、面包屑导航（如“主页”“回到总览”）、“查看帖子标签”、“分享这篇文章”、“相关新闻”、“订阅通讯”、“关注我们”及其之后的所有内容；
+4. 不要翻译、不要总结、不要改写，也不要加任何解释，原样输出清洗后的正文段落。
+
+【文本开始】
+%s
+【文本结束】
+"""
+
+
+async def clean_content_with_llm(client, item):
+    """
+    使用 LLM 从抓取文本中提取主体正文（去除标签/相关新闻/订阅等冗余）
+
+    Args:
+        client: AsyncOpenAI 客户端
+        item: 文章字典，需包含 content
+
+    Returns:
+        清洗后的正文；内容过短或调用失败时返回 None
+    """
+    raw = (item.get('content') or '').strip()
+    if len(raw) < 50:
+        return None
+
+    pre = clean_article_text(raw)
+    if len(pre) > 12000:
+        pre = pre[:12000]
+    prompt = CLEAN_PROMPT % pre
+    try:
+        resp = await client.chat.completions.create(
+            model=config.TEXT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000,
+        )
+        content = resp.choices[0].message.content
+        return content.strip() if content and content.strip() else None
+    except Exception as e:
+        print(f"[Text] 正文清洗失败 {item.get('url', '')}: {e}")
+        return None
+
+
 def is_obvious_junk(title):
     """判断标题是否为明显的垃圾信息"""
     if not title:
