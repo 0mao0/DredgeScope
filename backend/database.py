@@ -200,6 +200,17 @@ def init_db():
         except Exception as e:
             print(f"[DB] 添加 remark 列失败: {e}")
 
+    # 检查并添加缺失的 content_clean 列 (针对已有数据库)
+    try:
+        c.execute("SELECT content_clean FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] 检测到 articles 表缺失 content_clean 列，正在添加...")
+        try:
+            c.execute("ALTER TABLE articles ADD COLUMN content_clean TEXT")
+            print("[DB] 已成功添加 content_clean 列")
+        except Exception as e:
+            print(f"[DB] 添加 content_clean 列失败: {e}")
+
     c.execute("DROP TABLE IF EXISTS events")
     c.execute("DROP TABLE IF EXISTS event_groups")
     
@@ -840,6 +851,52 @@ def get_items_for_enrichment(created_after=None, ids=None):
     conn.close()
     return items
 
+def get_articles_need_clean(limit=None):
+    """获取需要 AI 正文清洗的文章（content_clean 为空且 content 非空且 valid=1）"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    query = '''
+        SELECT id, url, title, content, content_clean
+        FROM articles
+        WHERE (content_clean IS NULL OR content_clean = '')
+          AND content IS NOT NULL AND content != ''
+          AND valid = 1
+        ORDER BY id DESC
+    '''
+    params = []
+    if limit:
+        query += " LIMIT ?"
+        params.append(limit)
+    c.execute(query, tuple(params))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_articles_by_ids(ids):
+    """按 ID 列表批量查询文章（用于手动补跑指定文章）"""
+    if not ids:
+        return []
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    placeholders = ",".join("?" * len(ids))
+    c.execute(f"SELECT * FROM articles WHERE id IN ({placeholders})", tuple(ids))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def update_content_clean(article_id, text):
+    """回写 AI 清洗后的正文"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE articles SET content_clean = ? WHERE id = ?", (text, article_id))
+    conn.commit()
+    conn.close()
+
+
 def get_items_for_analysis(created_after=None, ids=None):
     """获取需要分析的条目: valid=1 且 有内容 且 尚未分析(summary_cn为空)"""
     conn = sqlite3.connect(DB_PATH)
@@ -957,7 +1014,7 @@ def get_articles_by_time_range_strict(start_time, end_time, is_retained=None):
         SELECT 
             a.id, a.title, a.title_cn, a.url, a.pub_date, a.summary_cn, a.full_text_cn, a.content, 
             a.screenshot_path, a.vl_desc, a.created_at, a.source_type, a.source_name, a.valid,
-            a.category, a.is_retained, a.is_significant
+            a.category, a.is_retained, a.is_significant, a.content_clean
         FROM articles a
         WHERE 
           a.created_at >= ? AND a.created_at <= ?
