@@ -729,6 +729,18 @@ async def process_items_from_db(items):
 
     async def runner(item):
         async with sem:
+            # AI 正文清洗：先清理冗余，再用于后续分析
+            if not (item.get('content_clean') or '').strip() and (item.get('content') or '').strip():
+                cleaned = await clean_content_with_llm(client, item)
+                if cleaned:
+                    item['content_clean'] = cleaned
+                    item['content'] = cleaned
+                    article_id = item.get('id')
+                    if article_id:
+                        try:
+                            database.update_content_clean(article_id, cleaned)
+                        except Exception as e:
+                            print(f"[Text] 清洗结果回写失败 id={article_id}: {e}")
             res = await analyze_item_from_db(client, item)
             if res:
                 # 分析完成后立即保存回数据库
