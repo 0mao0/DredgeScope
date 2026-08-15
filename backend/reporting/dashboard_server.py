@@ -30,6 +30,9 @@ print(f"[Dashboard] Mounting /static to {STATIC_DIR}")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# 确保表结构包含新增列（幂等，向后兼容旧库）
+database.init_db()
+
 # 清理历史误写入的 __NO_CHANGE__ 哨兵字符串（与 main.py 保持一致）
 try:
     database.clean_no_change_sentinels()
@@ -468,7 +471,7 @@ async def get_articles(
     data_query = f"""
         SELECT 
             a.id, a.title, a.title_cn, a.pub_date, a.source_type, a.source_name,
-            a.summary_cn, a.full_text_cn, a.content, a.screenshot_path, a.url, a.created_at,
+            a.summary_cn, a.full_text_cn, a.content, a.content_clean, a.screenshot_path, a.url, a.created_at,
             a.valid, a.category
         FROM articles a
         WHERE {where_sql}
@@ -508,7 +511,7 @@ async def get_article_detail(article_id: int):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
-        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, source_type, source_name, screenshot_path, vl_desc, created_at, valid, category
+        SELECT id, title, title_cn, url, pub_date, summary_cn, full_text_cn, content, content_clean, source_type, source_name, screenshot_path, vl_desc, created_at, valid, category
         FROM articles
         WHERE id = ?
     """, (article_id,))
