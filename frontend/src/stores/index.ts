@@ -31,6 +31,7 @@ export interface NewsItem {
   amount?: string
   currency?: string
   content?: string
+  content_clean?: string
   time?: string
   created_at?: string
   updated_at?: string

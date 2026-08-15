@@ -220,6 +220,17 @@
           </div>
         </div>
 
+        <!-- 清洗后原文 -->
+        <div
+          v-if="currentArticle?.content_clean"
+          class="mt-6 bg-slate-900/50 rounded-lg p-4 border border-slate-700/50"
+        >
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">原文</h4>
+          <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+            {{ currentArticle.content_clean }}
+          </div>
+        </div>
+
         <!-- Image -->
         <div v-if="currentArticle?.screenshot_path" class="mt-6 group relative cursor-pointer">
           <img
