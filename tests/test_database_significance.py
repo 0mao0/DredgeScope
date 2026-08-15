@@ -21,9 +21,10 @@ def test_get_articles_by_time_range_strict_returns_significance(tmp_path, monkey
         CREATE TABLE articles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             url TEXT, title TEXT, title_cn TEXT, pub_date TEXT,
-            source_type TEXT, source_name TEXT, summary_cn TEXT,
-            full_text_cn TEXT, content TEXT, screenshot_path TEXT,
-            vl_desc TEXT, created_at TEXT, valid INTEGER DEFAULT 1,
+                source_type TEXT, source_name TEXT, summary_cn TEXT,
+                full_text_cn TEXT, content TEXT, screenshot_path TEXT,
+                content_clean TEXT,
+                vl_desc TEXT, created_at TEXT, valid INTEGER DEFAULT 1,
             category TEXT, is_hidden INTEGER DEFAULT 0,
             is_retained INTEGER DEFAULT 0, is_significant INTEGER
         )
