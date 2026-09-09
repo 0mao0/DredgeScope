@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "threatModel": {
+    "inherit": true,
+    "assets": [
+      "SQLite 文章数据库 (backend/data/dredge_intel.db)",
+      "backend/data 下的截图、报告与缓存文件",
+      "企业微信 webhook 推送通道"
+    ],
+    "attackerControlledInputs": [
+      "外部网站返回的采集文章内容与链接（入库后的存储型数据）",
+      "dashboard API 的查询参数"
+    ],
+    "trustBoundaries": [
+      "外部网站(采集) → SQLite 数据库",
+      "前端 → dashboard_server API",
+      "后端 → 企业微信 webhook 出站"
+    ],
+    "securityInvariants": [
+      "服务端出站目标仅限 network.allowedHosts 中声明的采集源与集成服务域名",
+      "服务端文件写入仅限 backend/data 目录树内，文件名由常量、时间戳或 isalnum 消毒字符串构成"
+    ],
+    "exclusions": [
+      "backend/static/sources.json 与 .env 由部署者管理、无 API 可写，不属于攻击者可控输入；其中配置的 URL 作为出站请求或文件名拼接来源时不按不可信源处理"
+    ]
+  },
+  "network": {
+    "allowedProtocols": ["https:", "http:"],
+    "allowedHosts": [
+      "qyapi.weixin.qq.com",
+      "ai.bim-ace.com",
+      "api.siliconflow.cn",
+      "101.200.125.6:8234",
+      "124.221.238.70:4000",
+      "124.221.238.70:8000",
+      "boskalis.com",
+      "dredgewire.com",
+      "dredging.org",
+      "dredgingcontractors.org",
+      "dredgingtoday.com",
+      "investor.gldd.com",
+      "pilebuck.com",
+      "waterways.org",
+      "www.boem.gov",
+      "www.cccc-cdc.com",
+      "www.cccc-sdc.com",
+      "www.ccgdc.com",
+      "www.chida.org",
+      "www.deme-group.com",
+      "www.iadc-dredging.com",
+      "www.marinelog.com",
+      "www.usace.army.mil",
+      "www.vanoord.com",
+      "www.waterwaysjournal.net",
+      "www.zjthbh.com"
+    ],
+    "blockPrivateNetworks": true,
+    "maxRedirects": 10
+  },
+  "command": {
+    "forbidShell": true,
+    "allowedBinaries": []
+  },
+  "path": {
+    "allowedWriteRoots": ["backend/data"],
+    "requireBasename": true
+  },
+  "data": {
+    "allowedSortFields": [],
+    "requireOwnerScope": true
+  }
+}

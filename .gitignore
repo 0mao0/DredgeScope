@@ -40,3 +40,8 @@ local_config.py
 
 #tests
 tests/
+
+# Mimosa 安全扫描状态目录（策略文件除外）
+.mimosa/*
+backend/.mimosa/
+!.mimosa/security-policy.json
