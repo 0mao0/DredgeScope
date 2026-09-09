@@ -145,20 +145,39 @@ def rank_articles_for_push(articles, max_items=5):
 
     return sorted(articles, key=sort_key, reverse=True)[:max_items]
 
+def article_image_url(article, base_url):
+    """根据文章截图路径拼接公网可访问的图片 URL，无图片时返回空字符串"""
+    path = str(article.get("screenshot_path") or "").strip().lstrip("/")
+    if not path:
+        return ""
+    if not path.startswith("assets/"):
+        path = f"assets/{path}"
+    return f"{base_url.rstrip('/')}/{path}"
+
 def build_news_payload(articles, base_url, total_count, label, category_line):
-    """构造单条重要新闻消息（news 图文消息），汇总作为第一张，末尾追加查看全部条目"""
+    """构造单条重要新闻消息（news 图文消息），汇总作为第一张，末尾追加查看全部条目
+    
+    图片规则：条目有截图才附带 picurl；头部大图取列表中第一张可用图片。
+    """
     article_items = []
+    header_pic = ""
     for article in articles:
         article_id = article.get("id")
         if article_id is None:
             continue
         title = truncate_for_wecom(article.get("title_cn") or article.get("title"), 40)
         description = truncate_for_wecom(article.get("summary_cn") or title, 160)
-        article_items.append({
+        item = {
             "title": title or "未命名新闻",
             "description": description,
             "url": f"{base_url.rstrip('/')}/?id={article_id}",
-        })
+        }
+        picurl = article_image_url(article, base_url)
+        if picurl:
+            item["picurl"] = picurl
+            if not header_pic:
+                header_pic = picurl
+        article_items.append(item)
     if not article_items:
         return None
     news_articles = [{
@@ -166,6 +185,8 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
         "description": category_line or f"本次更新 {total_count} 条",
         "url": f"{base_url.rstrip('/')}/?mode=recent",
     }]
+    if header_pic:
+        news_articles[0]["picurl"] = header_pic
     news_articles.extend(article_items)
     news_articles.append({
         "title": f"查看全部 {total_count} 条 →",

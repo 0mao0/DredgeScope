@@ -59,7 +59,7 @@ def test_rank_limits_to_max_items():
 
 
 def test_build_news_payload_structure():
-    """news 消息以汇总为第一张，含新闻条目与查看全部，不含图片字段"""
+    """news 消息以汇总为第一张，含新闻条目与查看全部，无图片时不携带 picurl"""
     articles = [make_article(1), make_article(2)]
     payload = build_news_payload(articles, "https://example.com", total_count=2, label="8月14日早报", category_line="中标 1 | 项目 1")
     assert payload["msgtype"] == "news"
@@ -70,7 +70,26 @@ def test_build_news_payload_structure():
     assert items[0]["url"] == "https://example.com/?mode=recent"
     assert items[1]["url"] == "https://example.com/?id=1"
     assert "picurl" not in items[1]
+    assert "picurl" not in items[0]
     assert items[-1]["title"] == "查看全部 2 条 →"
+
+
+def test_build_news_payload_with_images():
+    """条目有截图时附带 picurl，头部大图取列表第一张可用图片"""
+    articles = [
+        make_article(1),
+        make_article(2, created_at="2026-08-13T07:00:01"),
+        make_article(3),
+    ]
+    articles[0]["screenshot_path"] = ""
+    articles[1]["screenshot_path"] = "assets/two.jpg"
+    articles[2]["screenshot_path"] = "/assets/three.png"
+    payload = build_news_payload(articles, "https://example.com/", total_count=3, label="8月14日早报", category_line="中标 3")
+    items = payload["news"]["articles"]
+    assert "picurl" not in items[1]  # 无图条目不携带
+    assert items[2]["picurl"] == "https://example.com/assets/two.jpg"
+    assert items[3]["picurl"] == "https://example.com/assets/three.png"
+    assert items[0]["picurl"] == "https://example.com/assets/two.jpg"  # 头部取第一张可用图
 
 
 def test_build_news_payload_empty_returns_none():
