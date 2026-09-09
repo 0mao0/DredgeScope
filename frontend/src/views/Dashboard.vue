@@ -213,22 +213,12 @@
           </span>
         </div>
 
-        <!-- Content -->
-        <div class="prose prose-invert prose-sm max-w-none text-gray-300">
-          <div v-if="currentArticle?.summary_cn" class="mb-4 font-medium text-gray-300">
+        <!-- 摘要 -->
+        <div v-if="currentArticle?.summary_cn" class="mb-4">
+          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">摘要</h4>
+          <p class="text-sm font-medium text-gray-300 leading-relaxed">
             {{ currentArticle.summary_cn }}
-          </div>
-        </div>
-
-        <!-- 清洗后原文 -->
-        <div
-          v-if="currentArticle?.content_clean"
-          class="mt-6 bg-slate-900/50 rounded-lg p-4 border border-slate-700/50"
-        >
-          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">原文</h4>
-          <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-            {{ currentArticle.content_clean }}
-          </div>
+          </p>
         </div>
 
         <!-- Image -->
@@ -241,12 +231,67 @@
           />
         </div>
 
-        <!-- Translation -->
+        <!-- 清洗后原文（默认折叠） -->
+        <div
+          v-if="currentArticle?.content_clean"
+          class="mt-6 bg-slate-900/50 rounded-lg p-4 border border-slate-700/50"
+        >
+          <button
+            type="button"
+            :aria-expanded="originalExpanded"
+            class="w-full flex items-center justify-between gap-2 cursor-pointer text-left"
+            @click="originalExpanded = !originalExpanded"
+          >
+            <h4 class="text-sm font-bold text-gray-400 flex items-center gap-2">
+              <i class="fa-solid fa-file-lines"></i> 原文
+            </h4>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              {{ originalExpanded ? '收起' : '点击展开' }}
+              <i
+                :class="[
+                  'fa-solid fa-chevron-down transition-transform duration-300',
+                  originalExpanded ? 'rotate-180' : '',
+                ]"
+              ></i>
+            </span>
+          </button>
+          <Transition name="collapse">
+            <div v-if="originalExpanded" class="pt-3">
+              <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                {{ currentArticle.content_clean }}
+              </div>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- 原文翻译（默认折叠） -->
         <div class="mt-6 bg-slate-900/50 rounded-lg p-4 border border-slate-700/50">
-          <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">原文翻译</h4>
-          <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-            {{ currentArticle?.full_text_cn || '暂无全文翻译' }}
-          </div>
+          <button
+            type="button"
+            :aria-expanded="translationExpanded"
+            class="w-full flex items-center justify-between gap-2 cursor-pointer text-left"
+            @click="translationExpanded = !translationExpanded"
+          >
+            <h4 class="text-sm font-bold text-gray-400 flex items-center gap-2">
+              <i class="fa-solid fa-language"></i> 原文翻译
+            </h4>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              {{ translationExpanded ? '收起' : '点击展开' }}
+              <i
+                :class="[
+                  'fa-solid fa-chevron-down transition-transform duration-300',
+                  translationExpanded ? 'rotate-180' : '',
+                ]"
+              ></i>
+            </span>
+          </button>
+          <Transition name="collapse">
+            <div v-if="translationExpanded" class="pt-3">
+              <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                {{ currentArticle?.full_text_cn || '暂无全文翻译' }}
+              </div>
+            </div>
+          </Transition>
         </div>
 
         <!-- AI Analysis -->
@@ -254,21 +299,24 @@
           <button
             type="button"
             :aria-expanded="aiAnalysisExpanded"
-            class="w-full flex items-center justify-between gap-2 mb-3 cursor-pointer text-left"
+            class="w-full flex items-center justify-between gap-2 cursor-pointer text-left"
             @click="aiAnalysisExpanded = !aiAnalysisExpanded"
           >
             <h4 class="text-sm font-bold text-brand-400 flex items-center gap-2">
               <i class="fa-solid fa-robot"></i> AI 分析过程
             </h4>
-            <i
-              :class="[
-                'fa-solid fa-chevron-down text-xs text-gray-500 transition-transform duration-300',
-                aiAnalysisExpanded ? 'rotate-180' : '',
-              ]"
-            ></i>
+            <span class="flex items-center gap-1.5 text-xs text-gray-500">
+              {{ aiAnalysisExpanded ? '收起' : '点击展开' }}
+              <i
+                :class="[
+                  'fa-solid fa-chevron-down transition-transform duration-300',
+                  aiAnalysisExpanded ? 'rotate-180' : '',
+                ]"
+              ></i>
+            </span>
           </button>
           <Transition name="collapse">
-            <div v-if="aiAnalysisExpanded">
+            <div v-if="aiAnalysisExpanded" class="pt-3">
               <div class="mb-4">
                 <span class="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1"
                   >Qwen2.5 纯文字解析：</span
@@ -368,12 +416,24 @@ const vesselStore = useVesselStore()
 const route = useRoute()
 
 const modalVisible = ref(false)
-// AI 分析过程默认折叠，点击标题展开
+// 详情弹窗三个折叠区默认折叠，点击标题展开；切换文章时重置
+const originalExpanded = ref(false)
+const translationExpanded = ref(false)
 const aiAnalysisExpanded = ref(false)
 const currentArticle = ref<NewsItem | null>(null)
 const lastOpenedId = ref<string | null>(null)
 const scrollPositions = ref<Record<string, number>>({})
 let refreshTimer: number | null = null
+
+// 切换文章时把详情弹窗的三个折叠区恢复为默认折叠
+watch(
+  () => currentArticle.value?.id,
+  () => {
+    originalExpanded.value = false
+    translationExpanded.value = false
+    aiAnalysisExpanded.value = false
+  }
+)
 
 // 截图文件加载失败时隐藏图片，避免显示破图
 function hideBrokenImage(event: Event) {
