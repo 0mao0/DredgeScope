@@ -3,8 +3,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-COPY frontend/package.json frontend/pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install
+COPY frontend/package.json frontend/pnpm-workspace.yaml ./
+COPY frontend/pnpm-lock.yaml* ./
+RUN npm install -g pnpm@12 && pnpm install
 
 COPY frontend/ ./
 RUN pnpm run build

@@ -1,0 +1,7 @@
+# pnpm 11/12 默认拒绝依赖的 postinstall 构建脚本（CI 下直接报错）
+# 显式批准以下依赖执行安装脚本；esbuild/vue-demi 需要安装脚本落位二进制
+allowBuilds:
+  core-js: true
+  esbuild: true
+  less: true
+  vue-demi: true
