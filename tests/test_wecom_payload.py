@@ -23,11 +23,19 @@ from reporting.wecom_push import (
 
 COVER_URL = "https://example.com/static/push_cover.jpg"
 
+# autouse fixture 会把动态封面禁用为 None，动态封面专项测试需恢复真实实现
+import reporting.push_cover as _pc  # noqa: E402
+
+_REAL_ENSURE = _pc.ensure_dynamic_cover
+
 
 @pytest.fixture(autouse=True)
 def _default_cover_env(monkeypatch):
-    """封面覆盖置空，保证测试走默认静态封面"""
+    """封面覆盖置空且禁用动态封面，保证测试走默认静态封面"""
+    from reporting import push_cover
+
     monkeypatch.setattr(config, "PUSH_COVER_URL", "")
+    monkeypatch.setattr(push_cover, "ensure_dynamic_cover", lambda label, now=None: None)
 
 
 def make_article(article_id, category="Bid", significance=5, created_at="2026-08-13T07:00:00"):
@@ -204,7 +212,64 @@ def test_ensure_push_thumb_missing_file_returns_none(tmp_path, monkeypatch):
 
 
 def test_push_cover_picurl_default_and_override(monkeypatch):
-    """默认封面走 /static/push_cover.jpg，PUSH_COVER_URL 可覆盖"""
-    assert push_cover_picurl("https://example.com/") == COVER_URL
+    """动态封面不可用时走 /static/push_cover.jpg，PUSH_COVER_URL 可覆盖"""
+    assert push_cover_picurl("https://example.com/", "9月10日早报") == COVER_URL
     monkeypatch.setattr(config, "PUSH_COVER_URL", "https://cdn.example.com/cover.png")
     assert push_cover_picurl("https://example.com") == "https://cdn.example.com/cover.png"
+
+
+def test_push_cover_picurl_prefers_dynamic(monkeypatch):
+    """动态封面可用时优先使用，且随 label 传入时段标签"""
+    from reporting import push_cover
+
+    seen = {}
+
+    def fake_dynamic(label, now=None):
+        seen["label"] = label
+        return "assets/covers/push_cover_20260910_am.jpg"
+
+    monkeypatch.setattr(push_cover, "ensure_dynamic_cover", fake_dynamic)
+    url = push_cover_picurl("https://example.com", "9月10日早报")
+    assert url == "https://example.com/assets/covers/push_cover_20260910_am.jpg"
+    assert seen["label"] == "9月10日早报"
+
+
+def test_ensure_dynamic_cover_generates_and_caches(tmp_path, monkeypatch):
+    """早报/晚报各自生成当日封面并缓存；产物 2.4:1 且体积可控"""
+    pytest.importorskip("PIL")
+    from datetime import datetime
+
+    from reporting import push_cover
+
+    if push_cover.find_font(False, 12) is None:
+        pytest.skip("运行环境缺少中文字体")
+    monkeypatch.setattr(push_cover, "ensure_dynamic_cover", _REAL_ENSURE)
+    assets = _use_tmp_assets(tmp_path, monkeypatch)
+    now = datetime(2026, 9, 10, 19, 0)
+
+    rel_am = push_cover.ensure_dynamic_cover("9月10日早报", now=now)
+    rel_pm = push_cover.ensure_dynamic_cover("9月10日晚报", now=now)
+    assert rel_am == "assets/covers/push_cover_20260910_am.jpg"
+    assert rel_pm == "assets/covers/push_cover_20260910_pm.jpg"
+    from PIL import Image
+
+    for rel in (rel_am, rel_pm):
+        p = assets / "covers" / rel.split("/")[-1]
+        assert p.exists() and p.stat().st_size < 300 * 1024
+        with Image.open(p) as im:
+            assert abs(im.size[0] / im.size[1] - wp.THUMB_ASPECT) < 0.1
+    mtime = (assets / "covers" / "push_cover_20260910_am.jpg").stat().st_mtime
+    assert push_cover.ensure_dynamic_cover("9月10日早报", now=now) == rel_am
+    assert (assets / "covers" / "push_cover_20260910_am.jpg").stat().st_mtime == mtime
+
+
+def test_ensure_dynamic_cover_falls_back_without_font(tmp_path, monkeypatch):
+    """无中文字体时返回 None，由调用方回退静态封面"""
+    from datetime import datetime
+
+    from reporting import push_cover
+
+    monkeypatch.setattr(push_cover, "ensure_dynamic_cover", _REAL_ENSURE)
+    _use_tmp_assets(tmp_path, monkeypatch)  # 避开真实目录里已缓存的当日封面
+    monkeypatch.setattr(push_cover, "find_font", lambda bold, size: None)
+    assert push_cover.ensure_dynamic_cover("9月10日早报", now=datetime(2026, 9, 10)) is None

@@ -213,10 +213,18 @@ def article_image_url(article, base_url):
     return f"{base_url.rstrip('/')}/{path}"
 
 
-def push_cover_picurl(base_url):
-    """头部大图统一封面 URL（可用 PUSH_COVER_URL 覆盖，默认静态封面图）"""
+def push_cover_picurl(base_url, label=""):
+    """头部大图封面 URL：PUSH_COVER_URL 覆盖 > 当日动态封面（早报/晚报双色调） > 静态回退封面"""
     if config.PUSH_COVER_URL:
         return config.PUSH_COVER_URL
+    try:
+        from reporting import push_cover
+
+        rel = push_cover.ensure_dynamic_cover(label)
+        if rel:
+            return f"{base_url.rstrip('/')}/{rel}"
+    except Exception as e:
+        print(f"[Push:封面] 动态封面不可用: {e}")
     return f"{base_url.rstrip('/')}/static/push_cover.jpg"
 
 def build_news_payload(articles, base_url, total_count, label, category_line):
@@ -246,7 +254,7 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
         "title": truncate_for_wecom(f"{label} · 更新 {total_count} 条", 40),
         "description": category_line or f"本次更新 {total_count} 条",
         "url": f"{base_url.rstrip('/')}/?mode=recent",
-        "picurl": push_cover_picurl(base_url),
+        "picurl": push_cover_picurl(base_url, label),
     }]
     news_articles.extend(article_items)
     news_articles.append({
