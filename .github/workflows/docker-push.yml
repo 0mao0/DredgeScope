@@ -41,7 +41,7 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=semver,pattern=v{{version}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,enable=${{ github.event_name != 'tag' }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
