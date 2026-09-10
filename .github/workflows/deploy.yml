@@ -13,6 +13,7 @@ jobs:
       - name: Pull latest code
         run: |
           cd /home/runner/DredgeScope
+          echo "PREV_SHA=$(git rev-parse HEAD 2>/dev/null || echo '')" >> $GITHUB_ENV
           git pull origin master
           git fetch --tags
 
@@ -70,8 +71,11 @@ jobs:
           echo "health=$HEALTH" >> $GITHUB_OUTPUT
 
       - name: Notify WeCom group
+        if: always()
         env:
           WEBHOOK: ${{ secrets.WECOM_WEBHOOK_URL }}
+          PREV_SHA: ${{ env.PREV_SHA }}
+          DEPLOY_STATUS: ${{ job.status }}
           FE: ${{ steps.health.outputs.frontend }}
           API: ${{ steps.health.outputs.api }}
           HEALTH: ${{ steps.health.outputs.health }}
