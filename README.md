@@ -2,6 +2,18 @@
 
 面向全球疏浚行业的情报采集、分析与可视化系统，支持新闻抓取、AI 分析、情报结构化提取、仪表盘展示与企业微信推送。
 
+> **当前版本：v0.2.6** —— 推送卡片标注版本号（版本号随卡片描述与降级消息展示）。
+
+## 发版流程（git tag 为唯一版本来源）
+
+```
+node scripts/sync-version.mjs vX.Y.Z      # 同步 README.md / frontend/package.json / backend/VERSION
+git add -A && git commit -m "chore(release): vX.Y.Z"
+git tag vX.Y.Z && git push && git push origin vX.Y.Z    # master 触发部署，tag 触发镜像发布
+```
+
+部署流水线会校验上述三处与最新 tag 一致，不一致直接失败并提示重跑第一条命令。
+
 ## 界面预览
 
 | 首页 - 船舶分布与跟踪 | 统计分析 - 情报趋势分析 |
