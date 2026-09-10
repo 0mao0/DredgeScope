@@ -16,4 +16,5 @@ openpyxl
 reverse_geocoder
 pycountry
 pycountry-convert
+Pillow
 

@@ -50,6 +50,8 @@ WECOM_WEBHOOK_URL = os.getenv("WECOM_WEBHOOK_URL")
 BACKEND_URL = os.getenv("WISEFLOW_BACKEND_URL", "http://127.0.0.1:8000")
 # Webhook 推送跳转链接的公共地址（后续接 HTTPS 域名时只需改这里）
 PUSH_BASE_URL = os.getenv("PUSH_BASE_URL") or BACKEND_URL
+# 推送卡片头部统一封面图 URL；为空时使用 PUSH_BASE_URL 下的 /static/push_cover.jpg
+PUSH_COVER_URL = os.getenv("PUSH_COVER_URL", "")
 RSSHUB_BASES = [
     v.strip()
     for v in os.getenv("RSSHUB_BASES", os.getenv("RSSHUB_BASE", "https://rsshub.app")).split(",")

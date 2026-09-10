@@ -4,16 +4,30 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
+import config
+from reporting import wecom_push as wp
 from reporting.wecom_push import (
     CATEGORY_PRIORITY,
+    article_image_url,
     build_markdown_fallback,
     build_news_payload,
     build_push_messages,
+    push_cover_picurl,
     rank_articles_for_push,
     truncate_for_wecom,
 )
+
+COVER_URL = "https://example.com/static/push_cover.jpg"
+
+
+@pytest.fixture(autouse=True)
+def _default_cover_env(monkeypatch):
+    """封面覆盖置空，保证测试走默认静态封面"""
+    monkeypatch.setattr(config, "PUSH_COVER_URL", "")
 
 
 def make_article(article_id, category="Bid", significance=5, created_at="2026-08-13T07:00:00"):
@@ -68,14 +82,14 @@ def test_build_news_payload_structure():
     assert items[0]["title"] == "8月14日早报 · 更新 2 条"
     assert items[0]["description"] == "中标 1 | 项目 1"
     assert items[0]["url"] == "https://example.com/?mode=recent"
+    assert items[0]["picurl"] == COVER_URL  # 头部大图固定统一封面
     assert items[1]["url"] == "https://example.com/?id=1"
     assert "picurl" not in items[1]
-    assert "picurl" not in items[0]
     assert items[-1]["title"] == "查看全部 2 条 →"
 
 
 def test_build_news_payload_with_images():
-    """条目有截图时附带 picurl，头部大图取列表第一张可用图片"""
+    """条目有截图时附带 picurl（缩略图不可用时回退原图），头部固定统一封面"""
     articles = [
         make_article(1),
         make_article(2, created_at="2026-08-13T07:00:01"),
@@ -89,7 +103,18 @@ def test_build_news_payload_with_images():
     assert "picurl" not in items[1]  # 无图条目不携带
     assert items[2]["picurl"] == "https://example.com/assets/two.jpg"
     assert items[3]["picurl"] == "https://example.com/assets/three.png"
-    assert items[0]["picurl"] == "https://example.com/assets/two.jpg"  # 头部取第一张可用图
+    assert items[0]["picurl"] == COVER_URL
+
+
+def test_build_news_payload_skips_blank_image(monkeypatch):
+    """白图条目不携带 picurl（ensure_push_thumb 返回空串）"""
+    monkeypatch.setattr(wp, "ensure_push_thumb", lambda path: "")
+    articles = [make_article(1)]
+    articles[0]["screenshot_path"] = "assets/blank.jpg"
+    payload = build_news_payload(articles, "https://example.com", total_count=1, label="8月14日早报", category_line="")
+    items = payload["news"]["articles"]
+    assert "picurl" not in items[1]
+    assert items[0]["picurl"] == COVER_URL  # 白图不影响头部封面
 
 
 def test_build_news_payload_empty_returns_none():
@@ -122,3 +147,64 @@ def test_build_push_messages_structure():
     assert messages["news"]["msgtype"] == "news"
     assert len(messages["news"]["news"]["articles"]) == 4
     assert messages["markdown"]["msgtype"] == "markdown"
+
+
+# ---------- 缩略图与封面 ----------
+
+def _use_tmp_assets(tmp_path, monkeypatch):
+    """把 config 的数据/资源目录指向临时目录"""
+    data = tmp_path / "data"
+    assets = data / "assets"
+    assets.mkdir(parents=True)
+    monkeypatch.setattr(config, "DATA_DIR", str(data))
+    monkeypatch.setattr(config, "ASSETS_DIR", str(assets))
+    return assets
+
+
+def test_ensure_push_thumb_generates_small_jpeg(tmp_path, monkeypatch):
+    """长截图生成 2.4:1 缩略图，宽 640，带磁盘缓存"""
+    from PIL import Image
+
+    assets = _use_tmp_assets(tmp_path, monkeypatch)
+    src = assets / "long.jpg"
+    Image.effect_noise((1200, 6000), 60).convert("RGB").save(src, quality=90)
+
+    rel = wp.ensure_push_thumb("assets/long.jpg")
+    assert rel == "assets/thumbs/long.jpg"
+    thumb_file = assets / "thumbs" / "long.jpg"
+    assert thumb_file.exists()
+    with Image.open(thumb_file) as t:
+        w, h = t.size
+        assert w == 640
+        assert abs(w / h - wp.THUMB_ASPECT) < 0.1
+    assert thumb_file.stat().st_size < src.stat().st_size / 4
+    mtime_before = thumb_file.stat().st_mtime
+    assert wp.ensure_push_thumb("assets/long.jpg") == rel  # 命中缓存
+    assert thumb_file.stat().st_mtime == mtime_before
+
+
+def test_ensure_push_thumb_skips_blank_image(tmp_path, monkeypatch):
+    """纯白截图识别为白图，返回空串不生成缩略图"""
+    from PIL import Image
+
+    assets = _use_tmp_assets(tmp_path, monkeypatch)
+    Image.new("RGB", (1200, 3000), (255, 255, 255)).save(assets / "blank.jpg")
+
+    assert wp.ensure_push_thumb("assets/blank.jpg") == ""
+    assert not (assets / "thumbs").exists()
+    assert article_image_url({"screenshot_path": "assets/blank.jpg"}, "https://example.com") == ""
+
+
+def test_ensure_push_thumb_missing_file_returns_none(tmp_path, monkeypatch):
+    """源文件不存在时返回 None，article_image_url 回退原图 URL"""
+    _use_tmp_assets(tmp_path, monkeypatch)
+    assert wp.ensure_push_thumb("assets/missing.jpg") is None
+    assert article_image_url({"screenshot_path": "/assets/missing.jpg"}, "https://example.com") == "https://example.com/assets/missing.jpg"
+    assert article_image_url({"screenshot_path": ""}, "https://example.com") == ""
+
+
+def test_push_cover_picurl_default_and_override(monkeypatch):
+    """默认封面走 /static/push_cover.jpg，PUSH_COVER_URL 可覆盖"""
+    assert push_cover_picurl("https://example.com/") == COVER_URL
+    monkeypatch.setattr(config, "PUSH_COVER_URL", "https://cdn.example.com/cover.png")
+    assert push_cover_picurl("https://example.com") == "https://cdn.example.com/cover.png"

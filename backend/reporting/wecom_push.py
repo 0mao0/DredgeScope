@@ -145,22 +145,86 @@ def rank_articles_for_push(articles, max_items=5):
 
     return sorted(articles, key=sort_key, reverse=True)[:max_items]
 
-def article_image_url(article, base_url):
-    """根据文章截图路径拼接公网可访问的图片 URL，无图片时返回空字符串"""
-    path = str(article.get("screenshot_path") or "").strip().lstrip("/")
+THUMB_ASPECT = 2.4  # 企业微信卡片配图接近 2.4:1 的横条比例
+THUMB_WIDTH = 640   # 缩略图目标宽度（像素）
+THUMB_BLANK_STDDEV = 8  # 灰度标准差低于该值视为白图/纯色图，不推送
+
+
+def _normalize_asset_path(screenshot_path):
+    """把截图路径统一为 assets/ 开头的相对路径，空路径返回空字符串"""
+    path = str(screenshot_path or "").strip().lstrip("/")
     if not path:
         return ""
     if not path.startswith("assets/"):
         path = f"assets/{path}"
+    return path
+
+
+def ensure_push_thumb(screenshot_path):
+    """为推送卡片生成缩略图（裁剪 2.4:1、宽 640、JPEG q70），带磁盘缓存
+
+    Returns:
+        str: 缩略图相对路径（assets/thumbs/xxx.jpg），白图/纯色图返回 ""
+        None: 无法生成（文件缺失、Pillow 异常等），调用方应回退原图 URL
+    """
+    rel = _normalize_asset_path(screenshot_path)
+    if not rel:
+        return None
+    src = os.path.normpath(os.path.join(config.DATA_DIR, rel))
+    thumb_dir = os.path.join(config.ASSETS_DIR, "thumbs")
+    stem = os.path.splitext(os.path.basename(src))[0]
+    thumb_file = os.path.join(thumb_dir, f"{stem}.jpg")
+    thumb_rel = f"assets/thumbs/{stem}.jpg"
+    try:
+        if not os.path.isfile(src):
+            return None
+        if os.path.isfile(thumb_file) and os.path.getmtime(thumb_file) >= os.path.getmtime(src):
+            return thumb_rel
+        from PIL import Image, ImageStat
+
+        img = Image.open(src).convert("RGB")
+        w, h = img.size
+        crop_h = min(h, max(1, int(w / THUMB_ASPECT)))
+        img = img.crop((0, 0, w, crop_h))
+        scale = THUMB_WIDTH / max(1, w)
+        if scale < 1:
+            img = img.resize((THUMB_WIDTH, max(1, int(crop_h * scale))), Image.LANCZOS)
+        stddevs = ImageStat.Stat(img.convert("L")).stddev
+        if not stddevs or stddevs[0] < THUMB_BLANK_STDDEV:
+            print(f"[Push:缩略图] 跳过白图 {rel} (stddev={stddevs[0] if stddevs else 0:.1f})")
+            return ""
+        os.makedirs(thumb_dir, exist_ok=True)
+        img.save(thumb_file, "JPEG", quality=70, optimize=True, progressive=True)
+        print(f"[Push:缩略图] 生成 {thumb_rel} ({os.path.getsize(thumb_file) // 1024} KB)")
+        return thumb_rel
+    except Exception as e:
+        print(f"[Push:缩略图] 生成失败 {rel}: {e}")
+        return None
+
+
+def article_image_url(article, base_url):
+    """文章配图的公网 URL：优先缩略图，无法生成时回退原图，白图返回空字符串"""
+    thumb = ensure_push_thumb(article.get("screenshot_path"))
+    if thumb == "":
+        return ""
+    path = thumb or _normalize_asset_path(article.get("screenshot_path"))
+    if not path:
+        return ""
     return f"{base_url.rstrip('/')}/{path}"
+
+
+def push_cover_picurl(base_url):
+    """头部大图统一封面 URL（可用 PUSH_COVER_URL 覆盖，默认静态封面图）"""
+    if config.PUSH_COVER_URL:
+        return config.PUSH_COVER_URL
+    return f"{base_url.rstrip('/')}/static/push_cover.jpg"
 
 def build_news_payload(articles, base_url, total_count, label, category_line):
     """构造单条重要新闻消息（news 图文消息），汇总作为第一张，末尾追加查看全部条目
-    
-    图片规则：条目有截图才附带 picurl；头部大图取列表中第一张可用图片。
+
+    图片规则：头部大图固定使用统一封面；条目有截图才附带 picurl（优先缩略图，白图不携带）。
     """
     article_items = []
-    header_pic = ""
     for article in articles:
         article_id = article.get("id")
         if article_id is None:
@@ -175,8 +239,6 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
         picurl = article_image_url(article, base_url)
         if picurl:
             item["picurl"] = picurl
-            if not header_pic:
-                header_pic = picurl
         article_items.append(item)
     if not article_items:
         return None
@@ -184,9 +246,8 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
         "title": truncate_for_wecom(f"{label} · 更新 {total_count} 条", 40),
         "description": category_line or f"本次更新 {total_count} 条",
         "url": f"{base_url.rstrip('/')}/?mode=recent",
+        "picurl": push_cover_picurl(base_url),
     }]
-    if header_pic:
-        news_articles[0]["picurl"] = header_pic
     news_articles.extend(article_items)
     news_articles.append({
         "title": f"查看全部 {total_count} 条 →",
