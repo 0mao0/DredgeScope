@@ -52,6 +52,20 @@ BACKEND_URL = os.getenv("WISEFLOW_BACKEND_URL", "http://127.0.0.1:8000")
 PUSH_BASE_URL = os.getenv("PUSH_BASE_URL") or BACKEND_URL
 # 推送卡片头部统一封面图 URL；为空时使用 PUSH_BASE_URL 下的 /static/push_cover.jpg
 PUSH_COVER_URL = os.getenv("PUSH_COVER_URL", "")
+
+
+def _read_app_version():
+    """读取应用版本号：backend/VERSION 由镜像构建时从 frontend/package.json 注入，本地缺失时为 dev"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'VERSION')
+    try:
+        with open(path, encoding='utf-8') as f:
+            return f.read().strip() or 'dev'
+    except Exception:
+        return 'dev'
+
+
+# 应用版本号（推送卡片展示、日志标注用）
+APP_VERSION = _read_app_version()
 RSSHUB_BASES = [
     v.strip()
     for v in os.getenv("RSSHUB_BASES", os.getenv("RSSHUB_BASE", "https://rsshub.app")).split(",")

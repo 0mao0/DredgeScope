@@ -54,6 +54,10 @@ COPY backend /app/backend
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
+# 注入版本号：以 frontend/package.json 为唯一来源写入 backend/VERSION（发版只改 package.json 一处）
+COPY --from=frontend-builder /app/frontend/package.json /tmp/frontend-package.json
+RUN python -c "import json;print(json.load(open('/tmp/frontend-package.json'))['version'])" > /app/backend/VERSION
+
 # 复制 Nginx 配置
 COPY nginx.conf /etc/nginx/nginx.conf
 

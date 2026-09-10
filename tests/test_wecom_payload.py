@@ -35,6 +35,7 @@ def _default_cover_env(monkeypatch):
     from reporting import push_cover
 
     monkeypatch.setattr(config, "PUSH_COVER_URL", "")
+    monkeypatch.setattr(config, "APP_VERSION", "9.9.9")
     monkeypatch.setattr(push_cover, "ensure_dynamic_cover", lambda label, now=None: None)
 
 
@@ -88,7 +89,7 @@ def test_build_news_payload_structure():
     items = payload["news"]["articles"]
     assert len(items) == 4
     assert items[0]["title"] == "8月14日早报 · 更新 2 条"
-    assert items[0]["description"] == "中标 1 | 项目 1"
+    assert items[0]["description"] == "中标 1 | 项目 1 · v9.9.9"  # 卡片头部带版本号
     assert items[0]["url"] == "https://example.com/?mode=recent"
     assert items[0]["picurl"] == COVER_URL  # 头部大图固定统一封面
     assert items[1]["url"] == "https://example.com/?id=1"
@@ -145,6 +146,14 @@ def test_build_markdown_fallback_contains_links():
     content = payload["markdown"]["content"]
     assert "https://example.com/?id=1" in content
     assert "查看全部 2 条" in content
+    assert "· v9.9.9】" in content  # 降级消息同样带版本号
+
+
+def test_news_header_version_without_category_line():
+    """无分类统计行时，头部描述也带版本号"""
+    articles = [make_article(1)]
+    payload = build_news_payload(articles, "https://example.com", total_count=1, label="9月10日晚报", category_line="")
+    assert payload["news"]["articles"][0]["description"] == "本次更新 1 条 · v9.9.9"
 
 
 def test_build_push_messages_structure():

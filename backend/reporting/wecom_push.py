@@ -124,6 +124,11 @@ def build_hot_news_titles(articles, max_items=4, title_max_len=10):
         titles.append("...")
     return titles
 
+def version_suffix():
+    """推送文案统一的版本后缀，例如 ' · v0.2.6'"""
+    return f" · v{config.APP_VERSION}"
+
+
 def truncate_for_wecom(text, max_chars=40):
     """按字符数截断文本，超出长度时以省略号结尾"""
     if not text:
@@ -252,7 +257,7 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
         return None
     news_articles = [{
         "title": truncate_for_wecom(f"{label} · 更新 {total_count} 条", 40),
-        "description": category_line or f"本次更新 {total_count} 条",
+        "description": (category_line or f"本次更新 {total_count} 条") + version_suffix(),
         "url": f"{base_url.rstrip('/')}/?mode=recent",
         "picurl": push_cover_picurl(base_url, label),
     }]
@@ -266,7 +271,7 @@ def build_news_payload(articles, base_url, total_count, label, category_line):
 
 def build_markdown_fallback(label, total_count, category_line, articles, base_url):
     """构造 news 发送失败时的 markdown 降级消息"""
-    lines = [f"【全球疏浚情报 {label}】", f"本次更新: {total_count} 条", category_line, ""]
+    lines = [f"【全球疏浚情报 {label}{version_suffix()}】", f"本次更新: {total_count} 条", category_line, ""]
     for article in articles:
         article_id = article.get("id")
         if article_id is None:
@@ -410,7 +415,7 @@ def push_daily_report():
     }
     category_line = " | ".join([f"{category_labels[k]}{category_counts.get(k, 0)}" for k in category_labels.keys() if category_counts.get(k, 0) > 0])
     write_scheduler_log(
-        f"推送统计: 窗口{label} 原始记录{raw_event_count} 推送{total_count}"
+        f"推送统计: 窗口{label} 原始记录{raw_event_count} 推送{total_count}{version_suffix()}"
     )
 
     base_url = config.PUSH_BASE_URL
