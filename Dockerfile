@@ -25,7 +25,7 @@ RUN if [ "$USE_CHINA_MIRROR" = "true" ]; then \
 # 安装系统依赖
 # 安装系统依赖（镜像源失败时自动回退官方源重试）
 RUN set -eux; \
-    APT_PKGS="curl gnupg libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libglib2.0-0 libgtk-3-0 fonts-liberation fonts-noto-color-emoji fonts-arphic-uming lsb-release xdg-utils nginx"; \
+    APT_PKGS="curl gnupg libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libglib2.0-0 libgtk-3-0 fonts-liberation fonts-noto-color-emoji fonts-arphic-uming fonts-wqy-microhei lsb-release xdg-utils nginx"; \
     if ! (apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 install -y --no-install-recommends $APT_PKGS); then \
         if [ "$USE_CHINA_MIRROR" = "true" ]; then \
             echo "[Docker] 国内镜像源安装失败，回退官方 Debian 源重试"; \

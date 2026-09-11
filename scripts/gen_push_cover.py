@@ -18,6 +18,6 @@ from reporting.push_cover import draw_cover  # noqa: E402
 OUT = os.path.join(ROOT, "backend", "static", "push_cover.jpg")
 
 if __name__ == "__main__":
-    img = draw_cover("classic", "")
+    img = draw_cover("classic")
     img.save(OUT, "JPEG", quality=88, optimize=True, progressive=True)
     print(f"[Cover] 已生成 {OUT} ({os.path.getsize(OUT) // 1024} KB)")

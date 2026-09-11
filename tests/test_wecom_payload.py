@@ -244,22 +244,19 @@ def test_push_cover_picurl_prefers_dynamic(monkeypatch):
 
 
 def test_ensure_dynamic_cover_generates_and_caches(tmp_path, monkeypatch):
-    """早报/晚报各自生成当日封面并缓存；产物 2.4:1 且体积可控"""
+    """早报/晚报各生成一份固定封面并缓存；版本变更后自动重绘"""
     pytest.importorskip("PIL")
-    from datetime import datetime
-
     from reporting import push_cover
 
     if push_cover.find_font(False, 12) is None:
         pytest.skip("运行环境缺少中文字体")
     monkeypatch.setattr(push_cover, "ensure_dynamic_cover", _REAL_ENSURE)
     assets = _use_tmp_assets(tmp_path, monkeypatch)
-    now = datetime(2026, 9, 10, 19, 0)
 
-    rel_am = push_cover.ensure_dynamic_cover("9月10日早报", now=now)
-    rel_pm = push_cover.ensure_dynamic_cover("9月10日晚报", now=now)
-    assert rel_am == "assets/covers/push_cover_20260910_am.jpg"
-    assert rel_pm == "assets/covers/push_cover_20260910_pm.jpg"
+    rel_am = push_cover.ensure_dynamic_cover("9月11日早报")
+    rel_pm = push_cover.ensure_dynamic_cover("9月11日晚报")
+    assert rel_am == "assets/covers/push_cover_am.jpg"
+    assert rel_pm == "assets/covers/push_cover_pm.jpg"
     from PIL import Image
 
     for rel in (rel_am, rel_pm):
@@ -267,9 +264,15 @@ def test_ensure_dynamic_cover_generates_and_caches(tmp_path, monkeypatch):
         assert p.exists() and p.stat().st_size < 300 * 1024
         with Image.open(p) as im:
             assert abs(im.size[0] / im.size[1] - wp.THUMB_ASPECT) < 0.1
-    mtime = (assets / "covers" / "push_cover_20260910_am.jpg").stat().st_mtime
-    assert push_cover.ensure_dynamic_cover("9月10日早报", now=now) == rel_am
-    assert (assets / "covers" / "push_cover_20260910_am.jpg").stat().st_mtime == mtime
+    # 同版本命中缓存（mtime 不变）
+    am_file = assets / "covers" / "push_cover_am.jpg"
+    mtime = am_file.stat().st_mtime
+    assert push_cover.ensure_dynamic_cover("9月12日早报") == rel_am
+    assert am_file.stat().st_mtime == mtime
+    # 版本变更触发重绘
+    monkeypatch.setattr(config, "APP_VERSION", "9.9.8")
+    assert push_cover.ensure_dynamic_cover("9月12日早报") == rel_am
+    assert am_file.stat().st_mtime != mtime
 
 
 def test_ensure_dynamic_cover_falls_back_without_font(tmp_path, monkeypatch):

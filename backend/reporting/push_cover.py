@@ -1,14 +1,15 @@
 # 企业微信推送卡片动态封面绘制模块
-"""按推送时段（早报/晚报）实时绘制当日卡片头图封面，带磁盘缓存。
+"""按推送时段（早报/晚报）绘制卡片头图封面，带磁盘缓存与版本失效。
 
 设计：延续静态封面的"深蓝海底 + 耙吸船剪影 + 声呐弧"语言，
-早报为暖色日出格调（朝阳），晚报为冷色月夜格调（月亮+星），右上角日期胶囊。
-产物缓存在 assets/covers/push_cover_YYYYMMDD_am|pm.jpg，经 /assets 路由公网可达。
+早报为暖色日出格调（朝阳），晚报为冷色月夜格调（月亮+星）。
+字体优先微软雅黑（本地）/文泉驿微米黑（容器，镜像已装），无真粗体时用描边模拟加粗。
+产物固定两份 assets/covers/push_cover_am|pm.jpg（无日期元素，跨日复用），
+版本变更（backend/VERSION）时自动重绘；经 /assets 路由公网可达。
 绘制失败（无中文字体、Pillow 缺失等）返回 None，由调用方回退静态封面。
 """
 import math
 import os
-from datetime import datetime
 
 W, H = 960, 400
 TEXT_MAIN = (245, 249, 252)
@@ -41,19 +42,22 @@ def _lerp(a, b, t):
 
 
 def find_font(bold, size):
-    """按候选路径查找可用 TTF/TTC 字体，未找到返回 None（禁止用默认位图字体，中文会变方块）"""
+    """按候选路径查找可用 TTF/TTC 字体，未找到返回 None（禁止用默认位图字体，中文会变方块）
+
+    候选顺序：微软雅黑（本机观感基准）→ 文泉驿微米黑（容器内黑体，最接近雅黑）→ 其他兜底。
+    """
     names = (
-        ["msyhbd.ttc", "NotoSansCJK-Bold.ttc", "wqy-zenhei.ttc", "uming.ttc"]
+        ["msyhbd.ttc", "wqy-microhei.ttc", "NotoSansCJK-Bold.ttc", "wqy-zenhei.ttc", "uming.ttc"]
         if bold
-        else ["msyh.ttc", "NotoSansCJK-Regular.ttc", "wqy-zenhei.ttc", "uming.ttc"]
+        else ["msyh.ttc", "wqy-microhei.ttc", "NotoSansCJK-Regular.ttc", "wqy-zenhei.ttc", "uming.ttc"]
     )
     dirs = [
         r"C:\Windows\Fonts",
+        "/usr/share/fonts/truetype/wqy",
         "/usr/share/fonts",
         "/usr/share/fonts/truetype",
         "/usr/share/fonts/truetype/arphic",
         "/usr/share/fonts/truetype/arphic-uming",
-        "/usr/share/fonts/truetype/wqy",
         "/usr/share/fonts/opentype/noto",
     ]
     for d in dirs:
@@ -133,17 +137,16 @@ def _draw_extra(img, pal, extra):
             draw.ellipse([sx - r, sy - r, sx + r, sy + r], fill=_lerp(pal["sub"], (255, 255, 255), 0.5))
 
 
-def _draw_texts(img, pal, label, slot):
-    """主副标题、装饰线、角标；label 非空时右上角加日期胶囊"""
+def _draw_texts(img, pal, slot):
+    """主副标题、装饰线、角标；主标题用描边模拟加粗（容器内无真粗体字体）"""
     from PIL import ImageDraw
 
     draw = ImageDraw.Draw(img)
     f_title, f_sub, f_tag = find_font(True, 66), find_font(False, 24), find_font(False, 18)
-    f_pill = find_font(False, 22)
-    if None in (f_title, f_sub, f_tag, f_pill):
+    if None in (f_title, f_sub, f_tag):
         raise RuntimeError("未找到可用的中文字体，放弃动态封面")
 
-    draw.text((64, 92), "全球疏浚情报", font=f_title, fill=TEXT_MAIN)
+    draw.text((64, 92), "全球疏浚情报", font=f_title, fill=TEXT_MAIN, stroke_width=2, stroke_fill=TEXT_MAIN)
     draw.rectangle([40, 96, 48, 158], fill=pal["accent"])
     x = 64
     for ch in SUB_EN[slot]:
@@ -154,16 +157,8 @@ def _draw_texts(img, pal, label, slot):
     tw = draw.textlength(tag, font=f_tag)
     draw.text((W - tw - 40, H - 44), tag, font=f_tag, fill=pal["sub"])
 
-    if label:
-        lw = draw.textlength(label, font=f_pill)
-        px0, py0, px1, py1 = W - lw - 96, 24, W - 40, 68
-        draw.rounded_rectangle([px0, py0, px1, py1], radius=22,
-                               fill=_lerp(pal["top"], pal["bottom"], 0.6),
-                               outline=pal["accent"], width=2)
-        draw.text((px0 + 28, py0 + 10), label, font=f_pill, fill=TEXT_MAIN)
 
-
-def draw_cover(slot, label):
+def draw_cover(slot):
     """绘制一幅封面图，字体缺失抛 RuntimeError"""
     from PIL import Image
 
@@ -173,28 +168,43 @@ def draw_cover(slot, label):
     _draw_sonar_arcs(img, pal)
     _draw_extra(img, pal, pal["extra"])
     _draw_dredger(img, pal)
-    _draw_texts(img, pal, label, slot)
+    _draw_texts(img, pal, slot)
     return img
 
 
 def ensure_dynamic_cover(label, now=None):
-    """按标签（含"早报/晚报"）生成或复用当日封面，返回 assets 相对路径；失败返回 None"""
+    """按标签（含"早报/晚报"）取用封面（am/pm 两份长期缓存），返回 assets 相对路径；失败返回 None
+
+    now 参数保留仅为兼容旧调用与测试，现已无日期元素不再参与文件名。
+
+    缓存以 backend/VERSION 为失效键：版本变更后首次推送自动重绘（字体/设计随发版更新）。
+    """
     import config
 
-    now = now or datetime.now()
     slot = "morning" if "早报" in (label or "") else "evening"
     suffix = "am" if slot == "morning" else "pm"
-    fname = f"push_cover_{now.strftime('%Y%m%d')}_{suffix}.jpg"
+    fname = f"push_cover_{suffix}.jpg"
     cover_dir = os.path.join(config.ASSETS_DIR, "covers")
     target = os.path.join(cover_dir, fname)
+    ver_file = target + ".ver"
     rel = f"assets/covers/{fname}"
     try:
+        version = str(getattr(config, "APP_VERSION", "dev"))
         if os.path.isfile(target):
-            return rel
-        img = draw_cover(slot, label or "")
+            cached = ""
+            try:
+                with open(ver_file, encoding="utf-8") as f:
+                    cached = f.read().strip()
+            except Exception:
+                pass
+            if cached == version:
+                return rel
+        img = draw_cover(slot)
         os.makedirs(cover_dir, exist_ok=True)
         img.save(target, "JPEG", quality=88, optimize=True, progressive=True)
-        print(f"[Push:封面] 动态封面 {rel} ({os.path.getsize(target) // 1024} KB)")
+        with open(ver_file, "w", encoding="utf-8") as f:
+            f.write(version)
+        print(f"[Push:封面] 动态封面 {rel} v{version} ({os.path.getsize(target) // 1024} KB)")
         return rel
     except Exception as e:
         print(f"[Push:封面] 动态封面生成失败，回退静态: {e}")
