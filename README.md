@@ -111,7 +111,7 @@ dredgescope/
 |------|------|
 | **前端** | Vue 3.4+, TypeScript 5.4+, Vite 5.2+, Ant Design Vue 4.x, Tailwind CSS, Pinia, Leaflet |
 | **后端** | Python 3.11+, FastAPI, Uvicorn, Playwright, Feedparser, BeautifulSoup4 |
-| **AI/LLM** | SiliconFlow (Qwen2.5), Aliyun DashScope (Qwen-VL) |
+| **AI/LLM** | OpenAI 兼容 LLM 网关（文本分析 + 截图多模态共用同一模型，由 `Public_ALIYUN_MODEL2` 指定） |
 | **数据库** | SQLite |
 
 ## 运行指南
@@ -136,11 +136,15 @@ dredgescope/
 2. **配置环境**:
    创建 `.env` 文件：
    ```env
+   # LLM 网关（OpenAI 兼容，三项需指向同一网关，否则会静默打到默认地址）
+   Public_ALIYUN_API_URL=https://your-llm-gateway/v1
+   Public_ALIYUN_MODEL2=your_model
    Public_ALIYUN_API_KEY=your_key
-   TEXT_LLM_API_KEY=your_key
    WECOM_WEBHOOK_URL=your_webhook
    PUSH_BASE_URL=https://your-domain.com   # 可选：推送消息里的跳转链接地址，默认取 WISEFLOW_BACKEND_URL
    ```
+
+   > `TEXT_LLM_*` 系列变量已失效，不再生效：`config.py` 中 `TEXT_LLM_API_KEY` / `TEXT_LLM_API_BASE` 由 `Public_ALIYUN_API_KEY` / `Public_ALIYUN_API_URL` 推导，`TEXT_LLM_MODEL` 从未被读取。只配 `Public_ALIYUN_*` 三项即可。
 
 3. **启动项目**:
    ```bash
