@@ -35,7 +35,7 @@ services:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
     command: ["python", "-m", "scheduler"]
-    # 调度器是纯定时任务进程，无 HTTP 端口；用心跳文件新鲜度判活（主循环每 60s 刷新；>720s 未更新=调度器与看门狗双双失联，判失败）
+    # 调度器是纯定时任务进程，无 HTTP 端口；用心跳文件新鲜度判活（主循环每 60s 刷新，720s 未更新判 unhealthy，与内置 180s 看门狗形成双层防卡死）
     healthcheck:
       test: ["CMD-SHELL", "test $$(find /app/backend/data/scheduler.heartbeat -mmin -12 2>/dev/null)"]
       interval: 60s
