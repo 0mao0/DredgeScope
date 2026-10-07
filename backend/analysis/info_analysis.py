@@ -313,9 +313,12 @@ async def analyze_with_text(client, item, text_content, vl_context=None):
 }}
 """
     try:
-        # 判断是否为 Qwen3.5 模型，需要添加 enable_thinking 参数
-        is_qwen35 = "qwen3.5" in config.TEXT_MODEL.lower()
-        
+        # 判断是否为 Qwen3.5/3.6 模型，需要添加 enable_thinking 参数
+        # 自部署端点对非推理模型强制 response_format=json_object 会直接 400，
+        # 因此 3.5/3.6 一律走 enable_thinking 通道（输出为 ```json 围栏，由下方剥离逻辑解析）
+        model_lower = config.TEXT_MODEL.lower()
+        is_qwen35 = ("qwen3.5" in model_lower) or ("qwen3.6" in model_lower)
+
         if is_qwen35:
             resp = await client.chat.completions.create(
                 model=config.TEXT_MODEL,
@@ -693,12 +696,21 @@ async def analyze_item_from_db(client, item):
     text_res = None
     vl_res = None
 
+    # 重试次数上限：防止某模型/端点长期不支持 JSON 模式时，坏数据每 4 小时反复重试
+    retrying = (item.get("remark") or "").count("LLM调用失败") < 3
+
     if text_content and len(text_content.strip()) > 50:
         text_res = await analyze_with_text(client, item, text_content)
         if isinstance(text_res, Exception):
             print(f"[Text] Error: {text_res}")
             text_res = None
-        text_res = _normalize_llm_result(text_res, item)
+        if text_res is None and retrying:
+            # 本轮文本分析调用失败：不写入空翻译，标记后等下一轮调度重试，
+            # 避免失败结果落库后被"已分析"条件永久跳过（重试次数上限见上方 retrying 判定）
+            analysis_log.append("4. **Text分析**: 本轮调用失败，待下轮重试")
+            item["valid"] = 0
+            item["remark"] = (item.get("remark") or "") + " LLM调用失败，待重试"
+            return item
 
     if screenshot_bytes:
         if not config.VL_LLM_API_KEY:
@@ -711,6 +723,12 @@ async def analyze_item_from_db(client, item):
             if isinstance(vl_res, Exception):
                 print(f"[VL] Error: {vl_res}")
                 vl_res = None
+            if vl_res is None and text_res is None:
+                # 文本与视觉都失败，同属本轮调用失败，留给下轮重试
+                analysis_log.append("4. **VL分析**: 本轮调用失败，待下轮重试")
+                item["valid"] = 0
+                item["remark"] = (item.get("remark") or "") + " LLM调用失败，待重试"
+                return item
             vl_res = _normalize_llm_result(vl_res, item)
 
     return _build_final_result(item, url, text_content, screenshot_path, screenshot_filename, analysis_log, text_res, vl_res)
